@@ -1,7 +1,7 @@
 import { t, type MessageKey } from '../shared/i18n';
-import { childFolders, fold, folderName, resolvePath, subtree } from '../shared/folders';
+import { childFolders, fold, folderName, placementActive, resolvePath, subtree, TRASH_DAYS } from '../shared/folders';
 import { isOnline } from '../shared/provider';
-import type { DocumentCard, Job, LibraryFolder, LibraryState, OrganizePlan } from '../shared/types';
+import type { DocumentCard, Job, LibraryState, OrganizePlan, Placement } from '../shared/types';
 import type { Tab } from './detail';
 import { cleanError, date, h, icon, ICONS, jobDuration, jobTitle, langPair, MODES, progressInfo, statusIcon, STATUS_TEXT, toast, toastAction } from './dom';
 import { planView } from './plan-view';
@@ -19,6 +19,10 @@ export interface LibraryHost {
 /** Výběr v seznamu složek: všechny, nezařazené, nebo id složky. */
 const ALL = 'all';
 const UNSORTED = 'unsorted';
+// Pseudo-složky: koš a přehled toho, co zařadila AI.
+const TRASH = 'trash';
+const AI_LOG = 'aiLog';
+const DAY = 86_400_000;
 const FOLDER_KEY = 'libraryFolder';
 const SUMMARY_PREVIEW = 140;
 const COLLAPSED_KEY = 'libraryCollapsed';
@@ -45,6 +49,8 @@ let collapsed = new Set<string>();
 const chosen = new Set<string>();
 let anchor: string | null = null;
 let visible: string[] = [];
+// Dokumenty v koši (počet v levém panelu, seznam ve výběru Koše).
+let trash: Job[] = [];
 // Právě tažená složka (dataTransfer se při dragover nedá číst).
 let dragFolder: string | null = null;
 
@@ -60,6 +66,8 @@ function saveCollapsed() {
 }
 
 /** Složka dokumentu; zařazení do smazané složky se bere jako nezařazeno. */
+const special = () => selected === TRASH || selected === AI_LOG;
+
 const folderOf = (id: string) => {
   const folder = state.library.assign[id]?.folder;
   return state.library.folders.some((f) => f.id === folder) ? folder : undefined;
@@ -73,6 +81,7 @@ const FOCUS_VISIBLE = 20;
 
 /** Dokumenty, na které se uživatel dívá („toto“ v chatu): zaškrtnuté, jinak rozbalený řádek, jinak obsah otevřené složky. */
 export function focusDocs(): string[] {
+  if (special()) return [];
   if (chosen.size) return [...chosen];
   if (openId && visible.includes(openId)) return [openId];
   return selected !== ALL && visible.length <= FOCUS_VISIBLE ? [...visible] : [];
@@ -140,6 +149,11 @@ async function suggest(id: string) {
 /** Dotazy AI na zařazení a nabídka třídění přeplněné složky, nad seznamem. */
 function renderAsk(jobs: Job[]) {
   const box = $('library-ask');
+  if (special()) {
+    box.hidden = true;
+    box.replaceChildren();
+    return;
+  }
   const known = new Set(jobs.map((j) => j.id));
   const questions = (state.library.questions ?? []).filter((q) => known.has(q.jobId));
   const blocks = questions.map((q) =>
@@ -257,6 +271,10 @@ interface FolderOpts {
   draggable?: boolean;
   /** Počet podsložek, pro šipku sbalení. */
   kids?: number;
+  /** Ikona místo složky. */
+  iconPath?: string;
+  /** Pustit sem dokumenty = přesun do koše. */
+  trash?: boolean;
 }
 
 function folderItem(id: string, label: string, count: number, opts: FolderOpts = {}) {
@@ -281,13 +299,13 @@ function folderItem(id: string, label: string, count: number, opts: FolderOpts =
         icon(ICONS.chevron),
       )
     : h('span', { class: 'folder-toggle' });
-  const main = h('button', { class: 'folder-main', type: 'button', onclick: () => select(id) }, icon(ICONS.folder), h('span', { class: 'folder-name' }, label), h('span', { class: 'folder-count' }, String(count)));
+  const main = h('button', { class: 'folder-main', type: 'button', onclick: () => select(id) }, icon(opts.iconPath ?? ICONS.folder), h('span', { class: 'folder-name' }, label), h('span', { class: 'folder-count' }, String(count)));
   const item = h('div', { class: `folder-item${selected === id ? ' active' : ''}` }, toggle, main);
   item.style.paddingLeft = `${depth * INDENT}px`;
 
   const accepts = (e: DragEvent) => {
     const types = e.dataTransfer?.types ?? [];
-    if (docTarget !== undefined && types.includes(DRAG_TYPE)) return true;
+    if ((docTarget !== undefined || opts.trash) && types.includes(DRAG_TYPE)) return true;
     // Složku nelze pustit do sebe ani do vlastní podsložky.
     return folderTarget !== undefined && !!dragFolder && types.includes(FOLDER_DRAG_TYPE) && !subtree(state.library.folders, dragFolder).has(folderTarget ?? '');
   };
@@ -308,13 +326,17 @@ function folderItem(id: string, label: string, count: number, opts: FolderOpts =
       return;
     }
     const raw = e.dataTransfer?.getData(DRAG_TYPE);
-    if (!raw || docTarget === undefined) return;
+    if (!raw || (docTarget === undefined && !opts.trash)) return;
     // Pole id (výběr), kvůli zpětné kompatibilitě i jedno id.
     let ids: unknown;
     try {
       ids = JSON.parse(raw);
     } catch {}
-    void move(Array.isArray(ids) ? (ids as string[]) : [raw], docTarget);
+    const list = Array.isArray(ids) ? (ids as string[]) : [raw];
+    if (opts.trash) {
+      chosen.clear();
+      void toTrash(list);
+    } else void move(list, docTarget ?? null);
   });
   if (opts.draggable) {
     item.draggable = true;
@@ -430,6 +452,7 @@ function renderFolders(jobs: Job[]) {
   branch(undefined, 0);
   if (unsorted || selected === UNSORTED) items.push(folderItem(UNSORTED, t('library.unsorted'), unsorted, { docTarget: null }));
 
+  items.push(folderItem(AI_LOG, t('aiLog.title'), aiActive().length, { iconPath: ICONS.fast }), folderItem(TRASH, t('trash.title'), trash.length, { iconPath: ICONS.trash, trash: true }));
   items.push(
     editing === '+'
       ? h('div', { class: 'folder-item active' }, nameInput('', (value) => void window.api.createFolder(value).then((f) => select(f.id))))
@@ -489,6 +512,124 @@ function renderBanner(jobs: Job[]) {
     t(fillFacts ? 'library.fillFacts' : 'library.makeCards'),
   );
   banner.replaceChildren(h('span', {}, label), button);
+}
+
+// ---------- Koš a přehled „Zařadila AI“ ----------
+
+/** Přesune dokumenty do koše bez ptaní; vrátit je jde z upozornění. */
+export async function toTrash(ids: string[]) {
+  const done: string[] = [];
+  for (const id of ids) await window.api.deleteJob(id).then(() => done.push(id), (e) => toast(cleanError(e), true));
+  if (done.length) toastAction(t('trash.moved', { count: done.length }), t('trash.undo'), () => void window.api.restoreJobs(done).catch((e) => toast(cleanError(e), true)));
+}
+
+async function reloadTrash() {
+  try {
+    trash = await window.api.trashList();
+  } catch (e) {
+    toast(cleanError(e), true);
+  }
+  renderLibrary();
+}
+
+const daysLeft = (job: Job) => Math.max(0, Math.ceil(((job.trashedAt ?? 0) + TRASH_DAYS * DAY - Date.now()) / DAY));
+
+/** Záznamy AI k dokumentům, které ještě existují. */
+const aiEntries = (): Placement[] => (state.library.aiLog ?? []).filter((p) => host.jobs().some((j) => j.id === p.jobId));
+
+/** Zařazení, která jde ještě vrátit. */
+const aiActive = () => aiEntries().filter((p) => placementActive(state.library, p));
+
+function trashRow(job: Job) {
+  const check = h('input', { type: 'checkbox', class: 'lib-check', title: t('trash.selectRow'), 'aria-label': t('trash.selectRow') });
+  check.checked = chosen.has(job.id);
+  check.addEventListener('click', (e) => {
+    const on = check.checked;
+    const from = e.shiftKey && anchor ? visible.indexOf(anchor) : -1;
+    const to = visible.indexOf(job.id);
+    const ids = from >= 0 && to >= 0 ? visible.slice(Math.min(from, to), Math.max(from, to) + 1) : [job.id];
+    for (const id of ids) on ? chosen.add(id) : chosen.delete(id);
+    anchor = job.id;
+    renderLibrary();
+  });
+  const meta = [t('trash.deleted', { date: date(job.trashedAt ?? 0) }), t('trash.expires', { count: daysLeft(job) })];
+  return h(
+    'div',
+    { class: `lib-item trash-row${chosen.has(job.id) ? ' chosen' : ''}` },
+    h('div', { class: 'lib-line' }, check, h('div', { class: 'job-row' }, h('span', {}, h('div', { class: 'job-row-name' }, `${job.name}${job.ext}`), h('div', { class: 'job-row-meta' }, meta.join(' · '))))),
+  );
+}
+
+/** Lišta koše: výběr, obnovení, trvalé smazání, vyprázdnění. */
+function renderTrashBar() {
+  const bar = $('library-bar');
+  bar.hidden = !visible.length;
+  if (bar.hidden) return;
+  const all = h('input', { type: 'checkbox', class: 'lib-check', title: t('library.selectAll'), 'aria-label': t('library.selectAll') });
+  all.checked = visible.every((id) => chosen.has(id));
+  all.indeterminate = !all.checked && chosen.size > 0;
+  all.addEventListener('change', () => {
+    if (all.checked) for (const id of visible) chosen.add(id);
+    else chosen.clear();
+    renderLibrary();
+  });
+  const allLabel = h('label', { class: 'lib-bar-all' }, all, h('span', {}, chosen.size ? t('library.selected', { count: chosen.size }) : t('library.selectAll')));
+  const act = (run: (ids: string[]) => Promise<void>) => () => {
+    const ids = [...chosen];
+    chosen.clear();
+    void run(ids).catch((e) => toast(cleanError(e), true));
+  };
+  const restore = h('button', { class: 'btn', type: 'button', onclick: act((ids) => window.api.restoreJobs(ids)) }, t('trash.restore'));
+  const purge = h(
+    'button',
+    {
+      class: 'btn danger',
+      type: 'button',
+      onclick: () => {
+        if (confirm(t('trash.confirmPurge', { count: chosen.size }))) act((ids) => window.api.purgeJobs(ids))();
+      },
+    },
+    icon(ICONS.trash),
+    t('trash.purge'),
+  );
+  const empty = h(
+    'button',
+    {
+      class: 'btn danger',
+      type: 'button',
+      onclick: () => {
+        if (!confirm(t('trash.confirmEmpty', { count: trash.length }))) return;
+        chosen.clear();
+        void window.api.emptyTrash().catch((e) => toast(cleanError(e), true));
+      },
+    },
+    t('trash.emptyAll'),
+  );
+  restore.disabled = purge.disabled = !chosen.size;
+  bar.replaceChildren(allLabel, restore, purge, empty);
+}
+
+function aiRow(p: Placement) {
+  const job = host.jobs().find((j) => j.id === p.jobId)!;
+  const active = placementActive(state.library, p);
+  const status = active
+    ? h('button', { class: 'btn', type: 'button', onclick: () => void window.api.undoPlacement(p).catch((e) => toast(cleanError(e), true)) }, t('aiLog.undo'))
+    : h('span', { class: 'chip' }, t(p.undone ? 'aiLog.undone' : 'aiLog.moved'));
+  return h(
+    'div',
+    { class: `lib-item ai-row${active ? '' : ' dim'}` },
+    h(
+      'div',
+      { class: 'lib-line' },
+      h(
+        'button',
+        { class: 'job-row', type: 'button', onclick: () => host.open(job.id) },
+        h('span', {}, h('div', { class: 'job-row-name' }, `${job.name}${job.ext}`), h('div', { class: 'job-row-meta' }, [p.path, date(p.at)].join(' · '))),
+        p.created.length ? h('span', { class: 'chip accent' }, t('aiLog.new')) : '',
+      ),
+      status,
+    ),
+  );
 }
 
 // ---------- Řádky dokumentů ----------
@@ -635,12 +776,10 @@ function renderBar() {
     {
       class: 'btn danger',
       type: 'button',
-      onclick: async () => {
-        if (!confirm(t('library.confirmDeleteDocs', { count: chosen.size }))) return;
-        // Postupně; chyba jednoho dokumentu ostatní nezastaví.
-        for (const id of [...chosen]) await window.api.deleteJob(id).catch((e) => toast(cleanError(e), true));
+      onclick: () => {
+        const ids = [...chosen];
         chosen.clear();
-        renderLibrary();
+        void toTrash(ids);
       },
     },
     icon(ICONS.trash),
@@ -666,10 +805,26 @@ function renderBar() {
   bar.replaceChildren(allLabel, moveTo, del, clear);
 }
 
+/** Seznam Koše nebo přehledu AI místo běžných dokumentů. */
+function drawSpecial(query: string) {
+  const inTrash = selected === TRASH;
+  const jobs = trash.filter((j) => !query || fold(j.name).includes(query));
+  const log = aiEntries();
+  visible = inTrash ? jobs.map((j) => j.id) : [];
+  for (const id of chosen) if (!visible.includes(id)) chosen.delete(id);
+  if (inTrash) renderTrashBar();
+  else $('library-bar').hidden = true;
+  $('history-list').replaceChildren(...(inTrash ? jobs.map(trashRow) : log.map(aiRow)));
+  const count = inTrash ? jobs.length : log.length;
+  $('history-empty').hidden = count > 0;
+  $('history-empty-text').textContent = t(inTrash ? 'trash.empty' : 'aiLog.empty');
+  $('history-empty-action').hidden = true;
+}
+
 function draw() {
   const jobs = host.jobs();
   const { folders } = state.library;
-  if (selected !== ALL && selected !== UNSORTED && !folders.some((f) => f.id === selected)) selected = ALL;
+  if (selected !== ALL && selected !== UNSORTED && !special() && !folders.some((f) => f.id === selected)) selected = ALL;
   if (selected === UNSORTED && !jobs.some((j) => !folderOf(j.id))) selected = ALL;
 
   renderFolders(jobs);
@@ -677,6 +832,10 @@ function draw() {
   renderAsk(jobs);
 
   const query = fold($<HTMLInputElement>('history-search').value);
+  if (special()) {
+    drawSpecial(query);
+    return;
+  }
   // Vybraná složka ukazuje dokumenty celého podstromu.
   const inFolders = selected === ALL || selected === UNSORTED ? null : subtree(folders, selected);
   const list = jobs
@@ -723,10 +882,12 @@ export function setupLibrary(libraryHost: LibraryHost) {
     toastAction(t(p.created.length ? 'library.placedNew' : 'library.placed', { doc, path: p.path }), t('library.placedUndo'), () => void window.api.undoPlacement(p).catch((e) => toast(cleanError(e), true)));
   });
   window.api.onLibraryChanged(() => void reloadLibrary());
+  window.api.onTrashChanged(() => void reloadTrash());
   window.api.onLibraryProgress((p) => {
     progress = p;
     renderLibrary();
   });
   // Stav je potřeba i mimo knihovnu (rychlé zobrazení při prvním otevření).
   void reloadLibrary();
+  void reloadTrash();
 }

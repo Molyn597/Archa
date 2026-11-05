@@ -3702,3 +3702,22 @@ button.folder-toggle:hover {
   align-items: center;
   gap: 8px;
 }
+
+/* Koš a přehled „Zařadila AI“: řádek bez stavové ikony, text vyplní šířku. */
+.trash-row .job-row > span:first-child,
+.ai-row .job-row > span:first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.ai-row.dim .job-row-name,
+.ai-row.dim .job-row-meta {
+  color: var(--muted);
+}
+
+
+.ai-row .lib-line > .btn,
+.ai-row .lib-line > .chip {
+  flex: none;
+  margin-right: 14px;
+}

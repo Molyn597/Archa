@@ -1,5 +1,6 @@
 import { getDocument, GlobalWorkerOptions, type PDFDocumentProxy } from 'pdfjs-dist';
 import { formatUsd } from '../shared/estimate';
+import { TRASH_DAYS } from '../shared/folders';
 import { locale, t, type MessageKey } from '../shared/i18n';
 import { languageName } from '../shared/languages';
 import { PDFJS_OPTIONS } from '../shared/pdf';
@@ -27,6 +28,7 @@ import {
   STAGES,
   STATUS_TEXT,
   toast,
+  toastAction,
 } from './dom';
 
 GlobalWorkerOptions.workerSrc = './pdf.worker.min.mjs';
@@ -176,8 +178,9 @@ const deleteItem = (job: Job): MenuItem => ({
   icon: ICONS.trash,
   danger: true,
   run: async () => {
-    if (!confirm(t('detail.confirmDelete', { name: job.name }))) return;
+    if (!confirm(t('detail.confirmDelete', { name: job.name, days: TRASH_DAYS }))) return;
     await window.api.deleteJob(job.id);
+    toastAction(t('trash.moved', { count: 1 }), t('trash.undo'), () => void window.api.restoreJobs([job.id]).catch((e) => toast(cleanError(e), true)));
   },
 });
 

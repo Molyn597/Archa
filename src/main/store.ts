@@ -86,7 +86,9 @@ export class Store {
   /** Knihovna: složky a zařazení dokumentů (jen v datech aplikace, soubory se nepřesouvají). */
   async library(): Promise<Library> {
     const saved = await this.readJson<Partial<Library> | null>(path.join(this.root, 'library.json'), null);
-    return saved?.folders ? { folders: saved.folders, assign: saved.assign ?? {}, ...(saved.questions?.length && { questions: saved.questions }) } : defaultLibrary();
+    return saved?.folders
+      ? { folders: saved.folders, assign: saved.assign ?? {}, ...(saved.questions?.length && { questions: saved.questions }), ...(saved.aiLog?.length && { aiLog: saved.aiLog }) }
+      : defaultLibrary();
   }
 
   saveLibrary = (library: Library) => this.writeJson(path.join(this.root, 'library.json'), library);
@@ -105,11 +107,12 @@ export class Store {
     return run;
   }
 
-  async jobs(): Promise<Job[]> {
+  /** Úlohy od nejnovější; `trashed` = jen ty v koši, jinak bez nich. */
+  async jobs(trashed = false): Promise<Job[]> {
     const dir = path.join(this.root, 'jobs');
     const ids = await readdir(dir).catch(() => [] as string[]);
     const jobs = await Promise.all(ids.map((id) => this.readJson<Job | null>(path.join(dir, id, 'job.json'), null)));
-    return jobs.filter((j): j is Job => j !== null).sort((a, b) => b.createdAt - a.createdAt);
+    return jobs.filter((j): j is Job => j !== null && !!j.trashedAt === trashed).sort((a, b) => b.createdAt - a.createdAt);
   }
 
   job = (id: string) => this.readJson<Job | null>(path.join(this.jobDir(id), 'job.json'), null);

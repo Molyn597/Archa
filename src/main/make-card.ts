@@ -5,7 +5,7 @@ import type { DocumentCard, Job, Placement, Settings } from '../shared/types';
 import { cardSample, parseCard, parseFolderChoice } from './card';
 import { readKey } from './keystore';
 import { ask, connect, loadModel, type Llm } from './pipeline';
-import { placeDoc, subfolderTarget } from './library';
+import { logPlacement, placeDoc, subfolderTarget } from './library';
 import { samePath, scopedPath } from './organize';
 import { cardPrompt, subfolderPrompt } from './prompts';
 import type { Store } from './store';
@@ -33,7 +33,11 @@ export async function makeCard(store: Store, job: Job, settings: Settings, chang
   if (!card) throw new Error(t('card.unreadable'));
   await refineFolder(llm, store, card, job.targetLang);
   await store.saveCard(job.id, card);
-  const placed = await store.updateLibrary((library) => placeDoc(library, job.id, card));
+  const placed = await store.updateLibrary((library) => {
+    const p = placeDoc(library, job.id, card);
+    if (p) logPlacement(library, p);
+    return p;
+  });
   changed?.(placed);
   if (job.cost !== undefined) await store.saveJob(job);
   return card;

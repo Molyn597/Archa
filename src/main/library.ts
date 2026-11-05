@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { childFolders, DEFAULT_FOLDER_KEYS, fold, folderName, folderPath, isLocked, subtree } from '../shared/folders';
+import { childFolders, DEFAULT_FOLDER_KEYS, fold, folderName, folderPath, isLocked, placementActive, subtree } from '../shared/folders';
+
+export { placementActive };
 import type { DocumentCard, Library, OrganizePlan, Placement } from '../shared/types';
 
 /** Výchozí knihovna: jedna složka za každý klíč, bez zařazených dokumentů. */
@@ -118,26 +120,32 @@ export function placeDoc(library: Library, jobId: string, card: Pick<DocumentCar
       return undefined;
     }
   }
+  const placed = (folder: string, created: string[] = []): Placement | undefined => {
+    if (current?.folder === folder) return undefined;
+    library.assign[jobId] = { folder };
+    const target = library.folders.find((f) => f.id === folder)!;
+    return { jobId, path: folderPath(library.folders, target), folder, created, at: Date.now(), ...(current && { previous: current.folder }) };
+  };
   const existing = ensurePath(library, path, false).id ?? matchFolder(library, path);
-  if (existing) {
-    library.assign[jobId] = { folder: existing };
-    return undefined;
-  }
+  if (existing) return placed(existing);
   if (!path) {
-    autoAssign(library, jobId);
-    return undefined;
+    const fallback = library.folders.some((f) => f.id === 'other') ? 'other' : undefined;
+    return fallback ? placed(fallback) : undefined;
   }
   const { id, created } = ensurePath(library, path, true, newId);
-  if (!id) return undefined;
-  library.assign[jobId] = { folder: id };
-  return { jobId, path, created, ...(current && { previous: current.folder }) };
+  return id ? placed(id, created) : undefined;
+}
+
+const AI_LOG = 50;
+
+/** Zapíše automatické zařazení do přehledu (nejnovější první, nejvýš AI_LOG); starší záznam téhož dokumentu nahradí. */
+export function logPlacement(library: Library, p: Placement) {
+  library.aiLog = [p, ...(library.aiLog ?? []).filter((e) => e.jobId !== p.jobId)].slice(0, AI_LOG);
 }
 
 /** Vrátí zařazení AI: dokument zpět (pokud ho mezitím nikdo nepřesunul), prázdné založené složky pryč. */
 export function undoPlacement(library: Library, p: Placement) {
-  const now = library.assign[p.jobId];
-  const target = p.created.at(-1);
-  if (now && !now.manual && now.folder === target) {
+  if (placementActive(library, p)) {
     if (p.previous && library.folders.some((f) => f.id === p.previous)) library.assign[p.jobId] = { folder: p.previous };
     else delete library.assign[p.jobId];
   }
@@ -145,6 +153,7 @@ export function undoPlacement(library: Library, p: Placement) {
     const used = Object.values(library.assign).some((a) => a.folder === id) || library.folders.some((f) => f.parent === id);
     if (!used) library.folders = library.folders.filter((f) => f.id !== id);
   }
+  for (const e of library.aiLog ?? []) if (e.jobId === p.jobId && e.at === p.at) e.undone = true;
 }
 
 /** Odpověď na dotaz: vybraná cesta se případně založí a dokument se do ní ručně zařadí; `null` = nechat. */

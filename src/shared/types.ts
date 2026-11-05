@@ -113,6 +113,8 @@ export interface Library {
   assign: Record<string, { folder: string; manual?: boolean }>;
   /** Dokumenty, u kterých se AI ptá, kam je zařadit. */
   questions?: FolderQuestion[];
+  /** Poslední automatická zařazení AI (nejnovější první), pro přehled s Vrátit. */
+  aiLog?: Placement[];
 }
 /** Dotaz, kam zařadit dokument; možnosti jsou cesty složek (i dosud neexistujících). */
 export interface FolderQuestion {
@@ -120,7 +122,7 @@ export interface FolderQuestion {
   options: string[];
   at: number;
 }
-/** Zařazení, při kterém AI sama založila složky; jde vrátit. */
+/** Automatické zařazení AI (případně se založenými složkami); jde vrátit. */
 export interface Placement {
   jobId: string;
   path: string;
@@ -128,6 +130,11 @@ export interface Placement {
   created: string[];
   /** Složka dokumentu před zařazením (bez = nezařazeno). */
   previous?: string;
+  /** Cílová složka (id). */
+  folder: string;
+  at: number;
+  /** Uživatel zařazení vrátil. */
+  undone?: boolean;
 }
 /** Návrh roztřídění: cesty složek s dokumenty a dotazy u nejistých dokumentů. */
 export interface OrganizePlan {
@@ -245,6 +252,8 @@ export interface Progress {
 
 export interface Job {
   id: string;
+  /** V koši od (ms); po TRASH_DAYS se smaže natrvalo. */
+  trashedAt?: number;
   name: string;
   ext: string;
   mode: Mode;
@@ -492,7 +501,15 @@ export interface Api {
   makeCard(id: string): Promise<DocumentCard>;
   /** Uloží ručně upravenou kartu (označí ji jako `edited`). */
   saveCard(id: string, card: DocumentCard): Promise<void>;
+  /** Přesune dokument do koše (zařazení do složky zůstane pro obnovení). */
   deleteJob(id: string): Promise<void>;
+  /** Dokumenty v koši, od naposledy smazaného. */
+  trashList(): Promise<Job[]>;
+  restoreJobs(ids: string[]): Promise<void>;
+  /** Smaže natrvalo (soubory i data); nevratné. */
+  purgeJobs(ids: string[]): Promise<void>;
+  emptyTrash(): Promise<void>;
+  onTrashChanged(handler: () => void): void;
   libraryState(): Promise<LibraryState>;
   /** Nová složka, s `parent` jako podsložka. */
   createFolder(name: string, parent?: string): Promise<LibraryFolder>;

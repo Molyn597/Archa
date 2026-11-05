@@ -15,7 +15,7 @@ import {
   type MenuItemConstructorOptions,
 } from 'electron';
 import { resolveLang, setLang, t, type MessageKey } from '../shared/i18n';
-import { LIBRARY_CHAT } from '../shared/folders';
+import { LIBRARY_CHAT, TRASH_DAYS } from '../shared/folders';
 import { languageName } from '../shared/languages';
 import { findRegion, normalizeCrop } from '../shared/regions';
 import type { ChatModel, DocumentCard, GlossaryEntry, Job, Library, LibraryFolder, JobOptions, Mode, OrganizePlan, OutputKind, Placement, Provider, RegionTranslation, Settings, Stage } from '../shared/types';
@@ -65,7 +65,8 @@ const send = (channel: string, ...args: unknown[]) => win?.webContents.send(chan
 /** Knihovna se změnila; když AI přitom založila složky, renderer nabídne Vrátit. */
 const libraryChanged = (placed?: Placement) => {
   send('library-changed');
-  if (placed) send('library-placed', placed);
+  // Oznámení s Vrátit jen u nově založených složek; ostatní zařazení jsou v přehledu „Zařadila AI“.
+  if (placed?.created.length) send('library-placed', placed);
 };
 
 const queue = new Queue(store, {
@@ -400,10 +401,26 @@ function registerIpc() {
     send('library-changed');
   });
   ipcMain.handle('job-delete', async (_e, id: string) => {
-    await queue.remove(id);
-    await store.updateLibrary((library) => delete library.assign[id]);
+    await queue.trash(id);
     send('job-removed', id);
+    send('trash-changed');
   });
+  ipcMain.handle('trash-list', () => store.jobs(true));
+  ipcMain.handle('trash-restore', async (_e, ids: string[]) => {
+    for (const id of ids) {
+      const job = await queue.restore(id);
+      if (job) send('job-update', job);
+    }
+    send('trash-changed');
+    send('library-changed');
+  });
+  const purge = async (ids: string[]) => {
+    for (const id of ids) await queue.remove(id);
+    send('trash-changed');
+    send('library-changed');
+  };
+  ipcMain.handle('trash-purge', (_e, ids: string[]) => purge(ids));
+  ipcMain.handle('trash-empty', async () => purge((await store.jobs(true)).map((j) => j.id)));
   ipcMain.handle('job-open', async (_e, id: string, kind?: OutputKind) => {
     const job = await store.job(id);
     const file = job && jobFile(job, kind);
@@ -446,6 +463,7 @@ if (!app.requestSingleInstanceLock()) {
     setMenu();
     registerIpc();
     await queue.recover();
+    await queue.purgeOld(TRASH_DAYS).catch(() => undefined);
     applyTheme(settings.theme);
     createWindow();
     createTray();

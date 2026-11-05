@@ -1,8 +1,11 @@
 import { t, type MessageKey } from './i18n';
-import type { LibraryFolder } from './types';
+import type { Library, LibraryFolder, Placement } from './types';
 
 /** Výchozí složky knihovny; názvy jsou v i18n (`folder.<klíč>`), AI z nich vybírá návrh složky karty. */
 export const DEFAULT_FOLDER_KEYS = ['contracts', 'invoices', 'study', 'articles', 'manuals', 'official', 'other'] as const;
+
+/** Po tolika dnech se dokument z koše smaže natrvalo. */
+export const TRASH_DAYS = 30;
 
 /** jobId v průběhu (chat-progress / chat-delta) chatu s knihovnou. */
 export const LIBRARY_CHAT = 'library';
@@ -65,6 +68,9 @@ export function resolvePath(folders: LibraryFolder[], path: string): string | un
 
 /** Cesty všech nezamčených složek pro prompty (zamčená složka se modelu neukáže ani názvem). */
 export const openPaths = (folders: LibraryFolder[]) => folders.filter((f) => !isLocked(folders, f)).map((f) => folderPath(folders, f));
+
+/** Zařazení AI ještě platí (dokument je pořád tam, kam ho AI dala, a nikdo ho nepřesunul). */
+export const placementActive = (library: Library, p: Placement) => !p.undone && library.assign[p.jobId]?.folder === p.folder && !library.assign[p.jobId]?.manual;
 
 /** Text bez diakritiky a velikosti písmen, pro hledání a porovnání názvů. */
 export const fold = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim();

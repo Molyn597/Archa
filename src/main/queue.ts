@@ -159,6 +159,31 @@ export class Queue {
     }
   }
 
+  /** Do koše: běžící úloha se zruší, soubory i zařazení zůstanou. */
+  async trash(id: string) {
+    await this.cancel(id);
+    while (this.running?.id === id) await new Promise((r) => setTimeout(r, 100));
+    const job = await this.store.job(id);
+    if (!job) return;
+    job.trashedAt = Date.now();
+    await this.store.saveJob(job);
+  }
+
+  async restore(id: string): Promise<Job | undefined> {
+    const job = await this.store.job(id);
+    if (!job?.trashedAt) return undefined;
+    delete job.trashedAt;
+    await this.store.saveJob(job);
+    return job;
+  }
+
+  /** Natrvalo smaže dokumenty v koši starší než `days` dní. */
+  async purgeOld(days: number) {
+    const limit = Date.now() - days * 24 * 3600 * 1000;
+    for (const job of await this.store.jobs(true)) if (job.trashedAt! < limit) await this.remove(job.id);
+  }
+
+  /** Natrvalo: soubory, data i zařazení. */
   async remove(id: string) {
     await this.cancel(id);
     // Běžící úloha si složku po zrušení ještě zapíše; smazat až po doběhnutí.

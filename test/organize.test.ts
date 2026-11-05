@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('../src/main/pipeline', () => ({}));
 vi.mock('../src/main/keystore', () => ({}));
 
-const { answerQuestion, applyPlan, ensurePath, placeDoc, undoPlacement } = await import('../src/main/library');
+const { answerQuestion, applyPlan, ensurePath, logPlacement, placeDoc, placementActive, undoPlacement } = await import('../src/main/library');
 const { parsePlan, planSize, scopedPath } = await import('../src/main/organize');
 const { parseCard } = await import('../src/main/card');
 import type { Job, Library } from '../src/shared/types';
@@ -37,14 +37,15 @@ describe('placeDoc', () => {
     n = 0;
     const library = lib();
     const placed = placeDoc(library, 'a', { folder: 'Studium / Články / Management' }, newId);
-    expect(placed).toEqual({ jobId: 'a', path: 'Studium / Články / Management', created: ['n1', 'n2'] });
+    expect(placed).toEqual({ jobId: 'a', path: 'Studium / Články / Management', folder: 'n2', created: ['n1', 'n2'], at: expect.any(Number) });
     expect(library.assign.a).toEqual({ folder: 'n2' });
   });
 
-  it('existující složka: jen zařadí, bez Placement', () => {
+  it('existující složka: zařadí bez zakládání; stejné zařazení podruhé nic nevrátí', () => {
     const library = lib();
-    expect(placeDoc(library, 'a', { folder: 'Studium' })).toBeUndefined();
+    expect(placeDoc(library, 'a', { folder: 'Studium' })).toMatchObject({ folder: 'study', path: 'Studium', created: [] });
     expect(library.assign.a).toEqual({ folder: 'study' });
+    expect(placeDoc(library, 'a', { folder: 'Studium' })).toBeUndefined();
   });
 
   it('nejistý návrh: dotaz, dokument zůstane, nic se nezaloží', () => {
@@ -163,5 +164,30 @@ describe('karta: jistota složky', () => {
   });
   it('jistá karta nemá folderSure', () => {
     expect(parseCard(JSON.stringify({ ...base, folder: 'A', folderSure: true }), 'cs')!.folderSure).toBeUndefined();
+  });
+});
+
+describe('přehled „Zařadila AI“', () => {
+  it('nejnovější první, starší záznam dokumentu nahradí, Vrátit ho označí', () => {
+    n = 0;
+    const library = lib();
+    const first = placeDoc(library, 'a', { folder: 'Studium' }, newId)!;
+    logPlacement(library, first);
+    const second = placeDoc(library, 'b', { folder: 'Studium / Nová' }, newId)!;
+    logPlacement(library, second);
+    const again = placeDoc(library, 'a', { folder: 'Ostatní' }, newId)!;
+    logPlacement(library, again);
+    expect(library.aiLog!.map((e) => e.jobId)).toEqual(['a', 'b']);
+    expect(placementActive(library, second)).toBe(true);
+    undoPlacement(library, second);
+    expect(library.aiLog![1].undone).toBe(true);
+    expect(placementActive(library, second)).toBe(false);
+  });
+
+  it('ruční přesun zařazení zneplatní', () => {
+    const library = lib();
+    const p = placeDoc(library, 'a', { folder: 'Studium' })!;
+    library.assign.a = { folder: 'study', manual: true };
+    expect(placementActive(library, p)).toBe(false);
   });
 });
