@@ -2,7 +2,6 @@ import { t } from '../shared/i18n';
 import { isOnline } from '../shared/provider';
 import { LIBRARY_CHAT } from '../shared/folders';
 import type { ChatMessage, ChatModel, Job, LibraryRef, LmStatus, Provider, Segment, Settings } from '../shared/types';
-import { citationEnabled, copyWithCitation } from './citation-copy';
 import { chatWarningText, cleanError, h, icon, ICONS } from './dom';
 import { focusDocs, libraryFolders, selectedFolder } from './library';
 import { planView } from './plan-view';
@@ -170,12 +169,7 @@ const refCite = (refs: LibraryRef[] = []) => (n: number): Cite | undefined => {
 function messageEl(m: ChatMessage, byId: Map<number, Segment>) {
   if (m.role === 'user') return h('div', { class: 'chat-msg user' }, h('div', { class: 'chat-text' }, m.text));
   if (scope === 'library') return h('div', { class: 'chat-msg assistant' }, stepsSummary(m), answerText(m.text, refCite(m.refs)), m.plan && planView(m.plan, { title: libraryHost.title, folders: libraryFolders, done: appliedPlans.has(m.at), onDone: () => appliedPlans.add(m.at) }), h('div', { class: 'chat-note' }, m.model ?? ''));
-  const pages = (m.sources ?? []).flatMap((id) => byId.get(id)?.page ?? []);
-  const copy =
-    citationEnabled() && m.sources?.length && job
-      ? h('button', { class: 'chat-copy-cite', onclick: () => void copyWithCitation(job!.id, job!, { text: m.text, pdfPages: pages, translated: true }) }, icon(ICONS.copy), t('citation.copy'))
-      : null;
-  return h('div', { class: 'chat-msg assistant' }, stepsSummary(m), answerText(m.text, segmentCite(byId)), h('div', { class: 'chat-note' }, [m.whole ? t('chat.whole') : t('chat.found'), m.model].filter(Boolean).join(' · ')), copy);
+  return h('div', { class: 'chat-msg assistant' }, stepsSummary(m), answerText(m.text, segmentCite(byId)), h('div', { class: 'chat-note' }, [m.whole ? t('chat.whole') : t('chat.found'), m.model].filter(Boolean).join(' · ')));
 }
 
 function renderMessages() {

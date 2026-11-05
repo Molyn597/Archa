@@ -2,10 +2,11 @@ import { t, type MessageKey } from '../shared/i18n';
 import { childFolders, fold, folderName, folderPath, isLocked, placementActive, resolvePath, subtree, TRASH_DAYS } from '../shared/folders';
 import { duplicateGroups, type DuplicateGroup } from '../shared/duplicates';
 import { isOnline } from '../shared/provider';
-import type { DocumentCard, FolderMerge, Job, LibraryState, OrganizePlan, Placement } from '../shared/types';
+import type { DocumentCard, FolderMerge, Job, LibraryState, OrganizePlan, Placement, Project, ProjectKind } from '../shared/types';
 import type { Tab } from './detail';
 import { cleanError, date, h, icon, ICONS, jobDuration, jobTitle, langPair, MODES, openModal, progressInfo, statusIcon, STATUS_TEXT, toast, toastAction } from './dom';
 import { planView } from './plan-view';
+import { flushProject, newProjectModal, pickProjectModal, renderProject, type ProjectCtx } from './project-view';
 import { lockFolder, unlockFolder, unlockModal, vault } from './vault';
 
 export interface LibraryHost {
@@ -25,6 +26,8 @@ const UNSORTED = 'unsorted';
 const TRASH = 'trash';
 const AI_LOG = 'aiLog';
 const DUPLICATES = 'duplicates';
+// Výběr projektu: PROJECT + id (v hlavní oblasti je pak detail projektu, ne seznam dokumentů).
+const PROJECT = 'project:';
 const DAY = 86_400_000;
 const FOLDER_KEY = 'libraryFolder';
 const SUMMARY_PREVIEW = 140;
@@ -54,6 +57,9 @@ let anchor: string | null = null;
 let visible: string[] = [];
 // Dokumenty v koši (počet v levém panelu, seznam ve výběru Koše).
 let trash: Job[] = [];
+// Projekty (jedna kopie; po každém volání API se nahradí vráceným projektem).
+let projects: Project[] = [];
+let projectsLoaded = false;
 // Právě tažená složka (dataTransfer se při dragover nedá číst).
 let dragFolder: string | null = null;
 
@@ -69,7 +75,9 @@ function saveCollapsed() {
 }
 
 /** Složka dokumentu; zařazení do smazané složky se bere jako nezařazeno. */
-const special = () => selected === TRASH || selected === AI_LOG || selected === DUPLICATES;
+const special = () => selected === TRASH || selected === AI_LOG || selected === DUPLICATES || inProject();
+const inProject = () => selected.startsWith(PROJECT);
+const projectId = () => selected.slice(PROJECT.length);
 
 const folderOf = (id: string) => {
   const folder = state.library.assign[id]?.folder;
@@ -214,6 +222,7 @@ function renderAsk(jobs: Job[]) {
 }
 
 function select(value: string) {
+  flushProject();
   selected = value;
   openId = null;
   try {
@@ -526,6 +535,63 @@ function folderMenu(id: string, name: string) {
   return h('div', { class: 'menu-wrap' }, button, menu);
 }
 
+// ---------- Projekty ----------
+
+/** Nahradí (nebo přidá) kopii projektu a překreslí. */
+function putProject(p: Project) {
+  projects = projects.some((x) => x.id === p.id) ? projects.map((x) => (x.id === p.id ? p : x)) : [...projects, p];
+  renderLibrary();
+}
+
+const projectCtx: ProjectCtx = {
+  get: (id) => projects.find((p) => p.id === id),
+  put: putProject,
+  jobs: () => host.jobs(),
+  trash: () => trash,
+  cards: () => state.cards,
+  folderLabel: (id) => {
+    const folder = state.library.folders.find((f) => f.id === folderOf(id));
+    return folder ? folderPath(state.library.folders, folder) : '';
+  },
+  open: (id, tab) => host.open(id, tab),
+  remove: (id) => {
+    if (selected === PROJECT + id) select(ALL);
+    projects = projects.filter((p) => p.id !== id);
+    renderLibrary();
+    void window.api.deleteProject(id).catch((e) => toast(cleanError(e), true));
+  },
+  reload: () => void reloadLibrary(),
+};
+
+/** Dialog nového projektu; po založení se projekt otevře, nebo se do něj přidají dokumenty. */
+function createProject(ids: string[] = []) {
+  newProjectModal(async (name, kind: ProjectKind) => {
+    try {
+      let p = await window.api.createProject(name, kind);
+      putProject(p);
+      if (!ids.length) return select(PROJECT + p.id);
+      p = await window.api.addToProject(p.id, ids);
+      putProject(p);
+      toast(t('project.added', { name: p.name, count: p.sources.length }));
+    } catch (e) {
+      toast(cleanError(e), true);
+    }
+  });
+}
+
+/** Přidá dokumenty do projektu a oznámí, kolik jich v něm přibylo. */
+async function addToProject(id: string, ids: string[]) {
+  const before = projects.find((p) => p.id === id)?.sources.length ?? 0;
+  try {
+    const p = await window.api.addToProject(id, ids);
+    putProject(p);
+    const added = p.sources.length - before;
+    toast(added ? t('project.added', { name: p.name, count: added }) : t('project.addedNone', { name: p.name }));
+  } catch (e) {
+    toast(cleanError(e), true);
+  }
+}
+
 function renderFolders(jobs: Job[]) {
   const { folders } = state.library;
   const counts = new Map<string | undefined, number>();
@@ -584,6 +650,13 @@ function renderFolders(jobs: Job[]) {
   );
   // Zvláštní pohledy (ne složky) připnuté dole, oddělené od stromu.
   const dups = duplicateGroups(jobs, state.cards, state.library);
+  const projectBlock = h(
+    'div',
+    { class: 'folder-projects' },
+    h('div', { class: 'folder-section' }, t('project.section')),
+    ...projects.map((p) => folderItem(PROJECT + p.id, p.name, p.sources.length, { iconPath: ICONS.book })),
+    h('button', { class: 'folder-add', type: 'button', onclick: () => createProject() }, icon(ICONS.plus), t('project.new')),
+  );
   const pinned = h(
     'div',
     { class: 'folder-pinned' },
@@ -591,7 +664,7 @@ function renderFolders(jobs: Job[]) {
     folderItem(AI_LOG, t('aiLog.title'), aiActive().length, { iconPath: ICONS.fast }),
     folderItem(TRASH, t('trash.title'), trash.length, { iconPath: ICONS.trash, trash: true }),
   );
-  $('library-folders').replaceChildren(h('div', { class: 'folder-tree' }, ...items), pinned);
+  $('library-folders').replaceChildren(h('div', { class: 'folder-tree' }, ...items), projectBlock, pinned);
 }
 
 // ---------- Banner s chybějícími kartami ----------
@@ -1005,6 +1078,24 @@ function renderBar() {
     h('option', { value: UNSORTED }, t('library.unsorted')),
     ...folderOptions(),
   );
+  const toProject = h(
+    'button',
+    {
+      class: 'btn',
+      type: 'button',
+      onclick: () => {
+        const ids = [...chosen];
+        pickProjectModal(projects, ids.length, (id) => {
+          chosen.clear();
+          renderLibrary();
+          if (id === null) createProject(ids);
+          else void addToProject(id, ids);
+        });
+      },
+    },
+    icon(ICONS.book),
+    t('project.addTo'),
+  );
   const del = h(
     'button',
     {
@@ -1022,25 +1113,37 @@ function renderBar() {
   const clear = h(
     'button',
     {
-      class: 'btn',
+      class: 'btn icon-only',
       type: 'button',
+      title: t('library.clearSelection'),
+      'aria-label': t('library.clearSelection'),
       onclick: () => {
         chosen.clear();
         renderLibrary();
       },
     },
-    t('library.clearSelection'),
+    icon(ICONS.x),
   );
   const allLabel = h('label', { class: 'lib-bar-all' }, all, h('span', {}, chosen.size ? t('library.selected', { count: chosen.size }) : t('library.selectAll')));
   const none = !chosen.size;
   moveTo.disabled = none;
+  toProject.disabled = none;
   del.disabled = none;
   clear.hidden = none;
-  bar.replaceChildren(allLabel, moveTo, del, clear);
+  bar.replaceChildren(allLabel, moveTo, toProject, del, clear);
 }
 
 /** Seznam Koše nebo přehledu AI místo běžných dokumentů. */
 function drawSpecial(query: string) {
+  if (inProject()) {
+    visible = [];
+    chosen.clear();
+    $('library-bar').hidden = true;
+    $('history-empty').hidden = true;
+    $('history-empty-action').hidden = true;
+    renderProject($('history-list'), projectId(), projectCtx);
+    return;
+  }
   if (selected === DUPLICATES) {
     const groups = duplicateGroups(host.jobs(), state.cards, state.library);
     visible = [];
@@ -1088,6 +1191,7 @@ function draw() {
   const { folders } = state.library;
   if (selected !== ALL && selected !== UNSORTED && !special() && !folders.some((f) => f.id === selected)) selected = ALL;
   if (selected === UNSORTED && !jobs.some((j) => !folderOf(j.id))) selected = ALL;
+  if (inProject() && projectsLoaded && !projects.some((p) => p.id === projectId())) selected = ALL;
   if (selected === DUPLICATES && !duplicateGroups(jobs, state.cards, state.library).length) selected = ALL;
 
   renderFolders(jobs);
@@ -1122,7 +1226,8 @@ function draw() {
 /** Znovu načte složky a karty z disku a překreslí. */
 export async function reloadLibrary() {
   try {
-    state = await window.api.libraryState();
+    [state, projects] = await Promise.all([window.api.libraryState(), window.api.listProjects()]);
+    projectsLoaded = true;
   } catch (e) {
     toast(cleanError(e), true);
   }
@@ -1150,6 +1255,7 @@ export function setupLibrary(libraryHost: LibraryHost) {
     const doc = docTitle(p.jobId);
     toastAction(t(p.created.length ? 'library.placedNew' : 'library.placed', { doc, path: p.path }), t('library.placedUndo'), () => void window.api.undoPlacement(p).catch((e) => toast(cleanError(e), true)));
   });
+  window.addEventListener('pagehide', flushProject);
   window.api.onLibraryChanged(() => void reloadLibrary());
   window.api.onTrashChanged(() => void reloadTrash());
   window.api.onIndexProgress((p) => {

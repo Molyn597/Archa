@@ -3,75 +3,11 @@ import { formatUsd } from '../shared/estimate';
 import { locale, t, type MessageKey, type UiLangSetting } from '../shared/i18n';
 import { activeRates, FAST_REMOTE_MODEL, isFreeModel, RECOMMENDED_REMOTE_MODEL } from '../shared/provider';
 import { catalogRows, chatModelWarning, formatContext, isFree, sharedModel, visionWarnings } from '../shared/catalog-view';
-import type { CitationStyle, Currency, GlossaryEntry, LmStatus, ModelPrice, Models, Provider, Settings, Theme } from '../shared/types';
+import type { CitationStyle, Currency, LmStatus, ModelPrice, Models, Provider, Settings, Theme } from '../shared/types';
 import { chatWarningText, duration, h, icon, ICONS, toast } from './dom';
 import { changePasswordModal, refreshVault, vault } from './vault';
 
 const $ = (id: string) => document.getElementById(id)!;
-
-// ---------- Glosář ----------
-
-let entries: GlossaryEntry[] = [];
-let saveTimer: ReturnType<typeof setTimeout> | undefined;
-
-function scheduleSave() {
-  clearTimeout(saveTimer);
-  $('glossary-saved').textContent = t('glossary.saving');
-  saveTimer = setTimeout(async () => {
-    await window.api.saveGlossary(entries);
-    $('glossary-saved').textContent = t('glossary.saved');
-  }, 500);
-}
-
-function glossaryRow(entry: GlossaryEntry) {
-  const input = (key: keyof GlossaryEntry, placeholder: string) => {
-    const el = h('input', { type: 'text', placeholder });
-    el.value = entry[key];
-    el.addEventListener('input', () => {
-      entry[key] = el.value;
-      scheduleSave();
-    });
-    return el;
-  };
-  const row = h(
-    'div',
-    { class: 'glossary-row' },
-    input('source', t('glossary.sourcePlaceholder')),
-    icon(ICONS.arrow),
-    input('target', t('glossary.targetPlaceholder')),
-    h(
-      'button',
-      {
-        class: 'circle-btn',
-        title: t('glossary.remove'),
-        onclick: () => {
-          entries = entries.filter((e) => e !== entry);
-          row.remove();
-          scheduleSave();
-        },
-      },
-      icon(ICONS.trash),
-    ),
-  );
-  return row;
-}
-
-export async function renderGlossary() {
-  entries = await window.api.getGlossary();
-  if (!entries.length) entries.push({ source: '', target: '' });
-  $('glossary').replaceChildren(...entries.map(glossaryRow));
-  $('glossary-saved').textContent = '';
-}
-
-export function setupGlossary() {
-  $('glossary-add').addEventListener('click', () => {
-    const entry = { source: '', target: '' };
-    entries.push(entry);
-    const row = glossaryRow(entry);
-    $('glossary').append(row);
-    row.querySelector('input')?.focus();
-  });
-}
 
 // ---------- Nastavení ----------
 
@@ -204,7 +140,7 @@ function vaultGroup() {
   );
 }
 
-/** Přepínač kopírování s citací a vedle něj výběr stylu (při vypnutí zakázaný). */
+/** Výchozí citační styl: pro nové projekty a jejich seznam literatury. */
 function citationRow(settings: Settings, save: () => Promise<void>) {
   const style = h('select');
   for (const [value, label] of [
@@ -213,17 +149,11 @@ function citationRow(settings: Settings, save: () => Promise<void>) {
   ] as [CitationStyle, string][]) {
     style.append(h('option', { value, selected: settings.citation.style === value }, label));
   }
-  style.disabled = !settings.citation.enabled;
   style.addEventListener('change', () => {
     settings.citation.style = style.value as CitationStyle;
     void save();
   });
-  const row = toggle(t('settings.citation'), t('settings.citationHint'), settings.citation.enabled, (v) => {
-    settings.citation.enabled = v;
-    style.disabled = !v;
-    void save();
-  });
-  return h('div', { class: 'citation-row' }, row, h('label', { class: 'field' }, h('span', {}, t('settings.citationStyle')), style));
+  return h('label', { class: 'field' }, h('span', {}, t('settings.citationStyle')), style, h('span', { class: 'muted small' }, t('settings.citationStyleHint')));
 }
 
 function selectedCard(label: string, body: (Node | string)[], chips: Node[] = []) {

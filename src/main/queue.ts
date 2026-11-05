@@ -240,7 +240,8 @@ export class Queue {
       const measured = await runJob({
         job,
         settings,
-        glossary: await this.store.glossary(),
+        // Závazná terminologie zatím nemá zdroj (glosář zrušen); pipeline ji umí, např. pro terminologii projektu.
+        glossary: [],
         store: this.store,
         signal: abort.signal,
         progress: (p) => {

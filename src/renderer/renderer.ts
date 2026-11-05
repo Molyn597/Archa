@@ -32,7 +32,7 @@ import { updateCard } from './update';
 import { fillHelpDots, renderHelp, scrollToTopic } from './help-view';
 import { openWelcome } from './welcome';
 import type { HelpTopic } from '../shared/help';
-import { renderGlossary, renderSettings, setSettingsTab, setupGlossary } from './forms';
+import { renderSettings, setSettingsTab } from './forms';
 
 declare global {
   interface Window {
@@ -40,7 +40,7 @@ declare global {
   }
 }
 
-type View = 'home' | 'history' | 'detail' | 'glossary' | 'help' | 'settings';
+type View = 'home' | 'history' | 'detail' | 'help' | 'settings';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const ROLE_NAMES: Record<keyof Models | 'chat', MessageKey> = { translate: 'role.translate', ocr: 'role.ocr', polish: 'role.polish', chat: 'role.chat' };
@@ -68,7 +68,6 @@ function show(next: View) {
     b.classList.toggle('active', b.dataset.nav === next || (next === 'detail' && b.dataset.nav === 'history'));
   }
   if (next !== 'detail') closeDetail();
-  if (next === 'glossary') void renderGlossary();
   if (next === 'settings') void renderSettings(onSettingsSaved);
   if (next === 'history') {
     reloadLibrary();
@@ -628,7 +627,6 @@ async function init() {
   setupStatus();
   setupPagesToggle();
   setupDetail(() => show(previousView), () => show('settings'));
-  setupGlossary();
   setupDrop();
   fillLanguages();
   renderAll();

@@ -147,6 +147,27 @@ export interface OrganizePlan {
   folders: { path: string; jobIds: string[] }[];
   questions: FolderQuestion[];
 }
+/** Druh projektu; určuje šablonu osnovy a popisky (literatura × podklady). */
+export type ProjectKind = 'seminar' | 'bachelor' | 'master' | 'dissertation' | 'work' | 'other';
+/** Projekt (práce, zakázka…): vybrané dokumenty knihovny napříč složkami, zadání, osnova a poznámky. */
+export interface Project {
+  id: string;
+  name: string;
+  kind: ProjectKind;
+  /** Zadání práce / zakázky (volný text). */
+  assignment: string;
+  /** Osnova, řádek = bod; odsazení = podbod. */
+  outline: string;
+  notes: string;
+  /** Dokumenty (id úloh) v pořadí přidání; soubory se nekopírují. */
+  sources: string[];
+  style: CitationStyle;
+  /** Termín odevzdání RRRR-MM-DD. */
+  deadline?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
 /** Dokument v knihovně se stejným originálem jako přidávaný soubor. */
 export interface DuplicateMatch {
   id: string;
@@ -462,8 +483,6 @@ export interface Api {
   platform: string;
   getSettings(): Promise<Settings>;
   saveSettings(settings: Settings): Promise<void>;
-  getGlossary(): Promise<GlossaryEntry[]>;
-  saveGlossary(entries: GlossaryEntry[]): Promise<void>;
   lmStatus(provider?: Provider): Promise<LmStatus>;
   /** Znovu stáhne katalog OpenRouter mimo mezipaměť. */
   refreshCatalog(): Promise<void>;
@@ -522,6 +541,16 @@ export interface Api {
   saveCard(id: string, card: DocumentCard): Promise<void>;
   /** Přesune dokument do koše (zařazení do složky zůstane pro obnovení). */
   deleteJob(id: string): Promise<void>;
+  /** Projekty od naposledy upraveného. */
+  listProjects(): Promise<Project[]>;
+  /** Nový projekt ze šablony druhu (osnova, citační styl z nastavení). */
+  createProject(name: string, kind: ProjectKind): Promise<Project>;
+  /** Uloží projekt (zadání, osnova, poznámky, zdroje…); vrací uložený s novým `updatedAt`. */
+  saveProject(project: Project): Promise<Project>;
+  /** Smaže projekt natrvalo; dokumenty v knihovně zůstanou. */
+  deleteProject(id: string): Promise<void>;
+  /** Přidá dokumenty do projektu (bez duplicit). */
+  addToProject(id: string, jobIds: string[]): Promise<Project>;
   /** Nechá `keep`, ostatní do koše; ponechaný bez složky převezme složku odstraněného. */
   dedupe(keep: string, drop: string[]): Promise<void>;
   /** Dokumenty v koši, od naposledy smazaného. */

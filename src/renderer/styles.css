@@ -2447,50 +2447,6 @@ input[type='checkbox'] {
   font-variant-numeric: tabular-nums;
 }
 
-.chat-copy-cite,
-.cite-pop {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--panel);
-  color: var(--text);
-  font-size: 12px;
-}
-
-.chat-copy-cite {
-  align-self: flex-start;
-  margin-top: 4px;
-  padding: 3px 8px;
-  color: var(--muted);
-}
-
-.chat-copy-cite:hover,
-.cite-pop:hover {
-  background: var(--raised);
-  color: var(--text);
-}
-
-.chat-copy-cite svg,
-.cite-pop svg {
-  width: 14px;
-  height: 14px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-/* Plovoucí tlačítko u konce výběru textu v detailu. */
-.cite-pop {
-  position: fixed;
-  z-index: 110;
-  padding: 6px 10px;
-  box-shadow: var(--shadow);
-}
-
 .cite-chip:hover {
   background: color-mix(in srgb, var(--accent) 30%, transparent);
 }
@@ -2689,25 +2645,6 @@ input[type='checkbox'] {
 
 /* ---------- Glosář a nastavení ---------- */
 
-.glossary {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.glossary-row {
-  display: grid;
-  grid-template-columns: 1fr 20px 1fr 34px;
-  align-items: center;
-  gap: 8px;
-}
-
-.glossary-row svg {
-  width: 16px;
-  height: 16px;
-  color: var(--muted);
-}
-
 .settings {
   display: flex;
   flex-direction: column;
@@ -2742,21 +2679,6 @@ input[type='checkbox'] {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-}
-
-.citation-row {
-  display: flex;
-  align-items: flex-end;
-  gap: 16px;
-}
-
-.citation-row .toggle {
-  flex: 1;
-}
-
-.citation-row .field {
-  flex: none;
-  width: 150px;
 }
 
 .toggle input {
@@ -3571,6 +3493,10 @@ button.folder-toggle:hover {
   background: var(--raised);
 }
 
+.lib-move {
+  width: 170px;
+}
+
 .lib-bar[hidden] {
   display: none;
 }
@@ -3903,4 +3829,269 @@ button.folder-toggle:hover {
 
 .dup-actions {
   padding: 6px 14px 12px;
+}
+
+/* ---------- Projekty v knihovně ---------- */
+
+.folder-projects {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+  max-height: 30%;
+  overflow-y: auto;
+}
+
+.folder-section {
+  padding: 0 10px 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.proj-view {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 22px 28px 28px;
+}
+
+.proj-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.proj-title > svg {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  color: var(--muted);
+}
+
+.proj-name {
+  min-width: 0;
+  padding: 2px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  font-size: 18px;
+  font-weight: 600;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.proj-name:hover {
+  background: var(--raised);
+}
+
+.proj-rename {
+  flex: 1;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.proj-status {
+  margin-right: auto;
+  min-width: 4rem;
+}
+
+.proj-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.proj-meta input[type='date'] {
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--main);
+  color: var(--text);
+}
+
+.proj-tabs {
+  align-self: flex-start;
+  max-width: 100%;
+}
+
+.proj-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.proj-list {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  overflow: hidden;
+}
+
+.proj-list .lib-item {
+  border-radius: 0;
+}
+
+.proj-gone {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+}
+
+.lib-item.dim {
+  opacity: 0.75;
+}
+
+.proj-brief {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.proj-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.proj-text {
+  min-height: 160px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--main);
+  color: var(--text);
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.proj-text.mono {
+  min-height: 260px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  tab-size: 2;
+}
+
+.proj-refs {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+}
+
+.proj-ref p {
+  margin: 0;
+  line-height: 1.5;
+  padding-left: 1.5em;
+  text-indent: -1.5em;
+}
+
+.proj-gaps {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 2px 0 6px 1.5em;
+  font-size: 12px;
+}
+
+.proj-missing {
+  margin-top: 20px;
+}
+
+.proj-missing h2 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.proj-pick {
+  max-height: 340px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.proj-pick-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+}
+
+.proj-pick-row:last-child {
+  border-bottom: 0;
+}
+
+.proj-pick-row:hover {
+  background: var(--raised);
+}
+
+.proj-pick-row.dim {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.proj-pick-row > span:nth-child(2) {
+  flex: 1;
+  min-width: 0;
+}
+
+.proj-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 360px;
+}
+
+.proj-choice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.proj-choice:hover {
+  background: var(--raised);
+}
+
+.proj-choice > svg {
+  flex: none;
+  width: 18px;
+  height: 18px;
+}
+
+.proj-choice > span {
+  min-width: 0;
+}
+
+.proj-choice-new {
+  border-style: dashed;
+  color: var(--muted);
 }

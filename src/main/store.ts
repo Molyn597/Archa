@@ -4,7 +4,7 @@ import { t } from '../shared/i18n';
 import { RECOMMENDED_REMOTE_MODEL } from '../shared/provider';
 import { defaultLibrary } from './library';
 import { decrypt, encrypt } from './vault';
-import type { ChatMessage, DocumentCard, GlossaryEntry, Job, Library, Rates, RegionTranslation, Segment, Settings } from '../shared/types';
+import type { ChatMessage, DocumentCard, Job, Library, Project, Rates, RegionTranslation, Segment, Settings } from '../shared/types';
 
 export const DEFAULT_SETTINGS: Settings = {
   uiLang: 'system',
@@ -61,7 +61,7 @@ async function listFiles(dir: string, sub = ''): Promise<string[]> {
   return out;
 }
 
-/** Úložiště pod userData: settings.json, glossary.json, library.json, library-chat.json a jobs/<id>/{job.json, segments.json, study.json, chat.json, card.json, vstup, výstup}. */
+/** Úložiště pod userData: settings.json, library.json, library-chat.json, jobs/<id>/{job.json, segments.json, study.json, chat.json, card.json, vstup, výstup} a projects/<id>/project.json. */
 export class Store {
   constructor(readonly root: string) {}
 
@@ -213,14 +213,6 @@ export class Store {
 
   saveSettings = (settings: Settings) => this.writeJson(path.join(this.root, 'settings.json'), settings);
 
-  glossary = () => this.readJson<GlossaryEntry[]>(path.join(this.root, 'glossary.json'), []);
-
-  saveGlossary = (entries: GlossaryEntry[]) =>
-    this.writeJson(
-      path.join(this.root, 'glossary.json'),
-      entries.filter((e) => e.source.trim() && e.target.trim()),
-    );
-
   /** Knihovna: složky a zařazení dokumentů (jen v datech aplikace, soubory se nepřesouvají). */
   async library(): Promise<Library> {
     const saved = await this.readJson<Partial<Library> | null>(path.join(this.root, 'library.json'), null);
@@ -267,5 +259,17 @@ export class Store {
   card = (id: string) => this.readJson<DocumentCard | null>(path.join(this.jobDir(id), 'card.json'), null);
   saveCard = (id: string, card: DocumentCard) => this.writeJson(path.join(this.jobDir(id), 'card.json'), card);
   inputPath = (job: Job) => path.join(this.jobDir(job.id), `input${job.ext}`);
+  projectDir = (id: string) => path.join(this.root, 'projects', id);
+
+  /** Projekty od naposledy upraveného. */
+  async projects(): Promise<Project[]> {
+    const ids = await readdir(path.join(this.root, 'projects')).catch(() => [] as string[]);
+    const list = await Promise.all(ids.map((id) => this.project(id)));
+    return list.filter((p): p is Project => p !== null).sort((a, b) => b.updatedAt - a.updatedAt);
+  }
+
+  project = (id: string) => this.readJson<Project | null>(path.join(this.projectDir(id), 'project.json'), null);
+  saveProject = (project: Project) => this.writeJson(path.join(this.projectDir(project.id), 'project.json'), project);
+  deleteProject = (id: string) => rm(this.projectDir(id), { recursive: true, force: true });
   deleteJob = (id: string) => rm(this.jobDir(id), { recursive: true, force: true });
 }

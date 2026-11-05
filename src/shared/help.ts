@@ -10,7 +10,7 @@ export interface HelpSection {
   blocks: HelpBlock[];
 }
 
-export type HelpTopic = 'start' | 'provider' | 'modes' | 'options' | 'results' | 'chat' | 'interface' | 'glossary' | 'updates' | 'problems' | 'about';
+export type HelpTopic = 'start' | 'provider' | 'modes' | 'options' | 'results' | 'chat' | 'interface' | 'updates' | 'problems' | 'about';
 
 const cs: HelpSection[] = [
   {
@@ -76,7 +76,7 @@ const cs: HelpSection[] = [
       {
         ul: [
           'Překlad: celý přeložený text jako souvislý dokument.',
-          'Srovnání: originál a překlad odstavec po odstavci vedle sebe. Místa, která stojí za kontrolu (možný překlep, nepřeložené slovo, chybějící termín z glosáře), jsou označená; odkaz „N ke kontrole“ vpravo nahoře tě k prvnímu z nich přenese.',
+          'Srovnání: originál a překlad odstavec po odstavci vedle sebe. Místa, která stojí za kontrolu (možný překlep, nepřeložené slovo), jsou označená; odkaz „N ke kontrole“ vpravo nahoře tě k prvnímu z nich přenese.',
           'Překlad PDF: přeložené PDF, které vypadá jako originál (stejné rozložení, obrázky i tabulky).',
           'PDF vedle sebe: originál a přeložené PDF vedle sebe, stránky se posouvají spolu.',
           'Originál: původní soubor.',
@@ -117,14 +117,6 @@ const cs: HelpSection[] = [
           'Nastavení má sekce Vzhled (jazyk aplikace a barevný motiv Světlý, Tmavý nebo Podle systému), Překlad v počítači (modely LM Studia), Online (OpenRouter: API klíč, výběr modelu, měna cen) a Pokročilé (oznámení, PDF se zachovaným vzhledem, uvolnění modelů).',
         ],
       },
-    ],
-  },
-  {
-    id: 'glossary',
-    title: 'Glosář',
-    blocks: [
-      { p: 'Glosář je seznam odborných termínů a jejich závazných překladů, např. „large language model = velký jazykový model“. Najdeš ho v levém panelu. Aplikace ho použije u všech překladů a odstavec, kde termín chybí, opraví nebo označí.' },
-      { tip: 'Zadávej termín tak, jak se píše v originále; v překladu se použije ve správném pádě.' },
     ],
   },
   {
@@ -225,7 +217,7 @@ const en: HelpSection[] = [
       {
         ul: [
           'Translation: the whole translated text as one document.',
-          'Comparison: original and translation side by side, paragraph by paragraph. Spots worth checking (possible typo, untranslated word, missing glossary term) are highlighted; the “N to review” link at the top right takes you to the first one.',
+          'Comparison: original and translation side by side, paragraph by paragraph. Spots worth checking (possible typo, untranslated word) are highlighted; the “N to review” link at the top right takes you to the first one.',
           'Translated PDF: a translated PDF that looks like the original (same layout, images and tables).',
           'PDFs side by side: the original and the translated PDF next to each other, scrolling together.',
           'Original: the source file.',
@@ -266,14 +258,6 @@ const en: HelpSection[] = [
           'Settings has the sections Appearance (app language and color theme: Light, Dark or System), Translation on this computer (LM Studio models), Online (OpenRouter: API key, model choice, price currency) and Advanced (notifications, layout-preserving PDF, unloading models).',
         ],
       },
-    ],
-  },
-  {
-    id: 'glossary',
-    title: 'Glossary',
-    blocks: [
-      { p: 'The glossary is a list of technical terms with their mandatory translations, e.g. “large language model = velký jazykový model”. You find it in the left panel. The app uses it for every translation and fixes or flags paragraphs where a term is missing.' },
-      { tip: 'Enter the term as written in the original; the translation uses it in the grammatically correct form.' },
     ],
   },
   {

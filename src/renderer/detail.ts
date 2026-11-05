@@ -9,8 +9,6 @@ import { findRegion, moveCrop, normalizeCrop, resizeCrop, type Handle } from '..
 import { authorsText, BIBLIO_FIELDS, DOC_TYPES, FACT_FIELDS, parseAuthors } from '../shared/card';
 import type { Biblio, DocFacts, DocType, DocumentCard, DocumentContext, Job, JobDetail, Mode, RegionTranslation, Segment, Stage } from '../shared/types';
 import { resetChat, setupChat, showChat } from './chat';
-import { refreshCitation } from './citation-copy';
-import { setupSelectionCite } from './selection-cite';
 import { createPages, releasePages, setupPdfZoom } from './pdf-zoom';
 import {
   cleanError,
@@ -1056,7 +1054,6 @@ export async function openDetail(id: string, initialTab: Tab = 'compare') {
   current = detail;
   clearCite();
   showChat(detail.job);
-  void refreshCitation();
   tab = initialTab;
   picking = false;
   renderHeader();
@@ -1094,7 +1091,6 @@ function syncRegionsToggle() {
 export function setupDetail(onBack: () => void, openSettings: () => void) {
   setupChat({ segments: () => current?.segments ?? [], cite: showCite, openSettings });
   setupPdfZoom();
-  setupSelectionCite($('detail-body'), () => current);
   $('detail-back').addEventListener('click', onBack);
   syncRegionsToggle();
   $('regions-toggle').addEventListener('click', () => {

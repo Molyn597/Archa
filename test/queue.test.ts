@@ -17,7 +17,6 @@ function makeStore() {
     saveJob: async (job: Job) => void jobs.set(job.id, job),
     settings: async () => settings,
     saveSettings: async (s: typeof settings) => void (settings = s),
-    glossary: async () => [],
     segments: async (id: string) => segments.get(id) ?? [],
     saveSegments: async (id: string, list: Segment[]) => void segments.set(id, list),
     jobDir: (id: string) => `/tmp/jobs/${id}`,

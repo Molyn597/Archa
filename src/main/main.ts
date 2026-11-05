@@ -23,7 +23,7 @@ import { resolveLang, setLang, t, type MessageKey } from '../shared/i18n';
 import { LIBRARY_CHAT, TRASH_DAYS } from '../shared/folders';
 import { languageName } from '../shared/languages';
 import { findRegion, normalizeCrop } from '../shared/regions';
-import type { ChatModel, DocumentCard, DuplicateMatch, GlossaryEntry, Job, Library, LibraryFolder, JobOptions, Mode, OrganizePlan, OutputKind, Placement, Provider, RegionTranslation, Settings, Stage } from '../shared/types';
+import type { ChatModel, DocumentCard, DuplicateMatch, Project, ProjectKind, Job, Library, LibraryFolder, JobOptions, Mode, OrganizePlan, OutputKind, Placement, Provider, RegionTranslation, Settings, Stage } from '../shared/types';
 import { isOnline } from '../shared/provider';
 import { makeCard } from './make-card';
 import { answerQuestion, applyPlan, mergeFolders, moveDocs, moveFolder, removeFolder, shouldBeLocked, undoPlacement } from './library';
@@ -34,6 +34,7 @@ import { buildIndex, embedder, embedModelFor, indexModel } from './embed';
 import { fileInfo } from './fileinfo';
 import { fillHashes, hashFile } from './hash';
 import { adoptFolder } from '../shared/duplicates';
+import { addSources, newProject } from '../shared/projects';
 import { usdCzk } from './fx';
 import { clearKey, readKey, saveKey } from './keystore';
 import { listModels, status } from './lmstudio';
@@ -241,8 +242,6 @@ function registerIpc() {
     applyTheme(settings.theme);
     applyLang(settings.uiLang);
   });
-  ipcMain.handle('glossary', () => store.glossary());
-  ipcMain.handle('glossary-save', (_e, entries: GlossaryEntry[]) => store.saveGlossary(entries));
   ipcMain.handle('lm-status', async (_e, provider?: Provider) => {
     const s = await store.settings();
     return isOnline({ provider: provider ?? s.provider }) ? openrouterStatus(s.remoteModels, await readKey(store.root)) : status(s.apiUrl, s.models);
@@ -289,6 +288,35 @@ function registerIpc() {
         return hash ? jobs.filter((j) => j.inputHash === hash).map((j) => ({ id: j.id, name: j.name, trashed: !!j.trashedAt })) : [];
       }),
     );
+  });
+  /** Zdrojům projektu bez karty ji na pozadí vytvoří, ať se rovnou objeví v seznamu literatury (jen hotové, ne zamčené). */
+  const cardsForSources = async (ids: string[]) => {
+    if (!(await store.settings()).autoCard) return;
+    const todo: Job[] = [];
+    for (const job of await openJobs()) if (ids.includes(job.id) && job.status === 'done' && !(await store.card(job.id))) todo.push(job);
+    for (const job of todo) await queue.exclusive(async () => makeCard(store, job, await store.settings(), libraryChanged)).catch(() => undefined);
+    if (todo.length) send('library-changed');
+  };
+  ipcMain.handle('projects', () => store.projects());
+  ipcMain.handle('project-create', async (_e, name: string, kind: ProjectKind) => {
+    const project = newProject(name, kind, (await store.settings()).citation.style, randomUUID());
+    await store.saveProject(project);
+    return project;
+  });
+  ipcMain.handle('project-save', async (_e, project: Project) => {
+    const saved = { ...project, updatedAt: Date.now() };
+    await store.saveProject(saved);
+    return saved;
+  });
+  ipcMain.handle('project-delete', (_e, id: string) => store.deleteProject(id));
+  ipcMain.handle('project-add', async (_e, id: string, jobIds: string[]) => {
+    const project = await store.project(id);
+    if (!project) throw new Error(t('project.missing'));
+    addSources(project, jobIds);
+    project.updatedAt = Date.now();
+    await store.saveProject(project);
+    void cardsForSources(jobIds);
+    return project;
   });
   ipcMain.handle('library-dedupe', async (_e, keep: string, drop: string[]) => {
     await editLibrary((library) => adoptFolder(library, keep, drop));
