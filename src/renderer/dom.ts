@@ -179,3 +179,26 @@ export function toastAction(text: string, label: string, onClick: () => void) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => (el.hidden = true), 10000);
 }
+
+/** Obecné malé modální okno; vrací funkci pro zavření. */
+export function openModal(title: string, body: HTMLElement[], foot: HTMLElement[]) {
+  const close = () => {
+    overlay.remove();
+    document.removeEventListener('keydown', onKey);
+  };
+  const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close();
+  const overlay: HTMLElement = h(
+    'div',
+    { class: 'modal-overlay', onmousedown: (e: Event) => e.target === overlay && close() },
+    h(
+      'div',
+      { class: 'modal merge-modal', role: 'dialog', 'aria-modal': 'true' },
+      h('div', { class: 'modal-head' }, h('strong', {}, title), h('button', { class: 'btn', type: 'button', title: t('region.close'), 'aria-label': t('region.close'), onclick: close }, icon(ICONS.x))),
+      h('div', { class: 'modal-body' }, ...body),
+      h('div', { class: 'modal-foot merge-foot' }, ...foot),
+    ),
+  );
+  document.addEventListener('keydown', onKey);
+  document.body.append(overlay);
+  return close;
+}

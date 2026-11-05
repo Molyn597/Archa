@@ -1,6 +1,4 @@
 import { Document, ExternalHyperlink, HeadingLevel, ImageRun, Packer, Paragraph, Table, TableCell, TableRow, TextRun, WidthType } from 'docx';
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
 import type { Segment } from '../shared/types';
 import { findAnchors } from './quality';
 import { finalText, visibleSegments } from './segments';
@@ -68,13 +66,13 @@ function figureParagraph(s: Segment, images: Map<string, Buffer>) {
   return new Paragraph({ children: [run], spacing: { before: 120, after: 120 } });
 }
 
-/** Načte výřezy tabulek a grafů ze složky úlohy; chybějící soubor se přeskočí. */
-export async function loadFigures(dir: string, segments: Segment[]): Promise<Map<string, Buffer>> {
+/** Načte výřezy tabulek a grafů úlohy (čtení přes Store kvůli zamčeným dokumentům); chybějící soubor se přeskočí. */
+export async function loadFigures(read: (file: string) => Promise<Buffer>, segments: Segment[]): Promise<Map<string, Buffer>> {
   const images = new Map<string, Buffer>();
   for (const s of segments) {
     if (!s.snapshot) continue;
     try {
-      images.set(s.snapshot.file, await readFile(path.join(dir, s.snapshot.file)));
+      images.set(s.snapshot.file, await read(s.snapshot.file));
     } catch {
       /* obrázek chybí */
     }

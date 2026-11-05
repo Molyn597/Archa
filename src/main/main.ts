@@ -1,4 +1,8 @@
-import { copyFile, readFile } from 'node:fs/promises';
+import { writeFile } from 'node:fs/promises';
+import { tempCopy, wipeTempCopies } from './temp-open';
+import { lockTransitions, syncLocks } from './locks';
+import { passwordOk, WrongPasswordError } from './vault';
+import { VaultState } from './vault-state';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import {
@@ -10,6 +14,7 @@ import {
   nativeImage,
   nativeTheme,
   Notification,
+  powerMonitor,
   shell,
   Tray,
   type MenuItemConstructorOptions,
@@ -21,7 +26,7 @@ import { findRegion, normalizeCrop } from '../shared/regions';
 import type { ChatModel, DocumentCard, GlossaryEntry, Job, Library, LibraryFolder, JobOptions, Mode, OrganizePlan, OutputKind, Placement, Provider, RegionTranslation, Settings, Stage } from '../shared/types';
 import { isOnline } from '../shared/provider';
 import { makeCard } from './make-card';
-import { answerQuestion, applyPlan, mergeFolders, moveDocs, moveFolder, removeFolder, undoPlacement } from './library';
+import { answerQuestion, applyPlan, mergeFolders, moveDocs, moveFolder, removeFolder, shouldBeLocked, undoPlacement } from './library';
 import { organizeFolder, suggestMerges } from './organize';
 import { askDocument } from './chat';
 import { askLibrary } from './library-chat';
@@ -64,6 +69,11 @@ const active = new Map<string, Job>();
 
 const send = (channel: string, ...args: unknown[]) => win?.webContents.send(channel, ...args);
 /** Knihovna se změnila; když AI přitom založila složky, renderer nabídne Vrátit. */
+/** Trezor zamčených složek; změna stavu = renderer znovu načte úlohy i knihovnu. */
+const vault = new VaultState(store, () => {
+  send('vault-changed');
+  send('library-changed');
+});
 const libraryChanged = (placed?: Placement) => {
   send('library-changed');
   // Oznámení s Vrátit jen u nově založených složek; ostatní zařazení jsou v přehledu „Zařadila AI“.
@@ -203,9 +213,17 @@ function createWindow() {
   win.loadFile(path.join(__dirname, 'index.html'));
 }
 
+const outputName = (job: Job, kind: OutputKind = 'docx') => (kind === 'pdf' ? job.outputPdf : job.output);
+
 function jobFile(job: Job, kind: OutputKind = 'docx') {
-  const name = kind === 'pdf' ? job.outputPdf : job.output;
+  const name = outputName(job, kind);
   return name ? path.join(store.jobDir(job.id), name) : null;
+}
+
+/** Úlohy mimo zamčené složky: hromadné AI zpracování (karty, fakta, indexy) zamčené dokumenty nikdy neposílá modelu. */
+async function openJobs() {
+  const library = await store.library();
+  return (await store.jobs()).filter((j) => !shouldBeLocked(library, j.id));
 }
 
 function registerIpc() {
@@ -261,18 +279,18 @@ function registerIpc() {
   });
   ipcMain.handle('job-input', async (_e, id: string) => {
     const job = await store.job(id);
-    return job ? new Uint8Array(await readFile(store.inputPath(job))) : null;
+    return job ? new Uint8Array(await store.readInput(job)) : null;
   });
   ipcMain.handle('job-figure', async (_e, id: string, file: string) => {
     if (!/^figures\/[\w.-]+\.png$/.test(file) || file.includes('..')) throw new Error('Neplatný soubor');
     const job = await store.job(id);
     if (!job) throw new Error('Úloha neexistuje');
-    return `data:image/png;base64,${(await readFile(path.join(store.jobDir(job.id), file))).toString('base64')}`;
+    return `data:image/png;base64,${(await store.readJobFile(job.id, file)).toString('base64')}`;
   });
   ipcMain.handle('job-output-pdf', async (_e, id: string) => {
     const job = await store.job(id);
-    const file = job && jobFile(job, 'pdf');
-    return file ? new Uint8Array(await readFile(file)) : null;
+    const name = job && outputName(job, 'pdf');
+    return name ? new Uint8Array(await store.readJobFile(job.id, name)) : null;
   });
   ipcMain.handle('job-cancel', (_e, id: string) => queue.cancel(id));
   ipcMain.handle('job-retry', (_e, id: string, mode: Mode) => queue.retry(id, mode));
@@ -331,7 +349,7 @@ function registerIpc() {
   );
   const unindexed = async () => {
     const model = embedModelFor(await store.settings());
-    const jobs = (await store.jobs()).filter((j) => j.status === 'done');
+    const jobs = (await openJobs()).filter((j) => j.status === 'done');
     const missing = model ? (await Promise.all(jobs.map(async (j) => ((await indexModel(store, j.id)) === model ? undefined : j)))).filter((j): j is Job => !!j) : [];
     return { model, total: jobs.length, missing };
   };
@@ -381,11 +399,51 @@ function registerIpc() {
     return { library: await store.library(), cards: Object.fromEntries(jobs.flatMap((j, i) => (cards[i] ? [[j.id, cards[i]]] : []))) };
   });
   // Změna knihovny: načíst, upravit, uložit a dát vědět oknu.
+  /**
+   * Úprava knihovny. Když změna vyžaduje šifrování či dešifrování dokumentů (zamčená složka, přesun do ní / z ní),
+   * musí být trezor odemčený – to se ověří nanečisto ještě před uložením.
+   */
   const editLibrary = async <T>(change: (library: Library) => T): Promise<T> => {
+    const preview = structuredClone(await store.library());
+    change(preview);
+    if (!store.unlocked && (await lockTransitions(store, preview)).length) throw new Error(t('vault.unlockFirst'));
     const result = await store.updateLibrary(change);
+    if (store.unlocked) await syncLocks(store, await store.library());
     send('library-changed');
     return result;
   };
+  ipcMain.handle('vault-status', () => vault.status());
+  ipcMain.handle('vault-create', async (_e, password: string) => {
+    if (!passwordOk(password)) throw new Error(t('vault.short'));
+    await vault.create(password);
+  });
+  ipcMain.handle('vault-unlock', async (_e, password: string) => {
+    try {
+      await vault.unlock(password);
+    } catch (e) {
+      throw new Error(e instanceof WrongPasswordError ? t('vault.wrong') : (e as Error).message);
+    }
+  });
+  ipcMain.handle('vault-lock', () => vault.lock());
+  ipcMain.handle('vault-change', async (_e, oldPassword: string, newPassword: string) => {
+    if (!passwordOk(newPassword)) throw new Error(t('vault.short'));
+    try {
+      await vault.changePassword(oldPassword, newPassword);
+    } catch (e) {
+      throw new Error(e instanceof WrongPasswordError ? t('vault.wrong') : (e as Error).message);
+    }
+  });
+  ipcMain.handle('vault-ping', () => vault.touch());
+  /** Zamknout složku (zašifruje ji i podsložky) / zrušit zámek natrvalo (dešifruje). */
+  ipcMain.handle('library-folder-lock', async (_e, id: string, locked: boolean) => {
+    if (!store.unlocked) throw new Error(t('vault.unlockFirst'));
+    await editLibrary((library) => {
+      const folder = library.folders.find((f) => f.id === id);
+      if (!folder) return;
+      if (locked) folder.locked = true;
+      else delete folder.locked;
+    });
+  });
   ipcMain.handle('library-folder-create', (_e, name: string, parent?: string): Promise<LibraryFolder> =>
     editLibrary((library) => {
       const folder: LibraryFolder = { id: randomUUID(), name: name.trim(), createdAt: Date.now() };
@@ -409,7 +467,7 @@ function registerIpc() {
   ipcMain.handle('library-move', (_e, jobIds: string[], folderId: string | null) => editLibrary((library) => moveDocs(library, jobIds, folderId)));
   ipcMain.handle('library-make-cards', async () => {
     const todo: Job[] = [];
-    for (const job of await store.jobs()) if (job.status === 'done' && !(await store.card(job.id))) todo.push(job);
+    for (const job of await openJobs()) if (job.status === 'done' && !(await store.card(job.id))) todo.push(job);
     send('library-progress', { done: 0, total: todo.length });
     for (const [i, job] of todo.entries()) {
       // Chyba jednoho dokumentu (prázdný text, model neodpověděl) ostatní nezastaví.
@@ -420,7 +478,7 @@ function registerIpc() {
   });
   ipcMain.handle('library-fill-facts', async () => {
     const todo: Job[] = [];
-    for (const job of await store.jobs()) {
+    for (const job of await openJobs()) {
       const card = job.status === 'done' ? await store.card(job.id) : undefined;
       if (card && (card.type === 'invoice' || card.type === 'contract') && !card.edited && !card.facts) todo.push(job);
     }
@@ -456,10 +514,14 @@ function registerIpc() {
   ipcMain.handle('trash-empty', async () => purge((await store.jobs(true)).map((j) => j.id)));
   ipcMain.handle('job-open', async (_e, id: string, kind?: OutputKind) => {
     const job = await store.job(id);
-    const file = job && jobFile(job, kind);
-    if (file) await shell.openPath(file);
+    const name = job && outputName(job, kind);
+    if (!job || !name) return;
+    // Zamčený dokument: jiná aplikace dostane dočasnou nešifrovanou kopii (smaže se při zamčení trezoru).
+    const file = (await store.isLockedJob(id)) ? await tempCopy(name, await store.readJobFile(id, name)) : jobFile(job, kind)!;
+    await shell.openPath(file);
   });
   ipcMain.handle('job-reveal', async (_e, id: string) => {
+    if (await store.isLockedJob(id)) throw new Error(t('vault.noReveal'));
     const job = await store.job(id);
     const file = job && jobFile(job);
     if (file) shell.showItemInFolder(file);
@@ -474,8 +536,9 @@ function registerIpc() {
       filters: [{ name: 'Word', extensions: ['docx'] }, ...(pdf ? [{ name: 'PDF', extensions: ['pdf'] }] : [])],
     });
     if (res.canceled || !res.filePath) return;
-    // Typ se pozná podle přípony, kterou dialog doplní podle zvoleného filtru.
-    await copyFile(pdf && path.extname(res.filePath).toLowerCase() === '.pdf' ? pdf : file, res.filePath);
+    // Typ se pozná podle přípony, kterou dialog doplní podle zvoleného filtru; zamčený dokument se uloží dešifrovaný.
+    const name = pdf && path.extname(res.filePath).toLowerCase() === '.pdf' ? job.outputPdf! : job.output!;
+    await writeFile(res.filePath, await store.readJobFile(id, name));
   });
 }
 
@@ -483,7 +546,12 @@ if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   app.on('second-instance', showWindow);
-  app.on('before-quit', () => (quitting = true));
+  app.on('before-quit', () => {
+    quitting = true;
+    // Dočasné nešifrované kopie zamčených dokumentů nesmí přežít aplikaci.
+    void vault.lock();
+    void wipeTempCopies();
+  });
   app.on('activate', showWindow);
   app.on('window-all-closed', () => {
     if (!isMac && !queue.busy) app.quit();
@@ -495,6 +563,10 @@ if (!app.requestSingleInstanceLock()) {
     setLang(resolveLang(settings.uiLang, app.getLocale()));
     setMenu();
     registerIpc();
+    await store.cleanupLocked().catch(() => undefined);
+    // Uspání nebo zamčení obrazovky zamkne i trezor.
+    powerMonitor.on('suspend', () => void vault.lock());
+    powerMonitor.on('lock-screen', () => void vault.lock());
     await queue.recover();
     await queue.purgeOld(TRASH_DAYS).catch(() => undefined);
     applyTheme(settings.theme);

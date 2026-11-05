@@ -19,7 +19,8 @@ const normPath = (s: string) => fold(s).split(/\s*[/>]\s*/).filter(Boolean).join
 export function matchFolder(library: Library, suggestion?: string): string | undefined {
   const wanted = normPath(suggestion ?? '');
   if (!wanted) return undefined;
-  const { folders } = library;
+  // Zamčené složky AI nevidí: dokument by se do nich zařadil nezašifrovaný.
+  const folders = library.folders.filter((f) => !isLocked(library.folders, f));
   const leaf = wanted.split('/').at(-1)!;
   return (
     folders.find((f) => normPath(folderPath(folders, f)) === wanted)?.id ??
@@ -85,14 +86,15 @@ export function ensurePath(library: Library, path: string, create: boolean, newI
   let parent: string | undefined;
   for (const part of pathParts(path)) {
     const wanted = fold(part);
-    const found = childFolders(library.folders, parent).find((f) => fold(folderName(f)) === wanted || f.id === wanted);
+    const open = childFolders(library.folders, parent).filter((f) => !isLocked(library.folders, f));
+    const found = open.find((f) => fold(folderName(f)) === wanted || f.id === wanted);
     if (found) {
       parent = found.id;
       continue;
     }
     if (!create) return { created };
     // Skoro stejná sourozenecká složka („Ekonomika“ vedle „Ekonomie“) se použije místo zakládání duplicity.
-    const similar = childFolders(library.folders, parent).find((f) => similarName(folderName(f), part));
+    const similar = open.find((f) => similarName(folderName(f), part));
     if (similar) {
       parent = similar.id;
       continue;
@@ -226,4 +228,10 @@ export function similarFolders(library: Library): { from: string; into: string }
     }
   }
   return pairs;
+}
+
+/** Dokument má být zašifrovaný: leží (i zděděně) v zamčené složce. */
+export function shouldBeLocked(library: Library, jobId: string) {
+  const folder = library.folders.find((f) => f.id === library.assign[jobId]?.folder);
+  return !!folder && isLocked(library.folders, folder);
 }

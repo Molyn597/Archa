@@ -518,6 +518,19 @@ export interface Api {
   purgeJobs(ids: string[]): Promise<void>;
   emptyTrash(): Promise<void>;
   onTrashChanged(handler: () => void): void;
+  /** Trezor zamčených složek: existuje (nastavené heslo) a je odemčený. */
+  vaultStatus(): Promise<{ exists: boolean; unlocked: boolean }>;
+  /** Nastaví heslo trezoru (jen poprvé) a odemkne ho. */
+  vaultCreate(password: string): Promise<void>;
+  /** Odemkne trezor; špatné heslo = chyba. */
+  vaultUnlock(password: string): Promise<void>;
+  vaultLock(): Promise<void>;
+  vaultChangePassword(oldPassword: string, newPassword: string): Promise<void>;
+  /** Aktivita uživatele (posouvá automatické zamčení). */
+  vaultPing(): Promise<void>;
+  /** Zamkne složku (zašifruje ji i podsložky), `false` = zámek natrvalo zruší (dešifruje); vyžaduje odemčený trezor. */
+  lockFolder(id: string, locked: boolean): Promise<void>;
+  onVaultChanged(handler: () => void): void;
   libraryState(): Promise<LibraryState>;
   /** Nová složka, s `parent` jako podsložka. */
   createFolder(name: string, parent?: string): Promise<LibraryFolder>;

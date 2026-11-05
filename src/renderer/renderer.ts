@@ -8,6 +8,7 @@ import type { Api, FileInfo, Job, LmStatus, Mode, Models, Provider, Settings } f
 import { openChat, renderFolderOpt, setupLibraryChat, showLibraryChat, syncChatSettings } from './chat';
 import { citeSegment, closeDetail, detailJobId, openDetail, setupDetail, updateDetail, type Tab } from './detail';
 import { reloadLibrary, renderLibrary, setupLibrary } from './library';
+import { refreshVault, setupVaultActivity } from './vault';
 import {
   applyI18n,
   date,
@@ -579,6 +580,7 @@ async function init() {
   applyI18n();
   applyTheme();
   jobs = new Map((await window.api.listJobs()).map((j) => [j.id, j]));
+  await refreshVault();
 
   for (const b of document.querySelectorAll<HTMLButtonElement>('.nav-item[data-nav]')) {
     b.addEventListener('click', () => show(b.dataset.nav as View));
@@ -644,6 +646,17 @@ async function init() {
     if (view === 'history') reloadLibrary();
     if (detailJobId() === id) show(previousView === 'detail' ? 'history' : previousView);
   });
+  // Zamčení/odemčení trezoru mění, které úlohy a dokumenty knihovny jsou vidět.
+  window.api.onVaultChanged(async () => {
+    await refreshVault();
+    jobs = new Map((await window.api.listJobs()).map((j) => [j.id, j]));
+    // Zamčením zmizel otevřený dokument ze seznamu: rozšifrovaný obsah nesmí zůstat na obrazovce.
+    const open = detailJobId();
+    if (view === 'detail' && open && !jobs.has(open)) show('history');
+    renderHome();
+    await reloadLibrary();
+  });
+  setupVaultActivity();
   window.api.onOpenJob((id) => void openJob(id));
 
   if (!settings.onboarded) showWelcome();

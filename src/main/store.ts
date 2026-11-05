@@ -1,7 +1,9 @@
-import { mkdir, readFile, readdir, rm, writeFile, rename } from 'node:fs/promises';
+import { access, mkdir, readFile, readdir, rm, writeFile, rename } from 'node:fs/promises';
 import path from 'node:path';
+import { t } from '../shared/i18n';
 import { RECOMMENDED_REMOTE_MODEL } from '../shared/provider';
 import { defaultLibrary } from './library';
+import { decrypt, encrypt } from './vault';
 import type { ChatMessage, DocumentCard, GlossaryEntry, Job, Library, Rates, RegionTranslation, Segment, Settings } from '../shared/types';
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -33,26 +35,161 @@ const mergeRates = (base: Rates, saved?: Partial<Rates>): Rates => {
   return { ocrPerPage, translatePerKChar, fixPerSegment };
 };
 
+/** Zašifrovaný soubor dokumentu: `<soubor>.tlk`; značka `.locked` v jeho složce = dokument je v zamčené složce. */
+export const ENC = '.tlk';
+export const LOCK_MARK = '.locked';
+
+/** Soubor zamčeného dokumentu, ale trezor je zamčený (bez hesla nejde číst ani zapisovat). */
+export class LockedError extends Error {
+  constructor() {
+    super(t('vault.locked'));
+  }
+}
+
+const missing = (e: unknown) => (e as NodeJS.ErrnoException)?.code === 'ENOENT';
+const exists = (file: string) => access(file).then(() => true, () => false);
+
+/** Soubory složky dokumentu (i v podsložkách, např. figures/), relativně, bez dočasných. */
+async function listFiles(dir: string, sub = ''): Promise<string[]> {
+  const entries = await readdir(path.join(dir, sub), { withFileTypes: true }).catch(() => []);
+  const out: string[] = [];
+  for (const e of entries) {
+    const rel = path.join(sub, e.name);
+    if (e.isDirectory()) out.push(...(await listFiles(dir, rel)));
+    else if (!e.name.endsWith('.tmp')) out.push(rel);
+  }
+  return out;
+}
+
 /** Úložiště pod userData: settings.json, glossary.json, library.json, library-chat.json a jobs/<id>/{job.json, segments.json, study.json, chat.json, card.json, vstup, výstup}. */
 export class Store {
   constructor(readonly root: string) {}
 
+  /** Hlavní klíč odemčeného trezoru (jen v paměti). */
+  private key?: Buffer;
+  setKey = (key?: Buffer) => (this.key = key);
+  get unlocked() {
+    return !!this.key;
+  }
+
   jobDir = (id: string) => path.join(this.root, 'jobs', id);
+
+  /** Vazba šifry na místo souboru (dokument a název), stejná na všech systémech. */
+  private aad = (file: string) => path.relative(this.root, file).split(path.sep).join('/');
+
+  /** Obsah souboru; zašifrovaný se dešifruje v paměti (zamčený trezor = LockedError). */
+  private async readBytes(file: string): Promise<Buffer> {
+    try {
+      const blob = await readFile(file + ENC);
+      if (!this.key) throw new LockedError();
+      return decrypt(this.key, blob, this.aad(file));
+    } catch (e) {
+      if (!missing(e)) throw e;
+    }
+    return readFile(file);
+  }
+
+  // Zápis přes dočasný soubor, aby pád uprostřed zápisu nezničil historii; v zamčeném dokumentu zašifrovaně.
+  private async writeBytes(file: string, data: Buffer | string) {
+    const dir = path.dirname(file);
+    await mkdir(dir, { recursive: true });
+    if (await this.inLockedJob(file)) {
+      if (!this.key) throw new LockedError();
+      const tmp = `${file}${ENC}.tmp`;
+      await writeFile(tmp, encrypt(this.key, Buffer.from(data), this.aad(file)));
+      await rename(tmp, file + ENC);
+      await rm(file, { force: true });
+      return;
+    }
+    const tmp = `${file}.tmp`;
+    await writeFile(tmp, data);
+    await rename(tmp, file);
+  }
+
+  /** Soubor patří dokumentu, jehož složka je označená jako zamčená. */
+  private inLockedJob(file: string) {
+    const rel = path.relative(path.join(this.root, 'jobs'), file).split(path.sep);
+    return rel.length > 1 && !rel[0].startsWith('..') ? exists(path.join(this.root, 'jobs', rel[0], LOCK_MARK)) : Promise.resolve(false);
+  }
 
   private async readJson<T>(file: string, fallback: T): Promise<T> {
     try {
-      return JSON.parse(await readFile(file, 'utf8')) as T;
-    } catch {
+      return JSON.parse((await this.readBytes(file)).toString('utf8')) as T;
+    } catch (e) {
+      // Zamčený dokument nesmí tiše vrátit prázdná data – následný zápis by ho přepsal.
+      if (e instanceof LockedError) throw e;
       return fallback;
     }
   }
 
-  // Zápis přes dočasný soubor, aby pád uprostřed zápisu nezničil historii.
-  private async writeJson(file: string, data: unknown) {
-    await mkdir(path.dirname(file), { recursive: true });
-    const tmp = `${file}.tmp`;
-    await writeFile(tmp, JSON.stringify(data, null, 1));
-    await rename(tmp, file);
+  private writeJson = (file: string, data: unknown) => this.writeBytes(file, JSON.stringify(data, null, 1));
+
+  /** Libovolný soubor dokumentu (originál, výstup, obrázek, vektory). */
+  readJobFile = (id: string, name: string) => this.readBytes(path.join(this.jobDir(id), name));
+  writeJobFile = (id: string, name: string, data: Buffer | string) => this.writeBytes(path.join(this.jobDir(id), name), data);
+  jobFileExists = async (id: string, name: string) => {
+    const file = path.join(this.jobDir(id), name);
+    return (await exists(file)) || exists(file + ENC);
+  };
+  readInput = (job: Job) => this.readJobFile(job.id, `input${job.ext}`);
+
+  isLockedJob = (id: string) => exists(path.join(this.jobDir(id), LOCK_MARK));
+
+  /** Zašifruje dokument (idempotentní: dokončí i přerušené šifrování). Nejdřív značka, nešifrovaný soubor až po zápisu šifry. */
+  async encryptJob(id: string) {
+    if (!this.key) throw new LockedError();
+    const dir = this.jobDir(id);
+    await writeFile(path.join(dir, LOCK_MARK), '');
+    for (const rel of await listFiles(dir)) {
+      if (rel === LOCK_MARK || rel.endsWith(ENC)) continue;
+      const file = path.join(dir, rel);
+      const tmp = `${file}${ENC}.tmp`;
+      await writeFile(tmp, encrypt(this.key, await readFile(file), this.aad(file)));
+      await rename(tmp, file + ENC);
+      await rm(file, { force: true });
+    }
+  }
+
+  /** Dešifruje dokument natrvalo (přesun ze zamčené složky); značka zmizí až na konci. */
+  async decryptJob(id: string) {
+    if (!this.key) throw new LockedError();
+    const dir = this.jobDir(id);
+    for (const rel of await listFiles(dir)) {
+      if (!rel.endsWith(ENC)) continue;
+      const file = path.join(dir, rel.slice(0, -ENC.length));
+      const tmp = `${file}.tmp`;
+      await writeFile(tmp, decrypt(this.key, await readFile(file + ENC), this.aad(file)));
+      await rename(tmp, file);
+      await rm(file + ENC, { force: true });
+    }
+    await rm(path.join(dir, LOCK_MARK), { force: true });
+  }
+
+  /**
+   * Úklid po pádu bez hesla: v zamčeném dokumentu, kde vedle šifry zůstal i nešifrovaný soubor, platí šifra
+   * (zapisuje se přejmenováním, takže je vždy celá); dočasné soubory pryč. Zbylé nešifrované soubory dořeší encryptJob po odemčení.
+   */
+  async cleanupLocked() {
+    const ids = await readdir(path.join(this.root, 'jobs')).catch(() => [] as string[]);
+    for (const id of ids) {
+      const dir = this.jobDir(id);
+      if (!(await exists(path.join(dir, LOCK_MARK)))) continue;
+      const files = await listFiles(dir);
+      for (const rel of files) if (!rel.endsWith(ENC) && rel !== LOCK_MARK && files.includes(rel + ENC)) await rm(path.join(dir, rel), { force: true });
+      for (const e of await readdir(dir).catch(() => [] as string[])) if (e.endsWith('.tmp')) await rm(path.join(dir, e), { force: true });
+    }
+  }
+
+  /** Zamčené dokumenty, ve kterých zůstal nešifrovaný soubor (přerušené šifrování). */
+  async lockedWithPlaintext(): Promise<string[]> {
+    const ids = await readdir(path.join(this.root, 'jobs')).catch(() => [] as string[]);
+    const out: string[] = [];
+    for (const id of ids) {
+      const dir = this.jobDir(id);
+      if (!(await exists(path.join(dir, LOCK_MARK)))) continue;
+      if ((await listFiles(dir)).some((rel) => rel !== LOCK_MARK && !rel.endsWith(ENC))) out.push(id);
+    }
+    return out;
   }
 
   async settings(): Promise<Settings> {
@@ -112,7 +249,8 @@ export class Store {
   async jobs(trashed = false): Promise<Job[]> {
     const dir = path.join(this.root, 'jobs');
     const ids = await readdir(dir).catch(() => [] as string[]);
-    const jobs = await Promise.all(ids.map((id) => this.readJson<Job | null>(path.join(dir, id, 'job.json'), null)));
+    // Zamčené dokumenty se bez odemčeného trezoru nezobrazují (ani název).
+    const jobs = await Promise.all(ids.map((id) => this.readJson<Job | null>(path.join(dir, id, 'job.json'), null).catch(() => null)));
     return jobs.filter((j): j is Job => j !== null && !!j.trashedAt === trashed).sort((a, b) => b.createdAt - a.createdAt);
   }
 

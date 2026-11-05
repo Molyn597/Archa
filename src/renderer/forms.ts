@@ -5,6 +5,7 @@ import { activeRates, FAST_REMOTE_MODEL, isFreeModel, RECOMMENDED_REMOTE_MODEL }
 import { catalogRows, chatModelWarning, formatContext, isFree, sharedModel, visionWarnings } from '../shared/catalog-view';
 import type { CitationStyle, Currency, GlossaryEntry, LmStatus, ModelPrice, Models, Provider, Settings, Theme } from '../shared/types';
 import { chatWarningText, duration, h, icon, ICONS, toast } from './dom';
+import { changePasswordModal, refreshVault, vault } from './vault';
 
 const $ = (id: string) => document.getElementById(id)!;
 
@@ -108,7 +109,7 @@ function toggle(label: string, hint: string, checked: boolean, onChange: (v: boo
 }
 
 export async function renderSettings(onSaved: (s: Settings) => void) {
-  const [settings, lm, remote] = await Promise.all([window.api.getSettings(), window.api.lmStatus('local'), window.api.lmStatus('openrouter')]);
+  const [settings, lm, remote] = await Promise.all([window.api.getSettings(), window.api.lmStatus('local'), window.api.lmStatus('openrouter'), refreshVault()]).then((r) => r.slice(0, 3) as [Settings, LmStatus, LmStatus]);
   const save = async () => {
     await window.api.saveSettings(settings);
     onSaved(settings);
@@ -150,7 +151,7 @@ export async function renderSettings(onSaved: (s: Settings) => void) {
   });
 
   const r = activeRates(settings);
-  // Pevné pořadí sekcí: Vzhled, Modely, Aplikace.
+  // Pevné pořadí sekcí: Vzhled, Modely, Aplikace, Zamčené složky.
   $('settings').replaceChildren(
     h(
       'section',
@@ -187,6 +188,19 @@ export async function renderSettings(onSaved: (s: Settings) => void) {
         h('span', {}, h('div', {}, t('settings.rates')), h('div', { class: 'muted small' }, t('settings.ratesText', { ocr: duration(r.ocrPerPage), translate: duration(r.translatePerKChar), fix: duration(r.fixPerSegment) }))),
       ),
     ),
+    vaultGroup(),
+  );
+}
+
+/** Zamčené složky: stav hesla trezoru a jeho změna. */
+function vaultGroup() {
+  return h(
+    'section',
+    { class: 'setting-group' },
+    h('h2', {}, t('vault.settingsTitle')),
+    h('p', { class: vault.exists ? 'ok-box' : 'muted small' }, t(vault.exists ? 'vault.statusSet' : 'vault.statusNone')),
+    vault.exists && h('div', { class: 'row gap' }, h('button', { class: 'btn', type: 'button', onclick: () => changePasswordModal(() => void refreshVault()) }, t('vault.change'))),
+    h('p', { class: 'muted small' }, t('vault.autoLock')),
   );
 }
 

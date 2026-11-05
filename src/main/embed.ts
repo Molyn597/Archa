@@ -1,5 +1,3 @@
-import { readFile, writeFile } from 'node:fs/promises';
-import path from 'node:path';
 import { isOnline } from '../shared/provider';
 import type { DocumentCard, Settings } from '../shared/types';
 import { readKey } from './keystore';
@@ -81,7 +79,6 @@ interface IndexMeta {
   card: boolean;
 }
 
-const files = (store: Store, id: string) => ({ meta: path.join(store.jobDir(id), 'vectors.json'), bin: path.join(store.jobDir(id), 'vectors.bin') });
 
 /** Text karty pro vektor: shrnutí a klíčová slova (výběr dokumentů podle významu). */
 export const cardEmbedText = (name: string, card: DocumentCard) => [name, card.biblio.title, card.summary, card.keywords.join(', ')].filter(Boolean).join('\n');
@@ -93,19 +90,17 @@ export async function saveIndex(store: Store, id: string, index: VectorIndex) {
   const rows = [...index.vectors, ...(index.card ? [index.card] : [])];
   const bin = new Float32Array(rows.length * dims);
   rows.forEach((v, i) => bin.set(v, i * dims));
-  const f = files(store, id);
-  await writeFile(f.bin, Buffer.from(bin.buffer));
+  await store.writeJobFile(id, 'vectors.bin', Buffer.from(bin.buffer));
   const meta: IndexMeta = { model: index.model, dims, ids: index.ids, card: !!index.card };
-  await writeFile(f.meta, JSON.stringify(meta));
+  await store.writeJobFile(id, 'vectors.json', JSON.stringify(meta));
 }
 
 /** Index dokumentu, pokud existuje a vznikl modelem `model`. */
 export async function loadIndex(store: Store, id: string, model?: string): Promise<VectorIndex | undefined> {
-  const f = files(store, id);
   try {
-    const meta = JSON.parse(await readFile(f.meta, 'utf8')) as IndexMeta;
+    const meta = JSON.parse((await store.readJobFile(id, 'vectors.json')).toString('utf8')) as IndexMeta;
     if (model && meta.model !== model) return undefined;
-    const buf = await readFile(f.bin);
+    const buf = await store.readJobFile(id, 'vectors.bin');
     const all = new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength / 4);
     const row = (i: number) => all.slice(i * meta.dims, (i + 1) * meta.dims);
     return { model: meta.model, ids: meta.ids, vectors: meta.ids.map((_, i) => row(i)), ...(meta.card && { card: row(meta.ids.length) }) };
@@ -116,7 +111,7 @@ export async function loadIndex(store: Store, id: string, model?: string): Promi
 
 export async function indexModel(store: Store, id: string): Promise<string | undefined> {
   try {
-    return (JSON.parse(await readFile(files(store, id).meta, 'utf8')) as IndexMeta).model;
+    return (JSON.parse((await store.readJobFile(id, 'vectors.json')).toString('utf8')) as IndexMeta).model;
   } catch {
     return undefined;
   }

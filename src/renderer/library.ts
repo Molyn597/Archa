@@ -1,10 +1,11 @@
 import { t, type MessageKey } from '../shared/i18n';
-import { childFolders, fold, folderName, folderPath, placementActive, resolvePath, subtree, TRASH_DAYS } from '../shared/folders';
+import { childFolders, fold, folderName, folderPath, isLocked, placementActive, resolvePath, subtree, TRASH_DAYS } from '../shared/folders';
 import { isOnline } from '../shared/provider';
 import type { DocumentCard, FolderMerge, Job, LibraryState, OrganizePlan, Placement } from '../shared/types';
 import type { Tab } from './detail';
-import { cleanError, date, h, icon, ICONS, jobDuration, jobTitle, langPair, MODES, progressInfo, statusIcon, STATUS_TEXT, toast, toastAction } from './dom';
+import { cleanError, date, h, icon, ICONS, jobDuration, jobTitle, langPair, MODES, openModal, progressInfo, statusIcon, STATUS_TEXT, toast, toastAction } from './dom';
 import { planView } from './plan-view';
+import { lockFolder, unlockFolder, unlockModal, vault } from './vault';
 
 export interface LibraryHost {
   /** Všechny úlohy od nejnovější. */
@@ -275,6 +276,8 @@ interface FolderOpts {
   iconPath?: string;
   /** Pustit sem dokumenty = přesun do koše. */
   trash?: boolean;
+  /** Složka je zamčená (sama nebo zděděně): ikona zámku, při zamčeném trezoru dotaz na heslo. */
+  locked?: boolean;
 }
 
 function folderItem(id: string, label: string, count: number, opts: FolderOpts = {}) {
@@ -299,7 +302,11 @@ function folderItem(id: string, label: string, count: number, opts: FolderOpts =
         icon(ICONS.chevron),
       )
     : h('span', { class: 'folder-toggle' });
-  const main = h('button', { class: 'folder-main', type: 'button', onclick: () => select(id) }, icon(opts.iconPath ?? ICONS.folder), h('span', { class: 'folder-name' }, label), h('span', { class: 'folder-count' }, String(count)));
+  const choose = () => {
+    select(id);
+    if (opts.locked && !vault.unlocked) unlockModal();
+  };
+  const main = h('button', { class: 'folder-main', type: 'button', onclick: choose }, icon(opts.iconPath ?? ICONS.folder), h('span', { class: 'folder-name' }, label), opts.locked && h('span', { class: 'folder-lock', title: t('vault.folderIcon') }, icon(ICONS.lock)), h('span', { class: 'folder-count' }, String(count)));
   const item = h('div', { class: `folder-item${selected === id ? ' active' : ''}` }, toggle, main);
   item.style.paddingLeft = `${depth * INDENT}px`;
 
@@ -355,29 +362,6 @@ function folderItem(id: string, label: string, count: number, opts: FolderOpts =
 }
 
 // ---------- Slučování složek ----------
-
-/** Obecné malé modální okno; vrací funkci pro zavření. */
-function openModal(title: string, body: HTMLElement[], foot: HTMLElement[]) {
-  const close = () => {
-    overlay.remove();
-    document.removeEventListener('keydown', onKey);
-  };
-  const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close();
-  const overlay: HTMLElement = h(
-    'div',
-    { class: 'modal-overlay', onmousedown: (e: Event) => e.target === overlay && close() },
-    h(
-      'div',
-      { class: 'modal merge-modal', role: 'dialog', 'aria-modal': 'true' },
-      h('div', { class: 'modal-head' }, h('strong', {}, title), h('button', { class: 'btn', type: 'button', title: t('region.close'), 'aria-label': t('region.close'), onclick: close }, icon(ICONS.x))),
-      h('div', { class: 'modal-body' }, ...body),
-      h('div', { class: 'modal-foot merge-foot' }, ...foot),
-    ),
-  );
-  document.addEventListener('keydown', onKey);
-  document.body.append(overlay);
-  return close;
-}
 
 /** Sloučení jedné složky do vybrané (cíl nesmí být ona ani její podsložka). */
 function mergeInto(from: string, name: string) {
@@ -459,7 +443,17 @@ function showMerges(merges: FolderMerge[]) {
   });
 }
 
+// Složka, jejíž dokumenty se právě šifrují nebo dešifrují.
+let encrypting: string | null = null;
+
 function folderMenu(id: string, name: string) {
+  const { folders } = state.library;
+  const folder = folders.find((f) => f.id === id);
+  const locked = !!folder && isLocked(folders, folder);
+  const busy = (on: boolean) => {
+    encrypting = on ? id : null;
+    renderLibrary();
+  };
   const menu = h(
     'div',
     { class: 'menu', role: 'menu', hidden: true },
@@ -491,6 +485,9 @@ function folderMenu(id: string, name: string) {
       t('library.rename'),
     ),
     h('button', { type: 'button', role: 'menuitem', onclick: () => mergeInto(id, name) }, t('merge.menu')),
+    // Zamknout jde jen nezamčenou složku; zrušit zámek jen tam, kde je nastavený přímo (zděděný se ruší u předka).
+    !locked && h('button', { type: 'button', role: 'menuitem', disabled: !!encrypting, onclick: () => lockFolder(id, busy) }, t(encrypting === id ? 'vault.encrypting' : 'vault.lockMenu')),
+    folder?.locked && h('button', { type: 'button', role: 'menuitem', disabled: !!encrypting, onclick: () => unlockFolder(id, name, busy) }, t(encrypting === id ? 'vault.decrypting' : 'vault.unlockMenu')),
     h(
       'button',
       {
@@ -533,6 +530,13 @@ function renderFolders(jobs: Job[]) {
   for (const j of jobs) counts.set(folderOf(j.id), (counts.get(folderOf(j.id)) ?? 0) + 1);
   const unsorted = counts.get(undefined) ?? 0;
   // Počet u složky = dokumenty v celém podstromu.
+  // Dokumenty zamčených složek při zamčeném trezoru nejsou v seznamu úloh, počítají se ze zařazení.
+  if (!vault.unlocked) {
+    for (const [jobId, a] of Object.entries(state.library.assign)) {
+      const f = folders.find((x) => x.id === a.folder);
+      if (f && isLocked(folders, f) && !host.jobs().some((j) => j.id === jobId)) counts.set(f.id, (counts.get(f.id) ?? 0) + 1);
+    }
+  }
   const total = (id: string) => [...subtree(folders, id)].reduce((sum, x) => sum + (counts.get(x) ?? 0), 0);
 
   const items: HTMLElement[] = [folderItem(ALL, t('library.all'), jobs.length, { folderTarget: null })];
@@ -544,7 +548,7 @@ function renderFolders(jobs: Job[]) {
         continue;
       }
       const kids = childFolders(folders, f.id).length;
-      const item = folderItem(f.id, name, total(f.id), { depth, docTarget: f.id, folderTarget: f.id, draggable: true, kids });
+      const item = folderItem(f.id, name, total(f.id), { depth, docTarget: f.id, folderTarget: f.id, draggable: true, kids, locked: isLocked(folders, f) });
       item.append(folderMenu(f.id, name));
       items.push(item);
       if (editing === `+${f.id}`) {
@@ -965,6 +969,24 @@ function drawSpecial(query: string) {
   $('history-empty-action').hidden = true;
 }
 
+/** Místo dokumentů zamčené složky výzva k odemknutí. */
+function drawLocked() {
+  visible = [];
+  chosen.clear();
+  $('library-bar').hidden = true;
+  $('history-empty').hidden = true;
+  $('history-list').replaceChildren(
+    h(
+      'div',
+      { class: 'vault-locked' },
+      icon(ICONS.lock),
+      h('strong', {}, t('vault.folderLocked')),
+      h('p', {}, t('vault.folderLockedHint')),
+      h('button', { class: 'btn primary', type: 'button', onclick: () => unlockModal() }, t('vault.unlock')),
+    ),
+  );
+}
+
 function draw() {
   const jobs = host.jobs();
   const { folders } = state.library;
@@ -974,6 +996,10 @@ function draw() {
   renderFolders(jobs);
   renderBanner(jobs);
   renderAsk(jobs);
+  $('vault-lock').hidden = !vault.unlocked || !folders.some((f) => f.locked);
+
+  const current = folders.find((f) => f.id === selected);
+  if (current && isLocked(folders, current) && !vault.unlocked) return drawLocked();
 
   const query = fold($<HTMLInputElement>('history-search').value);
   if (special()) {
@@ -1011,6 +1037,7 @@ export function setupLibrary(libraryHost: LibraryHost) {
   host = libraryHost;
   $('history-list').before(h('div', { class: 'library-ask', id: 'library-ask', hidden: true }), h('div', { class: 'lib-bar', id: 'library-bar', hidden: true }));
   $('history-search').addEventListener('input', renderLibrary);
+  $('history-search').before(h('button', { class: 'btn vault-lock', id: 'vault-lock', type: 'button', hidden: true, onclick: () => void window.api.vaultLock().catch((e) => toast(cleanError(e), true)) }, icon(ICONS.lock), t('vault.lockNow')));
   document.addEventListener('keydown', (e) => {
     const field = (e.target as HTMLElement).closest('input[type=text], textarea, select');
     // Escape zruší výběr jen v zobrazené knihovně a mimo psaní do políčka.

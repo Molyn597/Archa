@@ -114,8 +114,8 @@ export class Queue {
       context: undefined,
       notes: undefined,
     };
-    await mkdir(this.store.jobDir(job.id), { recursive: true });
-    await copyFile(this.store.inputPath(old), this.store.inputPath(job));
+    // Originál přes Store: zamčený dokument se pro novou (nezamčenou) úlohu dešifruje.
+    await this.store.writeJobFile(job.id, `input${job.ext}`, await this.store.readInput(old));
     await this.enqueue(job);
   }
 

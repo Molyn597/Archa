@@ -314,7 +314,6 @@ function inkBounds(image: Electron.NativeImage, edge: { top: boolean; bottom: bo
 /** Tabulky a grafy s popiskem se uloží jako výřez originálu; jejich text se nepřekládá ani neopravuje. */
 async function snapshotFigures(ctx: JobContext, docId: string, blocks: Block[]) {
   const sizes = new Map([...(ctx.pages ?? [])].map(([page, g]) => [page, { width: g.width, height: g.height }]));
-  const dir = path.join(ctx.store.jobDir(ctx.job.id), 'figures');
   for (const [i, region] of findFigureRegions(blocks, sizes).entries()) {
     check(ctx.signal);
     const size = sizes.get(region.page)!;
@@ -328,8 +327,7 @@ async function snapshotFigures(ctx: JobContext, docId: string, blocks: Block[]) 
     const y = Math.max(0, ink.y - pad);
     const area = { x, y, width: Math.min(width, ink.x + ink.width + pad) - x, height: Math.min(height, ink.y + ink.height + pad) - y };
     const file = `figures/${i + 1}.png`;
-    await mkdir(dir, { recursive: true });
-    await writeFile(path.join(ctx.store.jobDir(ctx.job.id), file), image.crop(area).toPNG());
+    await ctx.store.writeJobFile(ctx.job.id, file, image.crop(area).toPNG());
     region.caption.snapshot = { file, position: region.position, width: area.width / FIGURE_SCALE, height: area.height / FIGURE_SCALE };
     for (const m of region.members) Object.assign(m, { inSnapshot: true, layoutOnly: true, figure: true, needsRepair: false });
   }
@@ -834,10 +832,10 @@ export async function runJob(ctx: JobContext): Promise<Measured> {
 
   ctx.progress({ stage: 'write', done: 0, total: 0 });
   if (job.resume) clearLayoutNotes(job, segments);
-  const dir = store.jobDir(job.id);
   job.output = outputName(job);
-  await writeFile(path.join(dir, job.output), await buildDocx(job.name, segments, await loadFigures(dir, segments)));
-  await writeFile(path.join(dir, job.output.replace(/\.docx$/, '.md')), segmentsToMarkdown(segments));
+  // Přes Store: u zamčeného dokumentu (dopřeložení) se výstupy zapíšou zašifrovaně.
+  await store.writeJobFile(job.id, job.output, await buildDocx(job.name, segments, await loadFigures((file) => store.readJobFile(job.id, file), segments)));
+  await store.writeJobFile(job.id, job.output.replace(/\.docx$/, '.md'), segmentsToMarkdown(segments));
   // Bez překladu by „přeložené“ PDF bylo jen kopií originálu.
   if (translating() && job.ext.toLowerCase() === '.pdf' && settings.layoutPdf && ctx.pages) await writeLayoutPdf(ctx, segments, ctx.pages);
   job.warnings = segments.filter((s) => s.warning).length;
@@ -859,7 +857,7 @@ async function writeLayoutPdf(ctx: JobContext, segments: Segment[], pages: Map<n
   const { job, store } = ctx;
   ctx.progress({ stage: 'layout', done: 0, total: 0 });
   const docId = `${job.id}-layout`;
-  const input = new Uint8Array(await readFile(store.inputPath(job)));
+  const input = new Uint8Array(await store.readInput(job));
   try {
     // Původní dokument zavřel extractPdf; kvůli barvě pozadí se otevře znovu.
     await openPdf(docId, input.slice());
@@ -877,7 +875,7 @@ async function writeLayoutPdf(ctx: JobContext, segments: Segment[], pages: Map<n
       addJobNote(job, t('pipeline.rotated', { count: result.rotated.length, pages: result.rotated.join(', ') }));
     }
     const name = outputPdfName(job);
-    await writeFile(path.join(store.jobDir(job.id), name), result.pdf);
+    await store.writeJobFile(job.id, name, Buffer.from(result.pdf));
     job.outputPdf = name;
   } catch (err) {
     if (ctx.signal.aborted) throw err;
@@ -892,7 +890,7 @@ async function pageGeometries(store: Store, job: Job, segments: Segment[]) {
   const numbers = [...new Set(segments.flatMap((s) => s.rects?.map((r) => r.page) ?? []))].sort((a, b) => a - b);
   const pages = new Map<number, PageGeometry>();
   const docId = `${job.id}-geometry`;
-  await openPdf(docId, new Uint8Array(await readFile(store.inputPath(job))));
+  await openPdf(docId, new Uint8Array(await store.readInput(job)));
   try {
     const texts = [];
     for (const p of numbers) texts.push(await pageText(docId, p));
@@ -942,7 +940,7 @@ export async function translateRegion(store: Store, job: Job, settings: Settings
   if (!(await isVision(settings, 'polish'))) throw new Error(t('study.noVision', { model }));
   const llm: Llm = { job, settings, signal: new AbortController().signal, endpoint: await connect(settings, store.root) };
   const docId = `${job.id}-study`;
-  await openPdf(docId, new Uint8Array(await readFile(store.inputPath(job))));
+  await openPdf(docId, new Uint8Array(await store.readInput(job)));
   let image: string;
   try {
     const { width } = await pageText(docId, page);
