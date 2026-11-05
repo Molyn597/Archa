@@ -931,10 +931,10 @@ export async function relayoutJob(store: Store, job: Job, settings: Settings) {
 const REGION_PIXELS = 1600;
 
 /** Oblast stránky přepsaná a přeložená vision modelem; stejná oblast se podruhé vezme z study.json. */
-export async function translateRegion(store: Store, job: Job, settings: Settings, page: number, crop: RegionTranslation['crop']) {
+export async function translateRegion(store: Store, job: Job, settings: Settings, page: number, crop: RegionTranslation['crop'], replaces?: RegionTranslation['crop']) {
   const area = normalizeCrop(crop);
   const regions = await store.regions(job.id);
-  const saved = findRegion(regions, page, area);
+  const saved = replaces ? undefined : findRegion(regions, page, area);
   if (saved) return saved;
   const model = activeModels(settings).polish;
   if (!(await isVision(settings, 'polish'))) throw new Error(t('study.noVision', { model }));
@@ -957,7 +957,9 @@ export async function translateRegion(store: Store, job: Job, settings: Settings
     3000,
   );
   const region: RegionTranslation = { page, crop: area, text, createdAt: Date.now() };
-  await store.saveRegions(job.id, [...regions, region]);
+  // Upravená oblast nahradí původní až po úspěšném překladu.
+  const old = replaces && findRegion(regions, page, normalizeCrop(replaces));
+  await store.saveRegions(job.id, [...regions.filter((r) => r !== old), region]);
   if (job.cost !== undefined) await store.saveJob(job);
   return region;
 }

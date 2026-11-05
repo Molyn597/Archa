@@ -30,8 +30,8 @@
             <span data-i18n="nav.translate">Přeložit</span>
           </button>
           <button class="nav-item" data-nav="history">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5M12 7v5l3 3" /></svg>
-            <span data-i18n="nav.history">Historie</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></svg>
+            <span data-i18n="nav.history">Knihovna</span>
             <span class="nav-badge" id="active-badge" hidden></span>
           </button>
           <button class="nav-item" data-nav="glossary">
@@ -58,6 +58,7 @@
             </span>
           </button>
           <section class="lm-pop" id="lm-pop" role="dialog" data-i18n-aria-label="side.details" hidden>
+            <div class="segmented lm-switch" id="lm-switch" role="radiogroup" aria-label="Kde překládat" data-i18n-aria-label="home.provider"></div>
             <div class="lm-head">
               <span id="lm-title">LM Studio</span>
               <button class="icon-btn small" id="lm-refresh" type="button" title="Zkontrolovat znovu" data-i18n-title="lm.recheck">
@@ -66,6 +67,7 @@
             </div>
             <div class="lm-state" id="lm-state" data-i18n="lm.checking">Zjišťuji…</div>
             <ul class="lm-models" id="lm-models"></ul>
+            <button class="lm-change" id="lm-change" type="button" data-i18n="lm.change">Změnit modely</button>
           </section>
         </div>
       </aside>
@@ -158,15 +160,21 @@
           <div class="recent-list" id="recent-jobs"></div>
         </section>
 
-        <section class="view" data-view="history" hidden>
+        <section class="view library" data-view="history" hidden>
           <header class="view-head">
-            <h1 data-i18n="nav.history">Historie</h1>
-            <input class="search" id="history-search" type="search" placeholder="Hledat podle názvu…" data-i18n-placeholder="history.search" />
+            <h1 data-i18n="nav.history">Knihovna</h1>
+            <input class="search" id="history-search" type="search" placeholder="Hledat v knihovně…" data-i18n-placeholder="history.search" />
           </header>
-          <div class="job-list" id="history-list"></div>
-          <div class="empty" id="history-empty" hidden>
-            <p data-i18n="history.empty">Zatím tu nic není. Přeložené dokumenty se objeví tady – otevřeš je, porovnáš s originálem a uložíš.</p>
-            <button class="btn primary" id="history-empty-action" data-i18n="history.emptyAction">Přeložit první dokument</button>
+          <div class="library-banner" id="library-banner" hidden></div>
+          <div class="library-body">
+            <nav class="library-folders" id="library-folders"></nav>
+            <div class="library-main">
+              <div class="job-list" id="history-list"></div>
+              <div class="empty" id="history-empty" hidden>
+                <p id="history-empty-text" data-i18n="history.empty">Zatím tu nic není. Přeložené dokumenty se objeví tady – otevřeš je, porovnáš s originálem, uložíš a roztřídíš do složek.</p>
+                <button class="btn primary" id="history-empty-action" data-i18n="history.emptyAction">Přeložit první dokument</button>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -175,7 +183,7 @@
             <button class="icon-btn" id="detail-back" type="button" title="Zpět" data-i18n-title="detail.back" data-i18n-aria-label="detail.back">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6" /></svg>
             </button>
-            <span class="crumb" data-i18n="nav.history">Historie</span>
+            <span class="crumb" data-i18n="nav.history">Knihovna</span>
             <span class="crumb" aria-hidden="true">/</span>
             <h1 id="detail-name"></h1>
             <span id="detail-status"></span>
@@ -192,6 +200,7 @@
               <button class="tab" data-tab="info" data-i18n="detail.tab.info">Informace</button>
             </div>
             <div class="detail-meta" id="detail-meta"></div>
+            <button class="btn" id="regions-toggle" type="button" hidden></button>
           </div>
           <div class="detail-scroll" id="detail-scroll">
             <div class="tab-body" id="detail-body"></div>

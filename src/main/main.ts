@@ -1,4 +1,5 @@
 import { copyFile, readFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import {
   app,
@@ -16,9 +17,10 @@ import {
 import { resolveLang, setLang, t, type MessageKey } from '../shared/i18n';
 import { languageName } from '../shared/languages';
 import { findRegion, normalizeCrop } from '../shared/regions';
-import type { ChatModel, DocumentCard, GlossaryEntry, Job, JobOptions, Mode, OutputKind, Provider, RegionTranslation, Settings, Stage } from '../shared/types';
+import type { ChatModel, DocumentCard, GlossaryEntry, Job, Library, LibraryFolder, JobOptions, Mode, OutputKind, Provider, RegionTranslation, Settings, Stage } from '../shared/types';
 import { isOnline } from '../shared/provider';
 import { makeCard } from './make-card';
+import { moveDocs, removeFolder } from './library';
 import { askDocument } from './chat';
 import { fileInfo } from './fileinfo';
 import { usdCzk } from './fx';
@@ -86,6 +88,7 @@ const queue = new Queue(store, {
     n.show();
   },
   idle: () => updateProgressUi(),
+  library: () => send('library-changed'),
 });
 
 /** Celkový průběh z uplynulého času a odhadu zbytku; průběh fáze by u každé fáze začínal od nuly. */
@@ -272,14 +275,19 @@ function registerIpc() {
   });
   ipcMain.handle('job-translate-segments', (_e, id: string, ids: number[]) => queue.translateSegments(id, ids));
   ipcMain.handle('job-regions', (_e, id: string) => store.regions(id));
-  ipcMain.handle('job-translate-region', async (_e, id: string, page: number, crop: RegionTranslation['crop']) => {
+  ipcMain.handle('job-translate-region', async (_e, id: string, page: number, crop: RegionTranslation['crop'], replaces?: RegionTranslation['crop']) => {
     const job = await store.job(id);
     if (!job) throw new Error(t('study.noJob'));
-    const saved = findRegion(await store.regions(id), page, normalizeCrop(crop));
+    const saved = replaces ? undefined : findRegion(await store.regions(id), page, normalizeCrop(crop));
     if (saved) return saved;
-    const region = await queue.exclusive(async () => translateRegion(store, job, await store.settings(), page, crop));
+    const region = await queue.exclusive(async () => translateRegion(store, job, await store.settings(), page, crop, replaces));
     send('job-update', job);
     return region;
+  });
+  ipcMain.handle('job-delete-region', async (_e, id: string, page: number, crop: RegionTranslation['crop']) => {
+    const regions = await store.regions(id);
+    const saved = findRegion(regions, page, normalizeCrop(crop));
+    if (saved) await store.saveRegions(id, regions.filter((r) => r !== saved));
   });
   ipcMain.handle('job-chat', (_e, id: string) => store.chat(id));
   ipcMain.handle('job-chat-ask', async (_e, id: string, question: string, model?: ChatModel) => {
@@ -300,11 +308,51 @@ function registerIpc() {
   ipcMain.handle('job-card-make', async (_e, id: string) => {
     const job = await store.job(id);
     if (!job) throw new Error(t('study.noJob'));
-    const card = await queue.exclusive(async () => makeCard(store, job, await store.settings()));
+    const card = await queue.exclusive(async () => makeCard(store, job, await store.settings(), () => send('library-changed')));
     send('job-update', job);
     return card;
   });
-  ipcMain.handle('job-card-save', (_e, id: string, card: DocumentCard) => store.saveCard(id, { ...card, edited: true }));
+  ipcMain.handle('job-card-save', async (_e, id: string, card: DocumentCard) => {
+    await store.saveCard(id, { ...card, edited: true });
+    send('library-changed');
+  });
+  ipcMain.handle('library-state', async () => {
+    const jobs = await store.jobs();
+    const cards = await Promise.all(jobs.map((j) => store.card(j.id)));
+    return { library: await store.library(), cards: Object.fromEntries(jobs.flatMap((j, i) => (cards[i] ? [[j.id, cards[i]]] : []))) };
+  });
+  // Změna knihovny: načíst, upravit, uložit a dát vědět oknu.
+  const editLibrary = async <T>(change: (library: Library) => T): Promise<T> => {
+    const result = await store.updateLibrary(change);
+    send('library-changed');
+    return result;
+  };
+  ipcMain.handle('library-folder-create', (_e, name: string): Promise<LibraryFolder> =>
+    editLibrary((library) => {
+      const folder = { id: randomUUID(), name: name.trim(), createdAt: Date.now() };
+      library.folders.push(folder);
+      return folder;
+    }),
+  );
+  ipcMain.handle('library-folder-rename', (_e, id: string, name: string) =>
+    editLibrary((library) => {
+      const folder = library.folders.find((f) => f.id === id);
+      if (folder && name.trim()) folder.name = name.trim();
+    }),
+  );
+  ipcMain.handle('library-folder-delete', (_e, id: string) => editLibrary((library) => removeFolder(library, id)));
+  ipcMain.handle('library-move', (_e, jobIds: string[], folderId: string | null) => editLibrary((library) => moveDocs(library, jobIds, folderId)));
+  ipcMain.handle('library-make-cards', async () => {
+    const todo: Job[] = [];
+    for (const job of await store.jobs()) if (job.status === 'done' && !(await store.card(job.id))) todo.push(job);
+    send('library-progress', { done: 0, total: todo.length });
+    for (const [i, job] of todo.entries()) {
+      // Chyba jednoho dokumentu (prázdný text, model neodpověděl) ostatní nezastaví.
+      await queue.exclusive(async () => makeCard(store, job, await store.settings(), () => send('library-changed'))).catch(() => undefined);
+      send('library-progress', { done: i + 1, total: todo.length });
+    }
+    send('library-changed');
+  });
   ipcMain.handle('job-delete', async (_e, id: string) => {
     await queue.remove(id);
     send('job-removed', id);

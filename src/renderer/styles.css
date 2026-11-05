@@ -380,6 +380,29 @@ body::before {
   font-weight: 600;
 }
 
+.lm-switch {
+  display: flex;
+  margin-bottom: 12px;
+}
+
+.lm-switch .segment {
+  flex: 1;
+  padding: 0 8px;
+}
+
+.lm-change {
+  margin-top: 10px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-size: 12px;
+}
+
+.lm-change:hover {
+  text-decoration: underline;
+}
+
 .lm-state {
   margin: 6px 0 10px;
   color: var(--muted);
@@ -1854,6 +1877,116 @@ input[type='checkbox'] {
   background: var(--accent-soft);
 }
 
+.regions-hidden .region-frame,
+.region-frame.editing {
+  display: none;
+}
+
+/* Úprava oblasti: rám s rohovými úchyty a plovoucí lištou */
+.region-edit {
+  position: absolute;
+  z-index: 3;
+  box-sizing: border-box;
+  border: 1.5px solid var(--accent);
+  border-radius: 3px;
+  background: var(--accent-soft);
+  cursor: move;
+}
+
+.region-handle {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  box-sizing: border-box;
+  border: 1.5px solid var(--accent);
+  border-radius: 2px;
+  background: var(--panel);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--panel) 70%, transparent);
+  transform: translate(-50%, -50%);
+}
+
+/* Větší neviditelná plocha pro snadné chycení */
+.region-handle::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+}
+
+.region-handle.nw,
+.region-handle.se {
+  cursor: nwse-resize;
+}
+
+.region-handle.ne,
+.region-handle.sw {
+  cursor: nesw-resize;
+}
+
+.region-handle.n,
+.region-handle.s {
+  cursor: ns-resize;
+}
+
+.region-handle.e,
+.region-handle.w {
+  cursor: ew-resize;
+}
+
+.region-handle.nw,
+.region-handle.n,
+.region-handle.ne {
+  top: 0;
+}
+
+.region-handle.w,
+.region-handle.e {
+  top: 50%;
+}
+
+.region-handle.sw,
+.region-handle.s,
+.region-handle.se {
+  top: 100%;
+}
+
+.region-handle.nw,
+.region-handle.w,
+.region-handle.sw {
+  left: 0;
+}
+
+.region-handle.n,
+.region-handle.s {
+  left: 50%;
+}
+
+.region-handle.ne,
+.region-handle.e,
+.region-handle.se {
+  left: 100%;
+}
+
+.region-bar {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 10px);
+  display: flex;
+  gap: 6px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  line-height: normal;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.region-bar.above {
+  top: auto;
+  bottom: calc(100% + 10px);
+}
+
 /* Zvýraznění citace v dokumentu */
 .cite-hl {
   position: absolute;
@@ -2518,6 +2651,15 @@ input[type='checkbox'] {
   color: var(--link);
 }
 
+.chat-menu-item:disabled {
+  opacity: 0.5;
+}
+
+.chat-menu-item svg.warn-icon,
+.chat-model svg.warn-icon {
+  color: var(--warning-text);
+}
+
 .chat-menu-search {
   width: 100%;
   margin-bottom: 4px;
@@ -3070,4 +3212,285 @@ input[type='checkbox'] {
 .toast.error {
   border-color: var(--danger);
   color: var(--danger-text);
+}
+
+/* ---------- Knihovna ---------- */
+
+.view.library > * {
+  max-width: 1080px;
+}
+
+.library-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+}
+
+.library-folders {
+  flex: none;
+  width: 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.library-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.folder-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  border-radius: 9px;
+  color: var(--muted);
+  border: 1px solid transparent;
+}
+
+.folder-item:hover {
+  background: var(--raised);
+  color: var(--text);
+}
+
+.folder-item.active {
+  background: var(--raised);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.folder-item.drop {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.folder-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 34px;
+  padding: 0 10px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-weight: inherit;
+  text-align: left;
+}
+
+.folder-main svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+.folder-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-count {
+  font-size: 12px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+.folder-more {
+  display: none;
+  width: 26px;
+  height: 26px;
+  margin-right: 4px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+}
+
+.folder-item:hover .folder-more,
+.folder-item:focus-within .folder-more {
+  display: grid;
+}
+
+.folder-more:hover {
+  background: var(--line);
+  color: var(--text);
+}
+
+.folder-more svg {
+  width: 16px;
+  height: 16px;
+}
+
+.folder-item:hover .folder-count,
+.folder-item:focus-within .folder-count {
+  display: none;
+}
+
+.folder-item .menu {
+  min-width: 170px;
+}
+
+.folder-input {
+  width: 100%;
+  height: 32px;
+  margin: 1px 0;
+}
+
+.folder-add {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 34px;
+  margin-top: 6px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 9px;
+  background: none;
+  color: var(--muted);
+  text-align: left;
+}
+
+.folder-add:hover {
+  background: var(--raised);
+  color: var(--text);
+}
+
+.folder-add svg {
+  width: 16px;
+  height: 16px;
+}
+
+.library-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--warning-soft);
+  color: var(--warning-text);
+}
+
+.lib-item {
+  border-bottom: 1px solid var(--line);
+}
+
+.lib-item:last-child {
+  border-bottom: 0;
+}
+
+.lib-item .job-row {
+  width: 100%;
+  border-bottom: 0;
+}
+
+.lib-item.open {
+  background: var(--raised);
+}
+
+.lib-item.dragging {
+  opacity: 0.5;
+}
+
+.job-row-summary {
+  margin-top: 4px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--muted);
+  white-space: normal;
+}
+
+.lib-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 2px 14px 14px 54px;
+}
+
+.lib-summary {
+  margin: 0;
+  line-height: 1.55;
+}
+
+.lib-folder {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.lib-folder select {
+  min-width: 180px;
+}
+
+.lib-actions {
+  flex-wrap: wrap;
+}
+
+@media (max-width: 1100px) {
+  .library-body {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+  }
+
+  .library-folders {
+    width: auto;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .folder-item {
+    border-color: var(--line);
+  }
+
+  .folder-item .menu {
+    left: 0;
+    right: auto;
+  }
+}
+
+/* Nastavení: sekce Modely s přepínačem poskytovatele a řádkem pro každou úlohu */
+.models-switch {
+  align-self: flex-start;
+}
+
+.models-panel {
+  gap: 16px;
+}
+
+.setting-group .models-subtitle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.task-row {
+  gap: 6px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.task-title {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.task-picker {
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--raised);
 }

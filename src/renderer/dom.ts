@@ -1,4 +1,5 @@
 import { locale, t, type MessageKey } from '../shared/i18n';
+import { chatModelWarning, formatContext } from '../shared/catalog-view';
 import { languageName } from '../shared/languages';
 import type { Job, Mode, Stage } from '../shared/types';
 
@@ -62,9 +63,17 @@ export const ICONS = {
   chevron: '<path d="M6 9l6 6 6-6" />',
   lock: '<rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" />',
   globe: '<circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z" />',
+  eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" />',
+  eyeOff: '<path d="M3 3l18 18M10.6 5.1A9.6 9.6 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4M6.5 6.6C3.7 8.4 2 12 2 12s3.5 7 10 7a9.7 9.7 0 0 0 4.3-1M9.9 9.9a3 3 0 0 0 4.2 4.2" />',
   up: '<path d="M12 19V5M6 11l6-6 6 6" />',
   more: '<circle cx="6" cy="12" r="1.6" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" /><circle cx="18" cy="12" r="1.6" fill="currentColor" stroke="none" />',
 };
+
+/** Text varování, že se model nehodí na chat s dokumentem; vhodný model vrací undefined. */
+export function chatWarningText(model: { key: string; name: string; context?: number }) {
+  const w = chatModelWarning(model);
+  return w && t(`chat.warn.${w}`, { n: formatContext(model.context) });
+}
 
 export const cleanError = (e: unknown) => (e as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
 

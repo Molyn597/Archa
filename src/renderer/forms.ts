@@ -2,9 +2,9 @@ import { CHARS_PER_PAGE, estimateCost } from '../shared/cost';
 import { formatUsd } from '../shared/estimate';
 import { locale, t, type MessageKey, type UiLangSetting } from '../shared/i18n';
 import { activeRates, FAST_REMOTE_MODEL, isFreeModel, RECOMMENDED_REMOTE_MODEL } from '../shared/provider';
-import { catalogRows, filterCatalog, formatContext, isFree, sharedModel, sortCatalog, visionWarnings } from '../shared/catalog-view';
-import type { CitationStyle, Currency, GlossaryEntry, LmStatus, ModelPrice, Models, Settings, Theme } from '../shared/types';
-import { duration, h, icon, ICONS, toast } from './dom';
+import { catalogRows, chatModelWarning, formatContext, isFree, sharedModel, visionWarnings } from '../shared/catalog-view';
+import type { CitationStyle, Currency, GlossaryEntry, LmStatus, ModelPrice, Models, Provider, Settings, Theme } from '../shared/types';
+import { chatWarningText, duration, h, icon, ICONS, toast } from './dom';
 
 const $ = (id: string) => document.getElementById(id)!;
 
@@ -80,6 +80,24 @@ const ROLES: { key: keyof Models; title: MessageKey; hint: MessageKey; vision?: 
   { key: 'polish', title: 'settings.role.polish', hint: 'settings.role.polishHint' },
 ];
 
+type Task = keyof Models | 'chat';
+
+// Úlohy v pořadí, jak se ukazují v Nastavení; chat nemá vlastní roli v `Models`, jeho model je v `chatModels`.
+const TASKS: { key: Task; title: MessageKey; hint: MessageKey; vision?: boolean }[] = [
+  { key: 'translate', title: 'settings.role.translate', hint: 'settings.role.translateHint' },
+  { key: 'ocr', title: 'settings.role.ocr', hint: 'settings.role.ocrHint', vision: true },
+  { key: 'polish', title: 'settings.role.polish', hint: 'settings.role.polishHint', vision: true },
+  { key: 'chat', title: 'settings.role.chat', hint: 'settings.role.chatHint' },
+];
+
+// Poskytovatel, jehož modely se v Nastavení právě upravují (nemění aktivního poskytovatele).
+let editedTab: Provider | null = null;
+
+/** Předvolí záložku poskytovatele v sekci Modely (např. odkaz „Změnit modely“ ze stavu v panelu). */
+export function setSettingsTab(provider: Provider) {
+  editedTab = provider;
+}
+
 const gb = (bytes: number) => (bytes ? ` · ${(bytes / 1e9).toFixed(1)} GB` : '');
 
 function toggle(label: string, hint: string, checked: boolean, onChange: (v: boolean) => void) {
@@ -105,19 +123,7 @@ export async function renderSettings(onSaved: (s: Settings) => void) {
   });
 
   const rerender = () => renderSettings(onSaved);
-  const modelGroup = h(
-    'section',
-    { class: 'setting-group' },
-    groupTitle(t('settings.local.title'), settings.provider === 'local'),
-    localSummary(settings, lm),
-    h('label', { class: 'field' }, h('span', {}, t('settings.serverUrl')), url),
-  );
-  for (const role of ROLES) modelGroup.append(modelSelect(role, settings, lm, save));
-  if (!lm.cli) {
-    modelGroup.append(
-      h('p', { class: 'error-box' }, t('settings.noCli')),
-    );
-  }
+  const modelGroup = modelsGroup(settings, lm, remote, url, save, rerender);
 
   const theme = h('select');
   for (const value of ['system', 'light', 'dark'] as Theme[]) {
@@ -144,7 +150,7 @@ export async function renderSettings(onSaved: (s: Settings) => void) {
   });
 
   const r = activeRates(settings);
-  // Pevné pořadí sekcí: Vzhled, Překlad v počítači, Online (OpenRouter), Pokročilé.
+  // Pevné pořadí sekcí: Vzhled, Modely, Aplikace.
   $('settings').replaceChildren(
     h(
       'section',
@@ -154,7 +160,6 @@ export async function renderSettings(onSaved: (s: Settings) => void) {
       h('label', { class: 'field' }, h('span', {}, t('settings.theme')), theme),
     ),
     modelGroup,
-    remoteGroup(settings, remote, save, rerender),
     h(
       'section',
       { class: 'setting-group' },
@@ -207,10 +212,6 @@ function citationRow(settings: Settings, save: () => Promise<void>) {
   return h('div', { class: 'citation-row' }, row, h('label', { class: 'field' }, h('span', {}, t('settings.citationStyle')), style));
 }
 
-function groupTitle(text: string, active: boolean) {
-  return h('h2', {}, text, active ? h('span', { class: 'chip accent in-use-now' }, t('settings.inUseNow')) : '');
-}
-
 function selectedCard(label: string, body: (Node | string)[], chips: Node[] = []) {
   return h(
     'div',
@@ -249,38 +250,7 @@ function remoteSummary(settings: Settings, lm: LmStatus) {
   return selectedCard(t('settings.remote.selected'), [h('div', { class: 'selected-model-name big' }, names)], chips);
 }
 
-function modelSelect(
-  role: (typeof ROLES)[number],
-  settings: Settings,
-  lm: LmStatus,
-  save: () => Promise<void>,
-) {
-  const select = h('select');
-  const options = lm.models.filter((m) => !role.vision || m.vision);
-  if (!options.some((m) => m.key === settings.models[role.key])) {
-    select.append(h('option', { value: settings.models[role.key], selected: true }, t('settings.modelMissing', { model: settings.models[role.key] })));
-  }
-  for (const m of options) {
-    select.append(h('option', { value: m.key, selected: m.key === settings.models[role.key] }, `${m.name}${gb(m.sizeBytes)}`));
-  }
-  select.addEventListener('change', () => {
-    settings.models[role.key] = select.value;
-    void save();
-  });
-  return h('label', { class: 'field' }, h('span', {}, `${t(role.title)} – ${t(role.hint)}`), select);
-}
-
 const price = (n: number) => n.toLocaleString(locale(), { maximumFractionDigits: 3 });
-
-function remoteLabel(m: LmStatus['models'][number]) {
-  const tags = [
-    m.price ? t('settings.remote.price', { input: price(m.price.input), output: price(m.price.output) }) : '',
-    isFreeModel(m.key) ? t('settings.remote.free') : '',
-    m.key === RECOMMENDED_REMOTE_MODEL ? t('settings.remote.recommended') : '',
-    m.key === FAST_REMOTE_MODEL ? t('settings.remote.fast') : '',
-  ].filter(Boolean);
-  return [m.name, ...tags].join(' · ');
-}
 
 function currencySelect(settings: Settings, save: () => Promise<void>, rerender: () => Promise<void>) {
   const select = h('select');
@@ -295,7 +265,161 @@ function currencySelect(settings: Settings, save: () => Promise<void>, rerender:
   return h('label', { class: 'field' }, h('span', {}, t('settings.currency')), select);
 }
 
-function remoteGroup(settings: Settings, lm: LmStatus, save: () => Promise<void>, rerender: () => Promise<void>) {
+type CatalogModel = LmStatus['models'][number];
+
+/** Upozornění k modelu zvolenému pro úlohu: chybí obraz, model nesedí na překlad nebo na chat. */
+function taskNotes(task: Task, key: string, catalog: CatalogModel[], models: Models) {
+  const entry = catalog.find((m) => m.key === key);
+  if (!entry) return [];
+  const notes: string[] = [];
+  if ((task === 'ocr' || task === 'polish') && visionWarnings(models, catalog).some((w) => w.role === task)) notes.push(t('settings.remote.noVision', { model: entry.name }));
+  const warning = chatModelWarning(entry);
+  if (task === 'translate' && (warning === 'ocr' || warning === 'embedding')) notes.push(t(warning === 'ocr' ? 'settings.warn.translateOcr' : 'settings.warn.translateEmbedding'));
+  if (task === 'chat') {
+    const text = chatWarningText(entry);
+    if (text) notes.push(text);
+  }
+  return notes.map((n) => h('p', { class: 'warn-box' }, n));
+}
+
+function taskRow(task: (typeof TASKS)[number], ...body: (Node | string)[]) {
+  return h('div', { class: 'field task-row' }, h('span', { class: 'task-title' }, t(task.title)), h('span', { class: 'muted small' }, t(task.hint)), ...body);
+}
+
+/** Výběr modelu v počítači pro jednu úlohu; chat má navíc volbu „automaticky“ (= model oprav). Vrací řádek a funkci na obnovení po změně jiné úlohy. */
+function localTask(task: (typeof TASKS)[number], settings: Settings, lm: LmStatus, save: () => Promise<void>) {
+  const chat = (settings.chatModels ??= {});
+  const isChat = task.key === 'chat';
+  const select = h('select');
+  const notes = h('div', { class: 'stack' });
+  const effective = () => (isChat ? (chat.local ?? settings.models.polish) : settings.models[task.key as keyof Models]);
+  const nameOf = (key: string) => lm.models.find((m) => m.key === key)?.name ?? key;
+  const fill = () => {
+    const chosen = isChat ? chat.local : settings.models[task.key as keyof Models];
+    const options = lm.models.filter((m) => !task.vision || task.key === 'polish' || m.vision);
+    select.replaceChildren();
+    if (isChat) select.append(h('option', { value: '', selected: !chosen }, t('settings.chat.auto', { name: nameOf(settings.models.polish) })));
+    if (chosen && !options.some((m) => m.key === chosen)) select.append(h('option', { value: chosen, selected: true }, t('settings.modelMissing', { model: chosen })));
+    for (const m of options) select.append(h('option', { value: m.key, selected: m.key === chosen }, `${isChat && chatModelWarning(m) ? '⚠ ' : ''}${m.name}${gb(m.sizeBytes)}`));
+    notes.replaceChildren(...taskNotes(task.key, effective(), lm.models, settings.models));
+  };
+  select.addEventListener('change', () => {
+    if (isChat) chat.local = select.value || undefined;
+    else settings.models[task.key as keyof Models] = select.value;
+    void save();
+  });
+  fill();
+  return { row: taskRow(task, select, notes), fill };
+}
+
+/** Online výběr: tlačítko s aktuálním modelem, které rozbalí hledání v katalogu OpenRouteru. */
+function remoteTask(task: (typeof TASKS)[number], settings: Settings, remote: LmStatus, save: () => Promise<void>, rerender: () => Promise<void>) {
+  const chat = (settings.chatModels ??= {});
+  const isChat = task.key === 'chat';
+  const auto = isChat && !chat.remote;
+  const key = isChat ? (chat.remote ?? settings.remoteModels.polish) : settings.remoteModels[task.key as keyof Models];
+  const nameOf = (id: string) => remote.models.find((m) => m.key === id)?.name ?? id;
+  const prices = Object.fromEntries(remote.models.map((m) => [m.key, m.price]));
+  const apply = (change: () => void) => {
+    change();
+    void save().then(rerender);
+  };
+  const use = (id: string) =>
+    apply(() => {
+      if (isChat) chat.remote = id;
+      else settings.remoteModels[task.key as keyof Models] = id;
+    });
+
+  const label = auto ? t('settings.chat.auto', { name: nameOf(key) }) : nameOf(key);
+  const pick = h('button', { class: 'model-pick', type: 'button', 'aria-expanded': 'false', title: key }, h('span', { class: 'model-pick-name' }, label), h('span', { class: 'model-pick-note' }, key), icon(ICONS.chevron));
+  const body = h('div', { class: 'task-picker stack' });
+  body.hidden = true;
+  const filter = h('input', { type: 'search', placeholder: t('settings.remote.filter') });
+  const visionOnly = h('input', { type: 'checkbox' });
+  visionOnly.checked = Boolean(task.vision);
+  const list = h('div', { class: 'model-scroll' });
+  const more = h('p', { class: 'muted small' });
+  const fill = () => {
+    const { rows, total } = catalogRows(remote.models, { text: filter.value, visionOnly: Boolean(task.vision) && visionOnly.checked, keep: [key] });
+    list.replaceChildren(modelList(rows, auto ? undefined : key, use, (m) => sampleCost(m, settings, prices)));
+    more.textContent = total > rows.length ? t('settings.remote.shown', { shown: rows.length, total }) : rows.length ? '' : t('settings.remote.noMatch');
+  };
+  filter.addEventListener('input', fill);
+  visionOnly.addEventListener('change', fill);
+  body.append(
+    h('div', { class: 'row gap' }, h('div', { class: 'grow' }, filter), task.vision ? h('label', { class: 'check' }, visionOnly, t('settings.remote.visionOnly')) : ''),
+    ...(isChat && chat.remote ? [h('button', { class: 'btn', onclick: () => apply(() => (chat.remote = undefined)) }, t('settings.chat.auto', { name: nameOf(settings.remoteModels.polish) }))] : []),
+    list,
+    more,
+  );
+  let filled = false;
+  pick.addEventListener('click', () => {
+    body.hidden = !body.hidden;
+    pick.setAttribute('aria-expanded', String(!body.hidden));
+    if (!body.hidden) {
+      if (!filled) fill();
+      filled = true;
+      filter.focus();
+    }
+  });
+  // Stejný model pro překlad, OCR i opravy jedním klikem.
+  const all = !isChat && sharedModel(settings.remoteModels) === undefined
+    ? h('button', { class: 'btn', type: 'button', onclick: () => apply(() => (settings.remoteModels = { ocr: key, translate: key, polish: key })) }, t('settings.models.useAll'))
+    : '';
+  return taskRow(task, remote.models.length ? pick : h('span', { class: 'selected-model-name' }, key), remote.models.length ? body : '', all, ...taskNotes(task.key, key, remote.models, settings.remoteModels));
+}
+
+function providerTitle(text: string, active: boolean) {
+  return h('h3', { class: 'models-subtitle' }, text, active ? h('span', { class: 'chip accent in-use-now' }, t('settings.inUseNow')) : '');
+}
+
+/** Jedna sekce Modely: přepínač poskytovatele (jen volba, co se upravuje) a pod ním model pro každou úlohu. */
+function modelsGroup(settings: Settings, lm: LmStatus, remote: LmStatus, url: HTMLInputElement, save: () => Promise<void>, rerender: () => Promise<void>) {
+  const local = h('div', { class: 'models-panel stack' }, providerTitle(t('settings.local.title'), settings.provider === 'local'), localSummary(settings, lm));
+  const fills: (() => void)[] = [];
+  for (const task of TASKS) {
+    const { row, fill } = localTask(task, settings, lm, save);
+    fills.push(fill);
+    local.append(row);
+  }
+  // Změna modelu oprav posouvá i „automatický“ model chatu, proto se po změně obnoví všechny řádky.
+  local.addEventListener('change', () => fills.forEach((f) => f()));
+  local.append(h('label', { class: 'field' }, h('span', {}, t('settings.serverUrl')), url));
+  if (!lm.cli) local.append(h('p', { class: 'error-box' }, t('settings.noCli')));
+
+  const online = h('div', { class: 'models-panel stack' }, providerTitle(t('settings.remote.title'), settings.provider === 'openrouter'), remoteSummary(settings, remote));
+  if (!remote.models.length) online.append(h('p', { class: 'error-box' }, t('settings.remote.noCatalog')));
+  for (const task of TASKS) online.append(remoteTask(task, settings, remote, save, rerender));
+  if (Object.values(settings.remoteModels).some(isFreeModel)) online.append(h('p', { class: 'muted small' }, t('settings.remote.freeHint')));
+  online.append(...remoteExtras(settings, remote, save, rerender));
+
+  const panels: Record<Provider, HTMLElement> = { local, openrouter: online };
+  const tabs = new Map<Provider, HTMLElement>();
+  const select = (p: Provider) => {
+    editedTab = p;
+    for (const [id, panel] of Object.entries(panels)) panel.hidden = id !== p;
+    for (const [id, tab] of tabs) {
+      tab.classList.toggle('active', id === p);
+      tab.setAttribute('aria-checked', String(id === p));
+    }
+  };
+  for (const p of ['local', 'openrouter'] as Provider[]) {
+    tabs.set(p, h('button', { class: 'segment', type: 'button', role: 'radio', onclick: () => select(p) }, t(`home.provider.${p}`)));
+  }
+  select(editedTab ?? settings.provider);
+  return h(
+    'section',
+    { class: 'setting-group' },
+    h('h2', {}, t('settings.models.title')),
+    h('p', { class: 'muted small' }, t('settings.models.hint')),
+    h('div', { class: 'segmented models-switch', role: 'radiogroup', 'aria-label': t('settings.models.title') }, ...tabs.values()),
+    local,
+    online,
+  );
+}
+
+/** Online přípojení: soukromí, API klíč, měna a obnovení katalogu. */
+function remoteExtras(settings: Settings, lm: LmStatus, save: () => Promise<void>, rerender: () => Promise<void>) {
   const key = h('input', { type: 'password', autocomplete: 'off', spellcheck: 'false', placeholder: lm.hasKey ? t('settings.remote.keyPlaceholderSaved') : t('settings.remote.keyPlaceholder') });
   const run = (action: () => Promise<void>) => async () => {
     try {
@@ -307,68 +431,6 @@ function remoteGroup(settings: Settings, lm: LmStatus, save: () => Promise<void>
   };
   const saveKey = h('button', { class: 'btn', onclick: run(() => window.api.setApiKey(key.value)) }, t('settings.remote.keySave'));
   const removeKey = h('button', { class: 'btn danger', onclick: run(() => window.api.clearApiKey()) }, t('settings.remote.keyRemove'));
-  const group = h(
-    'section',
-    { class: 'setting-group' },
-    groupTitle(t('settings.remote.title'), settings.provider === 'openrouter'),
-    remoteSummary(settings, lm),
-    h('p', { class: 'warn-box' }, t('settings.remote.privacy')),
-    h('label', { class: 'field' }, h('span', {}, t('settings.remote.key')), key),
-    h('div', { class: 'row gap' }, saveKey, lm.hasKey ? removeKey : ''),
-    h('p', { class: lm.hasKey ? 'ok-box' : 'warn-box' }, lm.hasKey ? t('settings.remote.keySaved') : t('settings.remote.keyNone')),
-    currencySelect(settings, save, rerender),
-  );
-  if (!lm.models.length) {
-    group.append(h('p', { class: 'error-box' }, t('settings.remote.noCatalog')));
-    return group;
-  }
-
-  const prices = Object.fromEntries(lm.models.map((m) => [m.key, m.price]));
-  const roleModels = () => Object.values(settings.remoteModels);
-  const filter = h('input', { type: 'search', placeholder: t('settings.remote.filter') });
-  const visionOnly = h('input', { type: 'checkbox' });
-  visionOnly.checked = true;
-  const warnings = h('div', { class: 'stack' });
-  const table = h('div', { class: 'model-scroll' });
-  const more = h('p', { class: 'muted small' });
-  const cutoff = () => ({ text: filter.value, visionOnly: visionOnly.checked, keep: roleModels() });
-
-  const selects = ROLES.map((role) => {
-    const select = h('select');
-    select.addEventListener('change', () => {
-      settings.remoteModels[role.key] = select.value;
-      void save().then(rerender);
-    });
-    const fillOne = () => {
-      const current = settings.remoteModels[role.key];
-      const options = sortCatalog(filterCatalog(lm.models, { text: filter.value, visionOnly: false, keep: [current] }));
-      select.replaceChildren(
-        ...(options.some((m) => m.key === current) ? [] : [h('option', { value: current, selected: true }, t('settings.modelMissing', { model: current }))]),
-        ...options.map((m) => h('option', { value: m.key, selected: m.key === current }, remoteLabel(m))),
-      );
-    };
-    const hint = role.vision ? ` (${t('settings.remote.visionHint')})` : '';
-    return { fillOne, el: h('label', { class: 'field' }, h('span', {}, `${t(role.title)}${hint}`), select) };
-  });
-
-  const useModel = (id: string) => {
-    for (const role of ROLES) settings.remoteModels[role.key] = id;
-    void save().then(rerender);
-  };
-  const update = () => {
-    const { rows, total } = catalogRows(lm.models, cutoff());
-    const used = sharedModel(settings.remoteModels);
-    table.replaceChildren(modelList(rows, used, useModel, (m) => sampleCost(m, settings, prices)));
-    more.textContent = total > rows.length ? t('settings.remote.shown', { shown: rows.length, total }) : rows.length ? '' : t('settings.remote.noMatch');
-    warnings.replaceChildren(
-      ...visionWarnings(settings.remoteModels, lm.models).map(({ model }) => h('p', { class: 'warn-box' }, t('settings.remote.noVision', { model: lm.models.find((m) => m.key === model)?.name ?? model }))),
-    );
-    selects.forEach((x) => x.fillOne());
-  };
-  filter.addEventListener('input', update);
-  visionOnly.addEventListener('change', update);
-  update();
-
   const refresh = h(
     'button',
     {
@@ -381,17 +443,15 @@ function remoteGroup(settings: Settings, lm: LmStatus, save: () => Promise<void>
     t('settings.remote.refresh'),
   );
   const stamp = lm.catalogAt ? t('settings.remote.catalogAt', { date: new Date(lm.catalogAt).toLocaleString(locale()) }) : '';
-  group.append(
+  return [
+    h('p', { class: 'warn-box' }, t('settings.remote.privacy')),
+    h('label', { class: 'field' }, h('span', {}, t('settings.remote.key')), key),
+    h('div', { class: 'row gap' }, saveKey, lm.hasKey ? removeKey : ''),
+    h('p', { class: lm.hasKey ? 'ok-box' : 'warn-box' }, lm.hasKey ? t('settings.remote.keySaved') : t('settings.remote.keyNone')),
+    currencySelect(settings, save, rerender),
     h('p', { class: 'muted small' }, t('settings.remote.info')),
     h('div', { class: 'row gap' }, refresh, h('span', { class: 'muted small' }, stamp)),
-    h('div', { class: 'row gap' }, h('div', { class: 'grow' }, filter), h('label', { class: 'check' }, visionOnly, t('settings.remote.visionOnly'))),
-    table,
-    more,
-    warnings,
-    h('details', { class: 'role-models' }, h('summary', {}, t('settings.remote.custom')), ...selects.map((x) => x.el)),
-  );
-  if (Object.values(settings.remoteModels).some(isFreeModel)) group.append(h('p', { class: 'muted small' }, t('settings.remote.freeHint')));
-  return group;
+  ];
 }
 
 const usd = (n?: number) => (n === undefined ? '—' : price(n));

@@ -4,7 +4,7 @@ import { locale, t, type MessageKey } from '../shared/i18n';
 import { languageName } from '../shared/languages';
 import { PDFJS_OPTIONS } from '../shared/pdf';
 import { isOnline } from '../shared/provider';
-import { findRegion, normalizeCrop } from '../shared/regions';
+import { findRegion, moveCrop, normalizeCrop, resizeCrop, type Handle } from '../shared/regions';
 import { authorsText, BIBLIO_FIELDS, DOC_TYPES, parseAuthors } from '../shared/card';
 import type { Biblio, DocType, DocumentCard, DocumentContext, Job, JobDetail, Mode, RegionTranslation, Segment, Stage } from '../shared/types';
 import { resetChat, setupChat, showChat } from './chat';
@@ -31,7 +31,7 @@ import {
 
 GlobalWorkerOptions.workerSrc = './pdf.worker.min.mjs';
 
-type Tab = 'compare' | 'translated-pdf' | 'side-by-side' | 'translation' | 'original' | 'info';
+export type Tab = 'compare' | 'translated-pdf' | 'side-by-side' | 'translation' | 'original' | 'info';
 
 const $ = (id: string) => document.getElementById(id)!;
 const finalText = (s: Segment) => s.edited ?? s.polished ?? s.translation ?? '';
@@ -56,6 +56,20 @@ let picked = new Set<number>();
 let regions: RegionTranslation[] = [];
 // Vrstvy stránek originálu podle čísla stránky, aby šel přidat rámeček bez překreslení.
 let regionLayers = new Map<number, HTMLElement[]>();
+// Rámečky uložených oblastí (jeden na vrstvu), aby šly smazat nebo přesunout.
+let frames = new Map<RegionTranslation, HTMLElement[]>();
+// Právě upravovaná oblast na stránce.
+let editing: { cancel: () => void } | null = null;
+const HIDE_KEY = 'regionsHidden';
+let regionsHidden = (() => {
+  try {
+    return localStorage.getItem(HIDE_KEY) === '1';
+  } catch {
+    return false;
+  }
+})();
+// Upozornění „Oblasti jsou skryté“ se ukáže jen jednou.
+let hiddenTold = false;
 // Všechny vykreslené stránky (originál i překlad) podle čísla; na ně se kreslí zvýraznění citace.
 let pageWraps = new Map<number, HTMLElement[]>();
 // Záložka, jejíž obsah je v těle vykreslený hotový.
@@ -399,23 +413,45 @@ function openRegionDialog(pdf: PDFDocumentProxy, number: number, crop: RegionTra
       foot,
     ),
   );
-  const show = (text: string) => {
-    result.replaceChildren(regionResult(text));
-    foot.hidden = true;
+  // U uložené oblasti nabídne úpravu a smazání.
+  const show = (saved: RegionTranslation) => {
+    result.replaceChildren(regionResult(saved.text));
+    foot.replaceChildren(
+      h(
+        'button',
+        {
+          class: 'btn danger',
+          onclick: async () => {
+            try {
+              await window.api.deleteRegion(id, saved.page, saved.crop);
+            } catch (e) {
+              return toast(cleanError(e), true);
+            }
+            if (current?.job.id === id) removeRegion(saved);
+            close();
+          },
+        },
+        t('region.delete'),
+      ),
+      h('button', { class: 'btn', onclick: () => (close(), editRegion(pdf, saved)) }, t('region.edit')),
+    );
+    foot.hidden = false;
   };
   const saved = findRegion(regions, number, crop);
-  if (saved) show(saved.text);
+  if (saved) show(saved);
   button.onclick = async () => {
     button.disabled = true;
     button.textContent = t('region.translating');
     result.replaceChildren();
     try {
-      const region = await window.api.translateRegion(id, number, crop);
-      if (current?.job.id === id && !findRegion(regions, region.page, region.crop)) {
-        regions.push(region);
-        addRegionFrame(pdf, region);
+      const fresh = await window.api.translateRegion(id, number, crop);
+      const known = current?.job.id === id ? findRegion(regions, fresh.page, fresh.crop) : undefined;
+      if (current?.job.id === id && !known) {
+        regions.push(fresh);
+        addRegionFrame(pdf, fresh);
+        noteHidden();
       }
-      show(region.text);
+      show(known ?? fresh);
     } catch (e) {
       result.replaceChildren(h('div', { class: 'error-box' }, cleanError(e)));
       button.disabled = false;
@@ -437,14 +473,134 @@ function placeBox(el: HTMLElement, crop: RegionTranslation['crop']) {
 function addRegionFrame(pdf: PDFDocumentProxy, region: RegionTranslation) {
   for (const layer of regionLayers.get(region.page) ?? []) {
     const frame = h('button', { class: 'region-frame', title: t('region.saved') });
+    frames.set(region, [...(frames.get(region) ?? []), frame]);
     placeBox(frame, region.crop);
     frame.onmousedown = (e) => e.stopPropagation();
-    frame.onclick = () => openRegionDialog(pdf, region.page, region.crop);
+    // Jedno kliknutí otevře překlad, dvojklik přejde do úpravy (dialog se proto otevírá s krátkým zpožděním).
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    frame.onclick = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => openRegionDialog(pdf, region.page, region.crop), 220);
+    };
+    frame.ondblclick = () => {
+      clearTimeout(timer);
+      editRegion(pdf, region);
+    };
     layer.append(frame);
   }
 }
 
 const MIN_DRAG = 12;
+
+function removeRegion(region: RegionTranslation) {
+  for (const frame of frames.get(region) ?? []) frame.remove();
+  frames.delete(region);
+  regions = regions.filter((r) => r !== region);
+}
+
+/** Skryté oblasti nové překlady neukážou; uživatel se o tom dozví jednou. */
+function noteHidden() {
+  if (!regionsHidden || hiddenTold) return;
+  hiddenTold = true;
+  toast(t('region.hiddenToast'));
+}
+
+const HANDLES: Handle[] = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
+
+/**
+ * Upravitelný výběr na stránce (jako obdélníkový výběr v Photoshopu): úchyty mění velikost, tažení uvnitř ho posune.
+ * Bez `region` je to nový výběr s lištou „Přeložit“, jinak úprava uložené oblasti s „Přeložit znovu“.
+ */
+function startSelection(pdf: PDFDocumentProxy, number: number, layer: HTMLElement, start: RegionTranslation['crop'], region?: RegionTranslation) {
+  editing?.cancel();
+  const id = current!.job.id;
+  const old = region ? (frames.get(region) ?? []) : [];
+  let crop = start;
+  let busy = false;
+  const box = h('div', { class: 'region-edit' });
+  const confirm = h('button', { class: 'btn primary' }, t(region ? 'region.retranslate' : 'region.translate'));
+  const cancel = h('button', { class: 'btn' }, t('region.cancel'));
+  const bar = h('div', { class: 'region-bar' }, confirm, cancel);
+  const place = () => {
+    placeBox(box, crop);
+    bar.classList.toggle('above', crop[3] > 0.85);
+  };
+  const end = () => {
+    document.removeEventListener('keydown', onKey);
+    box.remove();
+    for (const frame of old) frame.classList.remove('editing');
+    editing = null;
+  };
+  const onKey = (e: KeyboardEvent) => {
+    if (busy || document.querySelector('.modal-overlay')) return;
+    if (e.key === 'Escape') end();
+    else if (e.key === 'Enter' && !(e.target instanceof HTMLButtonElement)) confirm.click();
+  };
+
+  // Tažení: `apply` spočítá nový výřez z původního a posunu v poměru ke stránce.
+  const drag = (e: MouseEvent, apply: (c: RegionTranslation['crop'], dx: number, dy: number, rect: DOMRect) => RegionTranslation['crop']) => {
+    if (e.button !== 0 || busy) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const rect = layer.getBoundingClientRect();
+    const from = crop;
+    const move = (ev: MouseEvent) => {
+      crop = apply(from, (ev.clientX - e.clientX) / rect.width, (ev.clientY - e.clientY) / rect.height, rect);
+      place();
+    };
+    const up = () => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+  };
+  box.onmousedown = (e) => drag(e, (c, dx, dy) => moveCrop(c, dx, dy));
+  for (const handleName of HANDLES) {
+    const handle = h('div', { class: `region-handle ${handleName}` });
+    handle.onmousedown = (e) => drag(e, (c, dx, dy, rect) => resizeCrop(c, handleName, dx, dy, [MIN_DRAG / rect.width, MIN_DRAG / rect.height]));
+    box.append(handle);
+  }
+  bar.onmousedown = (e) => e.stopPropagation();
+  cancel.onclick = end;
+  confirm.onclick = async () => {
+    if (!region) {
+      const chosen = crop;
+      end();
+      openRegionDialog(pdf, number, chosen);
+      return;
+    }
+    busy = true;
+    confirm.disabled = cancel.disabled = true;
+    confirm.textContent = t('region.translating');
+    try {
+      const fresh = await window.api.translateRegion(id, region.page, crop, region.crop);
+      if (current?.job.id !== id || !box.isConnected) return;
+      removeRegion(region);
+      regions.push(fresh);
+      addRegionFrame(pdf, fresh);
+      end();
+      noteHidden();
+      openRegionDialog(pdf, fresh.page, fresh.crop);
+    } catch (e) {
+      toast(cleanError(e), true);
+      busy = false;
+      confirm.disabled = cancel.disabled = false;
+      confirm.textContent = t('region.retranslate');
+    }
+  };
+  for (const frame of old) frame.classList.add('editing');
+  box.append(bar);
+  place();
+  layer.append(box);
+  document.addEventListener('keydown', onKey);
+  editing = { cancel: end };
+}
+
+function editRegion(pdf: PDFDocumentProxy, region: RegionTranslation) {
+  const layer = frames.get(region)?.[0]?.parentElement;
+  if (layer) startSelection(pdf, region.page, layer, region.crop, region);
+}
 
 /** Stránka originálu, na které jde tažením myši označit oblast k přiblížení a překladu. */
 function selectablePage(pdf: PDFDocumentProxy, number: number, canvas: HTMLCanvasElement) {
@@ -456,6 +612,7 @@ function selectablePage(pdf: PDFDocumentProxy, number: number, canvas: HTMLCanva
   wrap.onmousedown = (e) => {
     if (e.button !== 0) return;
     e.preventDefault();
+    editing?.cancel();
     const box = wrap.getBoundingClientRect();
     const clampX = (x: number) => Math.min(box.width, Math.max(0, x - box.left));
     const clampY = (y: number) => Math.min(box.height, Math.max(0, y - box.top));
@@ -473,7 +630,7 @@ function selectablePage(pdf: PDFDocumentProxy, number: number, canvas: HTMLCanva
       draft.remove();
       const [a, b, c, d] = rect(ev);
       if (c - a < MIN_DRAG || d - b < MIN_DRAG) return;
-      openRegionDialog(pdf, number, normalizeCrop([a / box.width, b / box.height, c / box.width, d / box.height]));
+      startSelection(pdf, number, wrap, normalizeCrop([a / box.width, b / box.height, c / box.width, d / box.height]));
     };
     window.addEventListener('mousemove', move);
     window.addEventListener('mouseup', up);
@@ -790,14 +947,18 @@ async function renderBody() {
   renderedTab = null;
   releasePages();
   const body = $('detail-body');
+  editing?.cancel();
+  body.classList.toggle('regions-hidden', regionsHidden);
   for (const b of document.querySelectorAll<HTMLButtonElement>('#detail-tabs .tab')) {
     b.classList.toggle('active', b.dataset.tab === tab);
   }
   const { job, segments } = current;
+  $('regions-toggle').hidden = !(job.ext.toLowerCase() === '.pdf' && (tab === 'original' || tab === 'side-by-side'));
   if (tab === 'info') return body.replaceChildren(infoView(current));
   if (tab === 'original' || tab === 'translated-pdf' || tab === 'side-by-side') {
     body.replaceChildren(h('p', { class: 'muted' }, t('detail.loading')));
     regionLayers = new Map();
+    frames = new Map();
     pageWraps = new Map();
     regions = job.ext.toLowerCase() === '.pdf' && tab !== 'translated-pdf' ? await window.api.jobRegions(job.id).catch(() => []) : [];
     try {
@@ -882,11 +1043,27 @@ export async function updateDetail(job: Job) {
   }
 }
 
-export function setupDetail(onBack: () => void) {
-  setupChat({ segments: () => current?.segments ?? [], cite: showCite });
+function syncRegionsToggle() {
+  const label = t(regionsHidden ? 'region.show' : 'region.hide');
+  $('regions-toggle').replaceChildren(icon(regionsHidden ? ICONS.eyeOff : ICONS.eye), label);
+  $('regions-toggle').title = label;
+}
+
+export function setupDetail(onBack: () => void, openSettings: () => void) {
+  setupChat({ segments: () => current?.segments ?? [], cite: showCite, openSettings });
   setupPdfZoom();
   setupSelectionCite($('detail-body'), () => current);
   $('detail-back').addEventListener('click', onBack);
+  syncRegionsToggle();
+  $('regions-toggle').addEventListener('click', () => {
+    regionsHidden = !regionsHidden;
+    try {
+      localStorage.setItem(HIDE_KEY, regionsHidden ? '1' : '0');
+    } catch {}
+    editing?.cancel();
+    $('detail-body').classList.toggle('regions-hidden', regionsHidden);
+    syncRegionsToggle();
+  });
   document.addEventListener('click', () => {
     for (const m of document.querySelectorAll<HTMLElement>('.menu')) m.hidden = true;
   });
@@ -900,6 +1077,7 @@ export function setupDetail(onBack: () => void) {
 }
 
 export function closeDetail() {
+  editing?.cancel();
   current = null;
   renderToken++;
   releasePages();

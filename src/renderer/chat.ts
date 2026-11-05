@@ -1,13 +1,13 @@
 import { t } from '../shared/i18n';
-import { catalogRows } from '../shared/catalog-view';
-import { FAST_REMOTE_MODEL, isOnline, RECOMMENDED_REMOTE_MODEL } from '../shared/provider';
-import type { ChatMessage, ChatModel, Job, LmStatus, Segment, Settings } from '../shared/types';
+import { isOnline } from '../shared/provider';
+import type { ChatMessage, ChatModel, Job, LmStatus, Provider, Segment, Settings } from '../shared/types';
 import { citationEnabled, copyWithCitation } from './citation-copy';
-import { cleanError, h, icon, ICONS } from './dom';
+import { chatWarningText, cleanError, h, icon, ICONS } from './dom';
 
 export interface ChatHost {
   segments(): Segment[];
   cite(segment: Segment): void;
+  openSettings(): void;
 }
 
 const $ = (id: string) => document.getElementById(id)!;
@@ -32,37 +32,31 @@ let settings: Settings | null = null;
 let localModels: LmStatus['models'] = [];
 let remoteModels: LmStatus['models'] = [];
 let hasKey = false;
-let choice: ChatModel | null = null;
+let choice: Provider | null = null;
 let closeMenu: (() => void) | null = null;
 
-const MODEL_KEY = 'chatModel';
-const MENU_ROWS = 30;
+type Entry = LmStatus['models'][number];
 
-const nameOf = (c: { provider: ChatModel['provider']; model: string }) =>
-  (c.provider === 'openrouter' ? remoteModels : localModels).find((m) => m.key === c.model)?.name ?? c.model;
+const entryOf = (provider: Provider, key: string): Entry =>
+  (provider === 'openrouter' ? remoteModels : localModels).find((m) => m.key === key) ?? { key, name: key, vision: false, sizeBytes: 0 };
 
-/** Zvolený model s názvem; bez volby (nebo online bez klíče) polish aktivního poskytovatele. Volba se pamatuje jen v tomto počítači. */
-function current(): ChatModel {
-  if (!choice) {
-    try {
-      const saved = JSON.parse(localStorage.getItem(MODEL_KEY) ?? 'null') as ChatModel | null;
-      if (saved && (saved.provider === 'local' || saved.provider === 'openrouter') && typeof saved.model === 'string') choice = saved;
-    } catch {}
-  }
-  if (choice && (choice.provider === 'local' || hasKey)) return { ...choice, name: nameOf(choice) };
-  // Online bez klíče by chat jen hlásil chybu, výchozí je pak model v počítači.
-  const base =
-    isOnline(settings ?? {}) && hasKey
-      ? { provider: 'openrouter' as const, model: settings!.remoteModels.polish }
-      : { provider: 'local' as const, model: settings!.models.polish };
-  return { ...base, name: nameOf(base) };
+/** Model chatu pro poskytovatele: volba z Nastavení, jinak role polish. */
+const modelFor = (provider: Provider): ChatModel => {
+  const key = provider === 'openrouter' ? (settings!.chatModels?.remote ?? settings!.remoteModels.polish) : (settings!.chatModels?.local ?? settings!.models.polish);
+  return { provider, model: key, name: entryOf(provider, key).name };
+};
+
+/** Poskytovatel zvolený v menu chatu (jen do konce běhu aplikace), jinak globální z postranního panelu; model určuje Nastavení.
+ * Zvolený poskytovatel s modelem; online bez klíče by chat jen hlásil chybu, tak platí model v počítači. */
+const current = (): ChatModel => modelFor(activeProvider());
+
+function activeProvider(): Provider {
+  if (choice === 'local' || (choice === 'openrouter' && hasKey)) return choice;
+  return isOnline(settings ?? {}) && hasKey ? 'openrouter' : 'local';
 }
 
-function choose(c: ChatModel) {
-  choice = { provider: c.provider, model: c.model };
-  try {
-    localStorage.setItem(MODEL_KEY, JSON.stringify(choice));
-  } catch {}
+function choose(provider: Provider) {
+  choice = provider;
   closeMenu?.();
   renderModel();
   renderMessages();
@@ -178,54 +172,45 @@ async function ask(question: string) {
 
 const chipLabel = (c: ChatModel) => `${t(c.provider === 'openrouter' ? 'chat.modelOnline' : 'chat.modelLocal')} · ${c.name}`;
 
+const warnIcon = () => {
+  const el = icon(ICONS.alert);
+  el.classList.add('warn-icon');
+  return el;
+};
+
+const warningOf = (c: ChatModel) => chatWarningText({ ...entryOf(c.provider, c.model), name: c.name ?? c.model });
+
 /** Čip modelu a poznámka pod polem; po změně volby nebo načtení modelů. */
 function renderModel() {
   const el = document.getElementById('chat-model');
   if (!el || !settings) return;
   const c = current();
   const online = c.provider === 'openrouter';
-  el.replaceChildren(icon(online ? ICONS.globe : ICONS.lock), h('span', { class: 'chat-model-name' }, chipLabel(c)), icon(ICONS.chevron));
+  const warning = warningOf(c);
+  el.title = warning ? `⚠ ${warning}` : t('chat.modelPick');
+  el.replaceChildren(icon(online ? ICONS.globe : ICONS.lock), h('span', { class: 'chat-model-name' }, chipLabel(c)), ...(warning ? [warnIcon()] : []), icon(ICONS.chevron));
   $('chat-privacy').textContent = t(online ? 'chat.noteOnline' : 'chat.noteLocal');
 }
 
 function modelMenu(anchor: HTMLElement) {
   const menu = h('div', { class: 'chat-menu', role: 'menu' });
-  const selected = current();
-  const item = (c: ChatModel) =>
-    h(
+  const selected = activeProvider();
+  const item = (provider: Provider, disabled = false) => {
+    const c = modelFor(provider);
+    const warning = warningOf(c);
+    return h(
       'button',
-      { class: 'chat-menu-item', role: 'menuitemradio', 'aria-checked': String(c.provider === selected.provider && c.model === selected.model), onclick: () => choose(c) },
-      h('span', {}, c.name ?? c.model),
-      c.provider === selected.provider && c.model === selected.model && icon(ICONS.check),
+      { class: 'chat-menu-item', role: 'menuitemradio', 'aria-checked': String(provider === selected), title: warning ?? '', disabled, onclick: () => choose(provider) },
+      h('span', {}, t(provider === 'openrouter' ? 'chat.menuOnline' : 'chat.menuLocal', { name: c.name ?? c.model })),
+      provider === selected ? icon(ICONS.check) : null,
+      warning ? warnIcon() : null,
     );
-  const label = (text: string) => h('div', { class: 'chat-menu-label' }, text);
-  const hint = (text: string) => h('div', { class: 'chat-menu-hint' }, text);
-
-  const polish = settings!.models.polish;
-  // OCR a TranslateGemma neumí volný chat.
-  const locals = localModels.filter((m) => !/ocr|translategemma|embed/i.test(`${m.key} ${m.name}`)).sort((a, b) => Number(b.key === polish) - Number(a.key === polish));
-  const quick = [...new Set([settings!.remoteModels.polish, RECOMMENDED_REMOTE_MODEL, FAST_REMOTE_MODEL])];
-
-  const showSearch = () => {
-    const list = h('div', { class: 'chat-menu-list' });
-    const field = h('input', { type: 'search', class: 'chat-menu-search', placeholder: t('chat.modelSearch') });
-    const fill = () => {
-      const { rows } = catalogRows(remoteModels, { text: field.value, visionOnly: false }, MENU_ROWS);
-      list.replaceChildren(...rows.map((m) => item({ provider: 'openrouter', model: m.key, name: m.name })));
-    };
-    field.addEventListener('input', fill);
-    menu.replaceChildren(field, list);
-    fill();
-    field.focus();
   };
-
   menu.append(
-    label(t('chat.modelLocal')),
-    ...(locals.length ? locals.map((m) => item({ provider: 'local', model: m.key, name: m.name })) : [hint(t('chat.modelNone'))]),
-    label(t('chat.modelOnline')),
-    ...(hasKey
-      ? [...quick.map((key) => item({ provider: 'openrouter', model: key, name: nameOf({ provider: 'openrouter', model: key }) })), h('button', { class: 'chat-menu-item more', onclick: showSearch }, h('span', {}, t('chat.modelMore')))]
-      : [hint(t('chat.modelNoKey'))]),
+    item('local'),
+    item('openrouter', !hasKey),
+    ...(hasKey ? [] : [h('div', { class: 'chat-menu-hint' }, t('chat.modelNoKey'))]),
+    h('button', { class: 'chat-menu-item more', onclick: () => (closeMenu?.(), host.openSettings()) }, h('span', {}, t('chat.changeModels'))),
   );
   anchor.append(menu);
   return menu;
@@ -353,6 +338,17 @@ export function showChat(j: Job) {
   syncRail();
   void load();
 }
+
+/** Změna globálního poskytovatele nebo modelů v Nastavení se hned projeví v chipu i menu chatu. */
+export function syncChatSettings(next: Settings) {
+  if (!settings) return;
+  settings = next;
+  renderModel();
+  renderMessages();
+}
+
+/** Otevře panel chatu (po otevření detailu z knihovny). */
+export const openChat = () => setOpen(true);
 
 /** Mimo detail úlohy se panel zavře. */
 export function resetChat() {

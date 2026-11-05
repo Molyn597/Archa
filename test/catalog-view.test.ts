@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { catalogRows, filterCatalog, formatContext, sharedModel, sortCatalog, visionWarnings } from '../src/shared/catalog-view';
+import { catalogRows, chatModelWarning, filterCatalog, formatContext, sharedModel, sortCatalog, visionWarnings } from '../src/shared/catalog-view';
 import { FAST_REMOTE_MODEL, RECOMMENDED_REMOTE_MODEL } from '../src/shared/provider';
 import { fetchCatalog, refreshCatalog, resetCatalogCache, catalogAt } from '../src/main/provider';
 
@@ -66,4 +66,23 @@ describe('refresh katalogu', () => {
     expect(models[0].context).toBe(1000);
     expect(catalogAt()).toBeGreaterThan(0);
   });
+});
+
+describe('chatModelWarning', () => {
+  const w = (key: string, context?: number) => chatModelWarning({ key, name: key, context });
+  it('OCR model', () => expect(w('unlimited-ocr')).toBe('ocr'));
+  it('překladové modely', () => {
+    expect(w('translategemma-12b-it')).toBe('translation');
+    expect(w('Helsinki/opus-mt-en-cs')).toBe('translation');
+  });
+  it('embedding modely', () => {
+    expect(w('text-embedding-nomic-embed-text-v1.5')).toBe('embedding');
+    expect(w('bge-m3')).toBe('embedding');
+  });
+  it('malé kontextové okno jen při známé hodnotě', () => {
+    expect(w('x/small', 8192)).toBe('smallContext');
+    expect(w('x/big', 16000)).toBeUndefined();
+    expect(w('x/unknown')).toBeUndefined();
+  });
+  it('běžný model bez varování', () => expect(w('google/gemma-4-12b-qat', 262144)).toBeUndefined());
 });

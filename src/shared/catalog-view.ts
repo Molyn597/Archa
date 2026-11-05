@@ -56,3 +56,18 @@ export function formatContext(n?: number) {
   if (n >= 1e6) return `${Math.round(n / 1e5) / 10}M`.replace('.0M', 'M');
   return `${Math.round(n / 1000)}k`;
 }
+
+export type ChatWarning = 'ocr' | 'translation' | 'embedding' | 'smallContext';
+
+/** Pod tímto kontextem se do chatu vejde jen malá část delšího dokumentu. */
+const MIN_CHAT_CONTEXT = 16000;
+
+/** Proč se model špatně hodí na chat s dokumentem; model bez problému vrací undefined. */
+export function chatModelWarning(model: { key: string; name: string; context?: number }): ChatWarning | undefined {
+  const id = `${model.key} ${model.name}`;
+  if (/ocr/i.test(id)) return 'ocr';
+  if (/translategemma|nllb|opus-mt|madlad|seamless/i.test(id)) return 'translation';
+  if (/embed|bge|e5-|gte-|nomic-embed/i.test(id)) return 'embedding';
+  if (model.context !== undefined && model.context < MIN_CHAT_CONTEXT) return 'smallContext';
+  return undefined;
+}

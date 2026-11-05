@@ -24,6 +24,32 @@ export function normalizeCrop([x0, y0, x1, y1]: Crop): Crop {
   return [clamp(Math.min(x0, x1)), clamp(Math.min(y0, y1)), clamp(Math.max(x0, x1)), clamp(Math.max(y0, y1))];
 }
 
+/** Úchyt výběru: rohy mění dvě strany, středy hran jednu. */
+export type Handle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w';
+
+const between = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+
+/** Posun výřezu o (dx, dy) v poměru ke stránce; velikost zůstává, výřez se drží na stránce. */
+export function moveCrop([x0, y0, x1, y1]: Crop, dx: number, dy: number): Crop {
+  const mx = between(dx, -x0, 1 - x1);
+  const my = between(dy, -y0, 1 - y1);
+  return [x0 + mx, y0 + my, x1 + mx, y1 + my];
+}
+
+/** Tažení úchytu o (dx, dy); posouvané strany zůstanou na stránce a výřez nejmenší možné [šířka, výška] `min`. */
+export function resizeCrop([x0, y0, x1, y1]: Crop, handle: Handle, dx: number, dy: number, min: [number, number]): Crop {
+  const west = handle.includes('w');
+  const east = handle.includes('e');
+  const north = handle.includes('n');
+  const south = handle.includes('s');
+  return [
+    west ? between(x0 + dx, 0, x1 - min[0]) : x0,
+    north ? between(y0 + dy, 0, y1 - min[1]) : y0,
+    east ? between(x1 + dx, x0 + min[0], 1) : x1,
+    south ? between(y1 + dy, y0 + min[1], 1) : y1,
+  ];
+}
+
 /** Segmenty, které další běh přeloží: vybrané a dosud nepřeložené. */
 export const pendingSegments = <T extends { skipped?: boolean; translation?: string }>(segments: T[]) =>
   segments.filter((s) => !s.skipped && s.translation === undefined);

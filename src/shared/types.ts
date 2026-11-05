@@ -71,6 +71,23 @@ export interface DocumentCard {
   edited?: boolean;
 }
 
+export interface LibraryFolder {
+  /** Výchozí složky: jejich klíč ('contracts', 'invoices', …); vlastní: náhodné id. */
+  id: string;
+  /** Vlastní název; bez hodnoty u výchozí složky = přeložený název z i18n. */
+  name?: string;
+  createdAt: number;
+}
+export interface Library {
+  folders: LibraryFolder[];
+  /** Zařazení dokumentu: id složky; `manual` = uživatel ho přesunul ručně a AI ho už nepřesune. */
+  assign: Record<string, { folder: string; manual?: boolean }>;
+}
+export interface LibraryState {
+  library: Library;
+  cards: Record<string, DocumentCard>;
+}
+
 export interface Segment {
   id: number;
   kind: SegmentKind;
@@ -276,6 +293,8 @@ export interface Settings {
   /** Kopírování úryvků a odpovědí chatu s citací. */
   citation: { enabled: boolean; style: CitationStyle };
   unloadWhenIdle: boolean;
+  /** Modely chatu s dokumentem; bez hodnoty se bere role polish (automaticky). */
+  chatModels?: { local?: string; remote?: string };
   theme: Theme;
   /** U PDF vytvořit i přeložené PDF se zachovaným vzhledem. */
   layoutPdf: boolean;
@@ -388,7 +407,9 @@ export interface Api {
   /** Přeloží vybrané segmenty (id) úlohy čekající na výběr nebo hotové; ostatní nepřeložené se přeskočí. */
   translateSegments(id: string, ids: number[]): Promise<void>;
   jobRegions(id: string): Promise<RegionTranslation[]>;
-  translateRegion(id: string, page: number, crop: RegionTranslation['crop']): Promise<RegionTranslation>;
+  /** `replaces` = původní výřez, který se po úspěchu nahradí (a nevrátí se uložený překlad). */
+  translateRegion(id: string, page: number, crop: RegionTranslation['crop'], replaces?: RegionTranslation['crop']): Promise<RegionTranslation>;
+  deleteRegion(id: string, page: number, crop: RegionTranslation['crop']): Promise<void>;
   jobChat(id: string): Promise<ChatMessage[]>;
   /** Odpověď na dotaz k dokumentu; otázka i odpověď se uloží do historie. */
   askDocument(id: string, question: string, model?: ChatModel): Promise<ChatMessage>;
@@ -399,6 +420,17 @@ export interface Api {
   /** Uloží ručně upravenou kartu (označí ji jako `edited`). */
   saveCard(id: string, card: DocumentCard): Promise<void>;
   deleteJob(id: string): Promise<void>;
+  libraryState(): Promise<LibraryState>;
+  createFolder(name: string): Promise<LibraryFolder>;
+  renameFolder(id: string, name: string): Promise<void>;
+  /** Dokumenty složky přejdou mezi nezařazené, soubory zůstanou. */
+  deleteFolder(id: string): Promise<void>;
+  /** Ruční zařazení; `null` = mezi nezařazené. */
+  moveToFolder(jobIds: string[], folderId: string | null): Promise<void>;
+  /** Vytvoří karty hotovým dokumentům, které je nemají; chyby jednotlivých dokumentů neskončí celé. */
+  makeMissingCards(): Promise<void>;
+  onLibraryChanged(handler: () => void): void;
+  onLibraryProgress(handler: (p: { done: number; total: number }) => void): void;
   openOutput(id: string, kind?: OutputKind): Promise<void>;
   revealOutput(id: string): Promise<void>;
   saveOutputAs(id: string): Promise<void>;

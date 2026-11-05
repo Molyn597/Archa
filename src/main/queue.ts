@@ -16,6 +16,8 @@ export interface QueueEvents {
   update(job: Job): void;
   finished(job: Job): void;
   idle(): void;
+  /** Vznikla karta nebo se změnila knihovna. */
+  library(): void;
 }
 
 // Nové měření se do průměru promítne z 30 %, jedna netypická úloha odhad nerozhodí.
@@ -162,6 +164,7 @@ export class Queue {
     // Běžící úloha si složku po zrušení ještě zapíše; smazat až po doběhnutí.
     while (this.running?.id === id) await new Promise((r) => setTimeout(r, 100));
     await this.store.deleteJob(id);
+    await this.store.updateLibrary((library) => delete library.assign[id]);
   }
 
   private async pump(): Promise<void> {
@@ -226,7 +229,7 @@ export class Queue {
       // Karta dokumentu: selhání nesmí shodit hotový překlad, jen se zapíše poznámka.
       if (job.status === 'done' && settings.autoCard && !abort.signal.aborted && !(await this.store.card(job.id))) {
         try {
-          await makeCard(this.store, job, settings);
+          await makeCard(this.store, job, settings, this.events.library);
         } catch (e) {
           (job.notes ??= []).push(t('card.failed', { error: (e as Error).message || String(e) }));
         }

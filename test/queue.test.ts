@@ -28,7 +28,7 @@ function makeStore() {
 }
 
 function makeEvents() {
-  return { update: vi.fn(), finished: vi.fn(), idle: vi.fn() };
+  return { update: vi.fn(), finished: vi.fn(), idle: vi.fn(), library: vi.fn() };
 }
 
 const makeJob = (id: string, extra: Partial<Job> = {}) =>

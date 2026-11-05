@@ -5,11 +5,14 @@ import { estimateFiles, formatUsd, setCurrency, setCzkRate } from '../shared/est
 import { isValidPageRange } from '../shared/pages';
 import { activeModels, activeRates, isOnline } from '../shared/provider';
 import type { Api, FileInfo, Job, LmStatus, Mode, Models, Provider, Settings } from '../shared/types';
-import { closeDetail, detailJobId, openDetail, setupDetail, updateDetail } from './detail';
+import { openChat, syncChatSettings } from './chat';
+import { closeDetail, detailJobId, openDetail, setupDetail, updateDetail, type Tab } from './detail';
+import { reloadLibrary, renderLibrary, setupLibrary } from './library';
 import {
   applyI18n,
   date,
   duration,
+  chatWarningText,
   h,
   icon,
   ICONS,
@@ -27,7 +30,7 @@ import { updateCard } from './update';
 import { fillHelpDots, renderHelp, scrollToTopic } from './help-view';
 import { openWelcome } from './welcome';
 import type { HelpTopic } from '../shared/help';
-import { renderGlossary, renderSettings, setupGlossary } from './forms';
+import { renderGlossary, renderSettings, setSettingsTab, setupGlossary } from './forms';
 
 declare global {
   interface Window {
@@ -38,7 +41,7 @@ declare global {
 type View = 'home' | 'history' | 'detail' | 'glossary' | 'help' | 'settings';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
-const ROLE_NAMES: Record<keyof Models, MessageKey> = { ocr: 'role.ocr', translate: 'role.translate', polish: 'role.polish' };
+const ROLE_NAMES: Record<keyof Models | 'chat', MessageKey> = { translate: 'role.translate', ocr: 'role.ocr', polish: 'role.polish', chat: 'role.chat' };
 // Stránka článku má 8 odstavců; opravu potřebuje zhruba 15 % z nich.
 const FIXES_PER_PAGE = 8 * 0.15;
 const CONTEXT_SECONDS = 10;
@@ -65,7 +68,7 @@ function show(next: View) {
   if (next !== 'detail') closeDetail();
   if (next === 'glossary') void renderGlossary();
   if (next === 'settings') void renderSettings(onSettingsSaved);
-  if (next === 'history') renderHistory();
+  if (next === 'history') reloadLibrary();
   if (next === 'help') renderHelp(showWelcome);
   document.querySelector('.main')?.scrollTo(0, 0);
   $('detail-scroll').scrollTo(0, 0);
@@ -80,13 +83,7 @@ export function showHelp(topic?: HelpTopic) {
 function showWelcome() {
   openWelcome({
     settings: () => settings,
-    setProvider: async (p) => {
-      settings.provider = p;
-      await window.api.saveSettings(settings);
-      lastStatus = undefined;
-      renderAll();
-      void refreshStatus();
-    },
+    setProvider,
     save: () => window.api.saveSettings(settings),
     openSettings: () => show('settings'),
   });
@@ -100,8 +97,10 @@ async function checkUpdates() {
   bar.hidden = false;
 }
 
-async function openJob(id: string) {
-  if (await openDetail(id)) show('detail');
+async function openJob(id: string, tab?: Tab, withChat = false) {
+  if (!(await openDetail(id, tab))) return;
+  show('detail');
+  if (withChat) openChat();
 }
 
 // ---------- LM Studio ----------
@@ -133,15 +132,25 @@ async function refreshStatus() {
   $('status-row').title = `${$('lm-title').textContent}: ${$('lm-state').textContent}`;
   renderEngine();
   renderCost();
+  const chatKey = remote ? settings.chatModels?.remote : settings.chatModels?.local;
+  const chatModel = chatKey ?? models.polish;
+  const rows: { role: keyof typeof ROLE_NAMES; key: string; missing: boolean; auto?: boolean }[] = [
+    { role: 'translate', key: models.translate, missing: lm.missing.includes('translate') },
+    { role: 'ocr', key: models.ocr, missing: lm.missing.includes('ocr') },
+    { role: 'polish', key: models.polish, missing: lm.missing.includes('polish') },
+    { role: 'chat', key: chatModel, auto: !chatKey, missing: chatKey ? lm.models.length > 0 && !lm.models.some((m) => m.key === chatKey) : lm.missing.includes('polish') },
+  ];
   $('lm-models').replaceChildren(
-    ...(Object.keys(ROLE_NAMES) as (keyof Models)[]).map((role) => {
-      const missing = lm.missing.includes(role);
-      const name = lm.models.find((m) => m.key === models[role])?.name ?? models[role];
+    ...rows.map(({ role, key, missing, auto }) => {
+      const entry = lm.models.find((m) => m.key === key);
+      const name = entry?.name ?? key;
+      const warning = role === 'chat' && entry ? chatWarningText(entry) : undefined;
+      const label = (missing ? t('lm.missing', { name }) : name) + (auto ? ` ${t('lm.auto')}` : '');
       return h(
         'li',
         {},
         h('span', { class: 'role' }, t(ROLE_NAMES[role])),
-        h('span', { class: missing ? 'model missing' : 'model', title: name }, missing ? t('lm.missing', { name }) : name),
+        h('span', { class: missing ? 'model missing' : 'model', title: warning ?? name }, warning ? `⚠ ${label}` : label),
       );
     }),
   );
@@ -153,31 +162,36 @@ const prices = () => Object.fromEntries(catalog.map((m) => [m.key, m.price]));
 // Online se kvalita nevolí: Nejlepší jen přidá jeden dotaz na kontext dokumentu (cena i čas zanedbatelné).
 const jobMode = (): Mode => (isOnline(settings) ? 'quality' : settings.mode);
 
+/** Přepne aktivního poskytovatele (domovská obrazovka i okno stavu v panelu). */
+async function setProvider(p: Provider) {
+  if (settings.provider === p) return;
+  settings.provider = p;
+  await window.api.saveSettings(settings);
+  lastStatus = undefined;
+  syncChatSettings(settings);
+  renderAll();
+  void refreshStatus();
+}
+
+const providerSegments = () =>
+  (['local', 'openrouter'] as Provider[]).map((p) =>
+    h(
+      'button',
+      {
+        class: settings.provider === p ? 'segment active' : 'segment',
+        type: 'button',
+        role: 'radio',
+        'aria-checked': String(settings.provider === p),
+        onclick: () => void setProvider(p),
+      },
+      t(`home.provider.${p}`),
+    ),
+  );
+
 /** Kde a čím se bude překládat; hlášky (chybí klíč, LM Studio) jako text u řádku modelu. */
 function renderEngine() {
   const online = isOnline(settings);
-  $('provider-switch').replaceChildren(
-    ...(['local', 'openrouter'] as Provider[]).map((p) =>
-      h(
-        'button',
-        {
-          class: settings.provider === p ? 'segment active' : 'segment',
-          type: 'button',
-          role: 'radio',
-          'aria-checked': String(settings.provider === p),
-          onclick: async () => {
-            if (settings.provider === p) return;
-            settings.provider = p;
-            await window.api.saveSettings(settings);
-            lastStatus = undefined;
-            renderAll();
-            void refreshStatus();
-          },
-        },
-        t(`home.provider.${p}`),
-      ),
-    ),
-  );
+  for (const id of ['provider-switch', 'lm-switch']) $(id).replaceChildren(...providerSegments());
   $('provider-note').textContent = t(`home.provider.${settings.provider}Desc`);
 
   const models = activeModels(settings);
@@ -321,6 +335,11 @@ function setupStatus() {
     if (open) void refreshStatus();
   });
   pop.addEventListener('click', (e) => e.stopPropagation());
+  $('lm-change').addEventListener('click', () => {
+    setOpen(false);
+    setSettingsTab(settings.provider);
+    show('settings');
+  });
   document.addEventListener('click', () => setOpen(false));
   document.addEventListener('keydown', (e) => e.key === 'Escape' && setOpen(false));
 }
@@ -430,7 +449,10 @@ function setupDrop() {
   const zone = $('dropzone');
   zone.addEventListener('click', async () => addFiles(await window.api.pickFiles()));
   let depth = 0;
+  // Jen soubory z disku; přetahování dokumentů v knihovně nesmí přepnout na úvod.
+  const hasFiles = (e: DragEvent) => Boolean(e.dataTransfer?.types.includes('Files'));
   document.addEventListener('dragenter', (e) => {
+    if (!hasFiles(e)) return;
     e.preventDefault();
     depth++;
     zone.classList.add('over');
@@ -441,6 +463,7 @@ function setupDrop() {
   });
   document.addEventListener('dragover', (e) => e.preventDefault());
   document.addEventListener('drop', (e) => {
+    if (!hasFiles(e)) return;
     e.preventDefault();
     depth = 0;
     zone.classList.remove('over');
@@ -467,27 +490,6 @@ function jobCard(job: Job) {
       h('button', { class: 'btn danger', onclick: () => window.api.cancelJob(job.id) }, icon(ICONS.stop), t('job.cancel')),
     ),
     progressBar(info.fraction),
-  );
-}
-
-function jobRow(job: Job) {
-  const parts = [t(STATUS_TEXT[job.status]), date(job.createdAt), t(MODES[job.mode].title), langPair(job), jobDuration(job)];
-  if (job.status === 'running' || job.status === 'queued') {
-    const info = progressInfo(job);
-    parts.splice(1, 0, info.label);
-  }
-  return h(
-    'button',
-    { class: 'job-row', onclick: () => openJob(job.id) },
-    statusIcon(job),
-    h(
-      'span',
-      {},
-      h('div', { class: 'job-row-name' }, `${job.name}${job.ext}`),
-      h('div', { class: 'job-row-meta' }, parts.filter(Boolean).join(' · ')),
-    ),
-    isOnline(job) ? h('span', { class: 'chip' }, job.models ? `${t('job.online')} · ${modelName(job.models.translate)}` : t('job.online')) : '',
-    job.warnings ? h('span', { class: 'chip warn' }, t('job.warnings', { count: job.warnings })) : job.status === 'error' ? h('span', { class: 'chip err' }, t('status.error')) : '',
   );
 }
 
@@ -521,21 +523,13 @@ function renderHome() {
   badge.textContent = String(active.length);
 }
 
-function renderHistory() {
-  const query = $<HTMLInputElement>('history-search').value.trim().toLowerCase();
-  const list = sorted().filter((j) => !query || j.name.toLowerCase().includes(query));
-  $('history-list').replaceChildren(...list.map(jobRow));
-  $('history-empty').hidden = list.length > 0;
-  // Při prázdném hledání v neprázdné historii se nabídka prvního překladu nezobrazuje.
-  $('history-empty-action').hidden = jobs.size > 0;
-}
-
 const applyTheme = () => (document.documentElement.dataset.theme = settings.theme);
 
 function onSettingsSaved(next: Settings) {
   settings = next;
   setCurrency(settings.currency);
   applyTheme();
+  syncChatSettings(settings);
   renderAll();
   void refreshStatus();
 }
@@ -589,14 +583,18 @@ async function init() {
   setupNavToggle();
   setupStatus();
   setupPagesToggle();
-  setupDetail(() => show(previousView));
+  setupDetail(() => show(previousView), () => show('settings'));
   setupGlossary();
   setupDrop();
   fillLanguages();
   renderAll();
   renderHome();
-  $('history-search').addEventListener('input', renderHistory);
-  $('history-empty-action').addEventListener('click', () => show('home'));
+  setupLibrary({
+    jobs: sorted,
+    open: (id, tab, withChat) => void openJob(id, tab, withChat),
+    modelName,
+    showHome: () => show('home'),
+  });
   fillHelpDots(showHelp);
   const pageRange = $<HTMLInputElement>('page-range');
   pageRange.addEventListener('input', () => {
@@ -619,7 +617,7 @@ async function init() {
     const wasActive = jobs.get(job.id) && isActive(jobs.get(job.id)!);
     jobs.set(job.id, job);
     renderHome();
-    if (view === 'history') renderHistory();
+    if (view === 'history') renderLibrary();
     if (detailJobId() === job.id) void updateDetail(job);
     // Po doběhnutí se zpřesní odhad času v kartách režimů.
     if (wasActive && !isActive(job)) {
@@ -632,7 +630,7 @@ async function init() {
   window.api.onJobRemoved((id) => {
     jobs.delete(id);
     renderHome();
-    if (view === 'history') renderHistory();
+    if (view === 'history') reloadLibrary();
     if (detailJobId() === id) show(previousView === 'detail' ? 'history' : previousView);
   });
   window.api.onOpenJob((id) => void openJob(id));

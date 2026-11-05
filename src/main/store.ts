@@ -1,7 +1,8 @@
 import { mkdir, readFile, readdir, rm, writeFile, rename } from 'node:fs/promises';
 import path from 'node:path';
 import { RECOMMENDED_REMOTE_MODEL } from '../shared/provider';
-import type { ChatMessage, DocumentCard, GlossaryEntry, Job, Rates, RegionTranslation, Segment, Settings } from '../shared/types';
+import { defaultLibrary } from './library';
+import type { ChatMessage, DocumentCard, GlossaryEntry, Job, Library, Rates, RegionTranslation, Segment, Settings } from '../shared/types';
 
 export const DEFAULT_SETTINGS: Settings = {
   uiLang: 'system',
@@ -32,7 +33,7 @@ const mergeRates = (base: Rates, saved?: Partial<Rates>): Rates => {
   return { ocrPerPage, translatePerKChar, fixPerSegment };
 };
 
-/** Úložiště pod userData: settings.json, glossary.json a jobs/<id>/{job.json, segments.json, study.json, chat.json, card.json, vstup, výstup}. */
+/** Úložiště pod userData: settings.json, glossary.json, library.json a jobs/<id>/{job.json, segments.json, study.json, chat.json, card.json, vstup, výstup}. */
 export class Store {
   constructor(readonly root: string) {}
 
@@ -68,6 +69,7 @@ export class Store {
       rates: mergeRates(DEFAULT_SETTINGS.rates, saved.rates),
       remoteRates: mergeRates(DEFAULT_SETTINGS.remoteRates, saved.remoteRates),
       remoteCostFactors: { ...saved.remoteCostFactors },
+      chatModels: saved.chatModels ? { ...saved.chatModels } : undefined,
     };
   }
 
@@ -80,6 +82,28 @@ export class Store {
       path.join(this.root, 'glossary.json'),
       entries.filter((e) => e.source.trim() && e.target.trim()),
     );
+
+  /** Knihovna: složky a zařazení dokumentů (jen v datech aplikace, soubory se nepřesouvají). */
+  async library(): Promise<Library> {
+    const saved = await this.readJson<Partial<Library> | null>(path.join(this.root, 'library.json'), null);
+    return saved?.folders ? { folders: saved.folders, assign: saved.assign ?? {} } : defaultLibrary();
+  }
+
+  saveLibrary = (library: Library) => this.writeJson(path.join(this.root, 'library.json'), library);
+
+  private libraryLock: Promise<unknown> = Promise.resolve();
+
+  /** Načíst, upravit a uložit knihovnu; změny jdou za sebou, ať AI a uživatel nepřepíšou jeden druhého. */
+  updateLibrary<T>(change: (library: Library) => T): Promise<T> {
+    const run = this.libraryLock.then(async () => {
+      const library = await this.library();
+      const result = change(library);
+      await this.saveLibrary(library);
+      return result;
+    });
+    this.libraryLock = run.catch(() => undefined);
+    return run;
+  }
 
   async jobs(): Promise<Job[]> {
     const dir = path.join(this.root, 'jobs');

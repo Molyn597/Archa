@@ -24,7 +24,7 @@ const cs: HelpSection[] = [
           '3. Zkontroluj odhad dole a klikni na Přeložit.',
         ],
       },
-      { p: 'Překlad běží na pozadí, průběh vidíš na úvodní stránce v části Probíhá. Hotové dokumenty najdeš v Nedávných dokumentech pod ním i v Historii; kliknutím je otevřeš, porovnáš s originálem, uložíš nebo se na ně zeptáš v chatu.' },
+      { p: 'Překlad běží na pozadí, průběh vidíš na úvodní stránce v části Probíhá. Hotové dokumenty najdeš v Nedávných dokumentech pod ním i v Knihovně; kliknutím je otevřeš, porovnáš s originálem, uložíš nebo se na ně zeptáš v chatu.' },
       { tip: 'Do fronty můžeš přidat víc souborů najednou, přeloží se postupně.' },
     ],
   },
@@ -71,7 +71,7 @@ const cs: HelpSection[] = [
     id: 'results',
     title: 'Detail dokumentu',
     blocks: [
-      { p: 'Po kliknutí na dokument se otevře jeho detail. Nahoře je pevná lišta: šipka zpět, název, stav a tlačítka Word a Otevřít PDF. V nabídce ⋯ je Uložit jako, Ve složce, Znovu vysázet PDF (vytvoří přeložené PDF znovu bez nového překladu), Přeložit znovu (v jiném režimu), Přeložit další odstavce (když něco zůstalo nepřeloženo) a Smazat z historie.' },
+      { p: 'Po kliknutí na dokument se otevře jeho detail. Nahoře je pevná lišta: šipka zpět, název, stav a tlačítka Word a Otevřít PDF. V nabídce ⋯ je Uložit jako, Ve složce, Znovu vysázet PDF (vytvoří přeložené PDF znovu bez nového překladu), Přeložit znovu (v jiném režimu), Přeložit další odstavce (když něco zůstalo nepřeloženo) a Smazat z knihovny.' },
       { p: 'Pod lištou jsou záložky:' },
       {
         ul: [
@@ -173,7 +173,7 @@ const en: HelpSection[] = [
           '3. Check the estimate at the bottom and click Translate.',
         ],
       },
-      { p: 'Translation runs in the background; progress is shown on the home screen under In progress. Finished documents are in Recent documents below it and in History; click one to open it, compare it with the original, save it or ask about it in the chat.' },
+      { p: 'Translation runs in the background; progress is shown on the home screen under In progress. Finished documents are in Recent documents below it and in the Library; click one to open it, compare it with the original, save it or ask about it in the chat.' },
       { tip: 'You can queue several files at once; they are translated one after another.' },
     ],
   },
@@ -220,7 +220,7 @@ const en: HelpSection[] = [
     id: 'results',
     title: 'Document details',
     blocks: [
-      { p: 'Clicking a document opens its details. At the top is a fixed bar: a back arrow, the name, the status and the Word and Open PDF buttons. The ⋯ menu has Save as, Show in folder, Rebuild PDF (builds the translated PDF again without a new translation), Translate again (in another mode), Translate more paragraphs (when something was left untranslated) and Delete from history.' },
+      { p: 'Clicking a document opens its details. At the top is a fixed bar: a back arrow, the name, the status and the Word and Open PDF buttons. The ⋯ menu has Save as, Show in folder, Rebuild PDF (builds the translated PDF again without a new translation), Translate again (in another mode), Translate more paragraphs (when something was left untranslated) and Delete from library.' },
       { p: 'Below the bar are tabs:' },
       {
         ul: [
