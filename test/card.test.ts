@@ -78,3 +78,32 @@ describe('authors', () => {
     expect(authorsText(authors)).toBe('Novák, Jan\nČSÚ');
   });
 });
+
+describe('parseCard – fakta', () => {
+  const invoice = { ...VALID, type: 'invoice' };
+
+  it('přečte fakta faktury, ořízne a převede data', () => {
+    const facts = { subject: ' Hosting ', amount: '1 200 Kč', issued: '5.3.2024', due: '15. 03. 2024', supplier: '', parties: [' A ', 'A', '', 'B'], notice: '2024-12-31' };
+    expect(parseCard(JSON.stringify({ ...invoice, facts }), 'cs')?.facts).toEqual({
+      subject: 'Hosting',
+      amount: '1 200 Kč',
+      issued: '2024-03-05',
+      due: '2024-03-15',
+      parties: ['A', 'B'],
+      notice: '2024-12-31',
+    });
+  });
+
+  it('jiný tvar data nechá být', () => {
+    expect(parseCard(JSON.stringify({ ...invoice, facts: { due: 'do konce měsíce' } }), 'cs')?.facts).toEqual({ due: 'do konce měsíce' });
+  });
+
+  it('u jiného typu fakta ignoruje', () => {
+    expect(parseCard(JSON.stringify({ ...VALID, facts: { amount: '1 Kč' } }), 'cs')?.facts).toBeUndefined();
+  });
+
+  it('prázdná fakta nenastaví', () => {
+    expect(parseCard(JSON.stringify({ ...invoice, facts: { amount: ' ', parties: [] } }), 'cs')).not.toHaveProperty('facts');
+    expect(parseCard(JSON.stringify({ ...invoice, facts: 'nesmysl' }), 'cs')).not.toHaveProperty('facts');
+  });
+});

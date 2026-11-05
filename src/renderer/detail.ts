@@ -5,8 +5,8 @@ import { languageName } from '../shared/languages';
 import { PDFJS_OPTIONS } from '../shared/pdf';
 import { isOnline } from '../shared/provider';
 import { findRegion, moveCrop, normalizeCrop, resizeCrop, type Handle } from '../shared/regions';
-import { authorsText, BIBLIO_FIELDS, DOC_TYPES, parseAuthors } from '../shared/card';
-import type { Biblio, DocType, DocumentCard, DocumentContext, Job, JobDetail, Mode, RegionTranslation, Segment, Stage } from '../shared/types';
+import { authorsText, BIBLIO_FIELDS, DOC_TYPES, FACT_FIELDS, parseAuthors } from '../shared/card';
+import type { Biblio, DocFacts, DocType, DocumentCard, DocumentContext, Job, JobDetail, Mode, RegionTranslation, Segment, Stage } from '../shared/types';
 import { resetChat, setupChat, showChat } from './chat';
 import { refreshCitation } from './citation-copy';
 import { setupSelectionCite } from './selection-cite';
@@ -725,6 +725,12 @@ function showCite(segment: Segment) {
   void renderBody();
 }
 
+/** Citace z chatu s knihovnou: zvýrazní segment v právě otevřeném dokumentu. */
+export function citeSegment(segmentId: number) {
+  const segment = current?.segments.find((s) => s.id === segmentId);
+  if (segment) showCite(segment);
+}
+
 const regionHint = () => h('p', { class: 'region-hint' }, t('region.hint'));
 const langCode = (lang: string) => (lang === 'auto' ? t('lang.autoShort') : lang.toUpperCase());
 
@@ -819,12 +825,18 @@ function cardSection(job: Job) {
       b.authors.length && line(t('card.authors'), b.authors.map((a) => (a.given ? `${a.family}, ${a.given}` : a.family)).join('; ')),
       ...BIBLIO_FIELDS.filter((k) => k !== 'title' && b[k]).map((k) => line(t(`card.biblio.${k}` as MessageKey), b[k]!)),
     ].filter(Boolean) as HTMLElement[];
+    const f = card.facts ?? {};
+    const docFacts = [
+      ...FACT_FIELDS.filter((k) => f[k]).map((k) => line(t(`card.facts.${k}` as MessageKey), f[k]!)),
+      f.parties?.length && line(t('card.facts.parties'), f.parties.join(', ')),
+    ].filter(Boolean) as HTMLElement[];
     box.replaceChildren(
       head(edit, recreate),
       h('p', { class: 'card-summary' }, card.summary),
       h('div', { class: 'chips' }, h('span', { class: 'chip accent' }, t(`docType.${card.type}` as MessageKey)), ...card.keywords.map((k) => h('span', { class: 'chip' }, k)), card.edited && h('span', { class: 'chip' }, t('card.edited'))),
       ...(card.folder ? [line(t('card.folder'), card.folder)] : []),
       ...(facts.length ? [h('div', { class: 'card-biblio' }, h('h3', {}, t('card.biblio')), ...facts)] : []),
+      ...(docFacts.length ? [h('div', { class: 'card-biblio' }, h('h3', {}, t('card.facts')), ...docFacts)] : []),
     );
   }
 
@@ -846,7 +858,26 @@ function cardSection(job: Job) {
         return [k, input];
       }),
     );
+    const factInputs = Object.fromEntries(
+      FACT_FIELDS.map((k) => {
+        const input = h('input', { type: 'text' });
+        input.value = card.facts?.[k] ?? '';
+        return [k, input];
+      }),
+    );
+    const parties = h('textarea', { rows: '2' });
+    parties.value = (card.facts?.parties ?? []).join('\n');
     const field = (label: string, control: HTMLElement) => h('label', { class: 'field' }, h('span', {}, label), control);
+    // Fakta se nabízejí jen u faktury a smlouvy.
+    const factsBox = h(
+      'div',
+      { class: 'card-facts-edit' },
+      ...FACT_FIELDS.map((k) => field(t(`card.facts.${k}` as MessageKey), factInputs[k])),
+      field(`${t('card.facts.parties')} (${t('card.facts.partiesHint')})`, parties),
+    );
+    const syncFacts = () => (factsBox.hidden = type.value !== 'invoice' && type.value !== 'contract');
+    type.onchange = syncFacts;
+    syncFacts();
     const save = h('button', { class: 'btn primary' }, t('card.save'));
     const cancel = h('button', { class: 'btn' }, t('card.cancel'));
     cancel.onclick = () => show(card);
@@ -854,8 +885,15 @@ function cardSection(job: Job) {
       const text = (v: string) => v.trim() || undefined;
       const biblio: Biblio = { authors: parseAuthors(authors.value), title: inputs.title.value.trim() };
       for (const k of BIBLIO_FIELDS) if (k !== 'title') biblio[k] = text(inputs[k].value);
+      const hasFacts = type.value === 'invoice' || type.value === 'contract';
+      const facts: DocFacts = {};
+      for (const k of FACT_FIELDS) facts[k] = text(factInputs[k].value);
+      facts.parties = [...new Set(parties.value.split('\n').map((p) => p.trim()).filter(Boolean))];
+      if (!facts.parties.length) delete facts.parties;
+      const factsClean = Object.fromEntries(Object.entries(facts).filter(([, v]) => v !== undefined)) as DocFacts;
       const edited: DocumentCard = {
         ...card,
+        facts: hasFacts && Object.keys(factsClean).length ? factsClean : undefined,
         summary: summary.value.trim() || card.summary,
         type: type.value as DocType,
         keywords: [...new Set(keywords.value.split(',').map((k) => k.trim()).filter(Boolean))].slice(0, 10),
@@ -880,6 +918,7 @@ function cardSection(job: Job) {
       field(t('card.folder'), folder),
       field(`${t('card.authors')} (${t('card.authorsHint')})`, authors),
       ...BIBLIO_FIELDS.map((k) => field(t(`card.biblio.${k}` as MessageKey), inputs[k])),
+      factsBox,
       h('div', { class: 'card-actions' }, save, cancel),
     );
   }

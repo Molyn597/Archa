@@ -1,8 +1,11 @@
 import { t } from '../shared/i18n';
 import { isOnline } from '../shared/provider';
-import type { ChatMessage, ChatModel, Job, LmStatus, Provider, Segment, Settings } from '../shared/types';
+import { LIBRARY_CHAT } from '../shared/folders';
+import type { ChatMessage, ChatModel, Job, LibraryRef, LmStatus, Provider, Segment, Settings } from '../shared/types';
 import { citationEnabled, copyWithCitation } from './citation-copy';
 import { chatWarningText, cleanError, h, icon, ICONS } from './dom';
+import { focusDocs, libraryFolders, selectedFolder } from './library';
+import { planView } from './plan-view';
 
 export interface ChatHost {
   segments(): Segment[];
@@ -10,11 +13,29 @@ export interface ChatHost {
   openSettings(): void;
 }
 
+export interface LibraryChatHost {
+  /** Název dokumentu pro titulek citace. */
+  title(jobId: string): string;
+  /** Otevře dokument citace (když už není otevřený) a zvýrazní segment. */
+  cite(ref: LibraryRef): Promise<void>;
+}
+
 const $ = (id: string) => document.getElementById(id)!;
 const SNIPPET = 140;
 const textOf = (s: Segment) => s.edited ?? s.polished ?? s.translation ?? s.source;
 
 let host: ChatHost;
+let libraryHost: LibraryChatHost;
+// Návrhy roztřídění provedené z chatu (podle času zprávy), aby po překreslení zůstaly označené.
+const appliedPlans = new Set<number>();
+/** Rozsah chatu: jeden dokument, nebo celá knihovna (jobId je pak LIBRARY_CHAT). */
+let scope: 'doc' | 'library' = 'doc';
+/** Dokument se právě otevírá z citace: panel zůstane v rozsahu knihovna. */
+let viaCite = false;
+/** Panel byl v knihovně otevřený, když se odešlo z view; po návratu se otevře znovu. */
+let restore = false;
+/** Zaškrtávátko „Jen ve složce“; výchozí zapnuto. */
+let onlyFolder = true;
 let jobId: string | null = null;
 let job: Job | null = null;
 let history: ChatMessage[] = [];
@@ -66,17 +87,21 @@ const panel = () => $('chat-panel');
 const send = () => ($('chat-send') as HTMLButtonElement);
 const input = () => $('chat-input') as HTMLTextAreaElement;
 
+interface Cite {
+  title: string;
+  click(): void;
+}
+
 /** Text odpovědi s citacemi [n] jako klikacími čipy; text modelu jde jen jako text node. */
-function answerText(text: string, byId: Map<number, Segment>) {
+function answerText(text: string, resolve: (n: number) => Cite | undefined) {
   const box = h('div', { class: 'chat-text' });
   // Markdown z modelu: odrážky „* “/„- “ jako tečky, tučné ** bez hvězdiček.
   const plain = text.replace(/^(\s*)[*-]\s+/gm, '$1• ').replace(/\*\*(.+?)\*\*/g, '$1');
   plain.split(/\[(\d+)\]/).forEach((part, i) => {
     if (i % 2 === 0) return void (part && box.append(part));
-    const segment = byId.get(Number(part));
-    if (!segment) return void box.append(`[${part}]`);
-    const title = `${t('chat.source', { n: part, page: segment.page ?? '–' })}: ${textOf(segment).slice(0, SNIPPET)}`;
-    box.append(h('button', { class: 'cite-chip', title, onclick: () => host.cite(segment) }, part));
+    const found = resolve(Number(part));
+    if (!found) return void box.append(`[${part}]`);
+    box.append(h('button', { class: 'cite-chip', title: found.title, onclick: found.click }, part));
   });
   return box;
 }
@@ -101,7 +126,8 @@ function stepsList(steps: Step[], active: boolean) {
 function stepsSummary(m: ChatMessage) {
   if (!m.steps?.length) return null;
   const s = String(Math.max(1, Math.round((m.ms ?? 0) / 1000)));
-  const label = m.whole || m.found === undefined ? t('chat.doneWhole', { s }) : t('chat.doneFound', { n: m.found, s });
+  const label =
+    m.docs !== undefined ? t('libraryChat.done', { count: m.docs, s }) : m.whole || m.found === undefined ? t('chat.doneWhole', { s }) : t('chat.doneFound', { n: m.found, s });
   return h('details', { class: 'chat-done' }, h('summary', {}, label), stepsList(m.steps.map((text) => ({ text })), false));
 }
 
@@ -119,21 +145,44 @@ function runEl() {
   return box;
 }
 
+/** Citace dokumentu: čip ukáže úryvek, klik zvýrazní segment v otevřeném dokumentu. */
+const segmentCite = (byId: Map<number, Segment>) => (n: number): Cite | undefined => {
+  const segment = byId.get(n);
+  return segment && { title: `${t('chat.source', { n, page: segment.page ?? '–' })}: ${textOf(segment).slice(0, SNIPPET)}`, click: () => host.cite(segment) };
+};
+
+/** Citace knihovny: čip s názvem dokumentu a stranou, klik otevře dokument na místě citace. */
+const refCite = (refs: LibraryRef[] = []) => (n: number): Cite | undefined => {
+  const ref = refs.find((r) => r.n === n);
+  if (!ref) return undefined;
+  const name = libraryHost.title(ref.jobId);
+  const click = async () => {
+    viaCite = true;
+    try {
+      await libraryHost.cite(ref);
+    } finally {
+      viaCite = false;
+    }
+  };
+  return { title: ref.page === undefined ? name : t('libraryChat.source', { title: name, page: ref.page }), click };
+};
+
 function messageEl(m: ChatMessage, byId: Map<number, Segment>) {
   if (m.role === 'user') return h('div', { class: 'chat-msg user' }, h('div', { class: 'chat-text' }, m.text));
+  if (scope === 'library') return h('div', { class: 'chat-msg assistant' }, stepsSummary(m), answerText(m.text, refCite(m.refs)), m.plan && planView(m.plan, { title: libraryHost.title, folders: libraryFolders, done: appliedPlans.has(m.at), onDone: () => appliedPlans.add(m.at) }), h('div', { class: 'chat-note' }, m.model ?? ''));
   const pages = (m.sources ?? []).flatMap((id) => byId.get(id)?.page ?? []);
   const copy =
     citationEnabled() && m.sources?.length && job
       ? h('button', { class: 'chat-copy-cite', onclick: () => void copyWithCitation(job!.id, job!, { text: m.text, pdfPages: pages, translated: true }) }, icon(ICONS.copy), t('citation.copy'))
       : null;
-  return h('div', { class: 'chat-msg assistant' }, stepsSummary(m), answerText(m.text, byId), h('div', { class: 'chat-note' }, [m.whole ? t('chat.whole') : t('chat.found'), m.model].filter(Boolean).join(' · ')), copy);
+  return h('div', { class: 'chat-msg assistant' }, stepsSummary(m), answerText(m.text, segmentCite(byId)), h('div', { class: 'chat-note' }, [m.whole ? t('chat.whole') : t('chat.found'), m.model].filter(Boolean).join(' · ')), copy);
 }
 
 function renderMessages() {
   const byId = new Map(host.segments().map((s) => [s.id, s]));
   const list = $('chat-messages');
   list.replaceChildren(
-    h('div', { class: 'chat-intro' }, h('p', {}, t('chat.intro')), h('p', { class: 'muted' }, t(settings && current().provider === 'openrouter' ? 'chat.online' : 'chat.private'))),
+    h('div', { class: 'chat-intro' }, h('p', {}, t(scope === 'library' ? 'libraryChat.intro' : 'chat.intro')), h('p', { class: 'muted' }, t(settings && current().provider === 'openrouter' ? 'chat.online' : 'chat.private'))),
     ...history.map((m) => messageEl(m, byId)),
   );
   if (pending !== null) list.append(h('div', { class: 'chat-msg user' }, h('div', { class: 'chat-text' }, pending)), runEl() ?? h('div', { class: 'chat-wait muted' }, t('chat.thinking')));
@@ -156,7 +205,9 @@ async function ask(question: string) {
   input().value = '';
   renderMessages();
   try {
-    const answer = await window.api.askDocument(id, question, settings ? current() : undefined);
+    const model = settings ? current() : undefined;
+    const folder = onlyFolder ? selectedFolder() : null;
+    const answer = scope === 'library' ? await window.api.askLibrary(question, model, folder?.id, focusDocs()) : await window.api.askDocument(id, question, model);
     if (jobId !== id) return;
     history.push({ role: 'user', text: question, at: Date.now() }, answer);
   } catch (e) {
@@ -233,10 +284,22 @@ function toggleMenu(anchor: HTMLElement) {
   document.addEventListener('mousedown', onDown, true);
 }
 
+/** Zaškrtávátko „Jen ve složce“ jen v knihovně s vybranou složkou; volá se i při změně výběru složky. */
+export function renderFolderOpt() {
+  const box = document.getElementById('chat-folder');
+  if (!box) return;
+  const folder = scope === 'library' ? selectedFolder() : null;
+  const check = h('input', { type: 'checkbox' }) as HTMLInputElement;
+  check.checked = onlyFolder;
+  check.addEventListener('change', () => (onlyFolder = check.checked));
+  box.hidden = !folder;
+  box.replaceChildren(...(folder ? [check, h('span', {}, t('libraryChat.onlyFolder', { name: folder.name }))] : []));
+}
+
 function buildPanel() {
   closeMenu?.();
   const quick = (label: 'chat.summary' | 'chat.keyPoints', prompt: 'chat.summaryPrompt' | 'chat.keyPointsPrompt') => h('button', { class: 'btn', onclick: () => void ask(t(prompt)) }, t(label));
-  const field = h('textarea', { id: 'chat-input', rows: '2', placeholder: t('chat.placeholder') });
+  const field = h('textarea', { id: 'chat-input', rows: '2', placeholder: t(scope === 'library' ? 'libraryChat.placeholder' : 'chat.placeholder') });
   field.addEventListener('keydown', (e) => {
     if (e.key !== 'Enter' || e.shiftKey || e.isComposing) return;
     e.preventDefault();
@@ -246,7 +309,7 @@ function buildPanel() {
     h(
       'div',
       { class: 'chat-head' },
-      h('strong', {}, t('chat.tab')),
+      h('strong', {}, t(scope === 'library' ? 'libraryChat.title' : 'chat.tab')),
       h(
         'button',
         {
@@ -256,7 +319,7 @@ function buildPanel() {
           'aria-label': t('chat.clear'),
           onclick: async () => {
             if (!jobId) return;
-            await window.api.clearChat(jobId);
+            await (scope === 'library' ? window.api.clearLibraryChat() : window.api.clearChat(jobId));
             history = [];
             error = '';
             renderMessages();
@@ -267,7 +330,8 @@ function buildPanel() {
       h('button', { class: 'btn', title: t('chat.hide'), 'aria-label': t('chat.hide'), onclick: () => setOpen(false) }, icon(ICONS.collapse)),
     ),
     h('div', { class: 'chat-messages', id: 'chat-messages' }),
-    h('div', { class: 'chat-quick' }, quick('chat.summary', 'chat.summaryPrompt'), quick('chat.keyPoints', 'chat.keyPointsPrompt')),
+    ...(scope === 'doc' ? [h('div', { class: 'chat-quick' }, quick('chat.summary', 'chat.summaryPrompt'), quick('chat.keyPoints', 'chat.keyPointsPrompt'))] : []),
+    h('label', { class: 'chat-folder', id: 'chat-folder', hidden: true }),
     h(
       'div',
       { class: 'chat-form' },
@@ -292,7 +356,7 @@ async function load() {
   error = '';
   try {
     const [messages, s, local, remote] = await Promise.all([
-      window.api.jobChat(id),
+      scope === 'library' ? window.api.libraryChat() : window.api.jobChat(id),
       window.api.getSettings(),
       window.api.lmStatus('local').catch(() => null),
       window.api.lmStatus('openrouter').catch(() => null),
@@ -316,7 +380,7 @@ function syncRail() {
   const bar = $('chat-bar');
   bar.hidden = jobId === null;
   bar.classList.toggle('active', open);
-  bar.title = t(open ? 'chat.hide' : 'chat.show');
+  bar.title = t(open ? 'chat.hide' : scope === 'library' ? 'libraryChat.show' : 'chat.show');
   bar.setAttribute('aria-label', bar.title);
 }
 
@@ -326,17 +390,40 @@ function setOpen(value: boolean) {
   syncRail();
   if (open) {
     buildPanel();
+    renderFolderOpt();
     void load();
   }
 }
 
 /** Panel se otevře až na žádost, historie se načte pro aktuální úlohu. */
 export function showChat(j: Job) {
-  if (jobId === j.id) return;
+  // Dokument otevřený z citace: panel zůstane v rozsahu knihovna.
+  if (scope === 'library' && viaCite) return;
+  if (scope === 'doc' && jobId === j.id) return;
+  const fromLibrary = scope === 'library';
+  scope = 'doc';
   jobId = j.id;
   job = j;
+  if (fromLibrary && open) setOpen(false);
   syncRail();
   void load();
+}
+
+/** Chat s celou knihovnou ve view Knihovna; panel se otevře až na žádost (nebo znovu, byl-li otevřený). */
+export function showLibraryChat() {
+  scope = 'library';
+  jobId = LIBRARY_CHAT;
+  job = null;
+  syncRail();
+  if (restore) {
+    restore = false;
+    return setOpen(true);
+  }
+  if (open) {
+    buildPanel();
+    renderFolderOpt();
+    void load();
+  }
 }
 
 /** Změna globálního poskytovatele nebo modelů v Nastavení se hned projeví v chipu i menu chatu. */
@@ -352,6 +439,7 @@ export const openChat = () => setOpen(true);
 
 /** Mimo detail úlohy se panel zavře. */
 export function resetChat() {
+  if (open) restore = scope === 'library';
   jobId = null;
   if (open) setOpen(false);
   syncRail();
@@ -396,6 +484,10 @@ function setupResize() {
     window.addEventListener('mousemove', move);
     window.addEventListener('mouseup', up);
   });
+}
+
+export function setupLibraryChat(chatHost: LibraryChatHost) {
+  libraryHost = chatHost;
 }
 
 export function setupChat(chatHost: ChatHost) {

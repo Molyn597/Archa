@@ -15,13 +15,16 @@ import {
   type MenuItemConstructorOptions,
 } from 'electron';
 import { resolveLang, setLang, t, type MessageKey } from '../shared/i18n';
+import { LIBRARY_CHAT } from '../shared/folders';
 import { languageName } from '../shared/languages';
 import { findRegion, normalizeCrop } from '../shared/regions';
-import type { ChatModel, DocumentCard, GlossaryEntry, Job, Library, LibraryFolder, JobOptions, Mode, OutputKind, Provider, RegionTranslation, Settings, Stage } from '../shared/types';
+import type { ChatModel, DocumentCard, GlossaryEntry, Job, Library, LibraryFolder, JobOptions, Mode, OrganizePlan, OutputKind, Placement, Provider, RegionTranslation, Settings, Stage } from '../shared/types';
 import { isOnline } from '../shared/provider';
 import { makeCard } from './make-card';
-import { moveDocs, removeFolder } from './library';
+import { answerQuestion, applyPlan, moveDocs, moveFolder, removeFolder, undoPlacement } from './library';
+import { organizeFolder } from './organize';
 import { askDocument } from './chat';
+import { askLibrary } from './library-chat';
 import { fileInfo } from './fileinfo';
 import { usdCzk } from './fx';
 import { clearKey, readKey, saveKey } from './keystore';
@@ -59,6 +62,11 @@ let quitting = false;
 const active = new Map<string, Job>();
 
 const send = (channel: string, ...args: unknown[]) => win?.webContents.send(channel, ...args);
+/** Knihovna se změnila; když AI přitom založila složky, renderer nabídne Vrátit. */
+const libraryChanged = (placed?: Placement) => {
+  send('library-changed');
+  if (placed) send('library-placed', placed);
+};
 
 const queue = new Queue(store, {
   update(job) {
@@ -88,7 +96,7 @@ const queue = new Queue(store, {
     n.show();
   },
   idle: () => updateProgressUi(),
-  library: () => send('library-changed'),
+  library: libraryChanged,
 });
 
 /** Celkový průběh z uplynulého času a odhadu zbytku; průběh fáze by u každé fáze začínal od nuly. */
@@ -304,11 +312,28 @@ function registerIpc() {
     return answer;
   });
   ipcMain.handle('job-chat-clear', (_e, id: string) => store.saveChat(id, []));
+  ipcMain.handle('library-answer', (_e, jobId: string, path: string | null) => editLibrary((library) => answerQuestion(library, jobId, path)));
+  ipcMain.handle('library-undo', (_e, placement: Placement) => editLibrary((library) => undoPlacement(library, placement)));
+  ipcMain.handle('library-organize', async (_e, folderId: string | null, model?: ChatModel) =>
+    queue.exclusive(async () => organizeFolder(store, await store.settings(), folderId, model)),
+  );
+  ipcMain.handle('library-apply', (_e, plan: OrganizePlan) => editLibrary((library) => applyPlan(library, plan)));
+  ipcMain.handle('library-chat', () => store.libraryChat());
+  ipcMain.handle('library-chat-ask', async (_e, question: string, model?: ChatModel, folder?: string, focus?: string[]) => {
+    if (queue.busy) send('chat-progress', { jobId: LIBRARY_CHAT, step: t('chat.stepQueue') });
+    return queue.exclusive(async () =>
+      askLibrary(store, await store.settings(), question, model, folder, focus, {
+        step: (step, tags) => send('chat-progress', { jobId: LIBRARY_CHAT, step, tags }),
+        delta: (d) => send('chat-delta', { jobId: LIBRARY_CHAT, ...d }),
+      }),
+    );
+  });
+  ipcMain.handle('library-chat-clear', () => store.saveLibraryChat([]));
   ipcMain.handle('job-card', (_e, id: string) => store.card(id));
   ipcMain.handle('job-card-make', async (_e, id: string) => {
     const job = await store.job(id);
     if (!job) throw new Error(t('study.noJob'));
-    const card = await queue.exclusive(async () => makeCard(store, job, await store.settings(), () => send('library-changed')));
+    const card = await queue.exclusive(async () => makeCard(store, job, await store.settings(), libraryChanged));
     send('job-update', job);
     return card;
   });
@@ -327,11 +352,17 @@ function registerIpc() {
     send('library-changed');
     return result;
   };
-  ipcMain.handle('library-folder-create', (_e, name: string): Promise<LibraryFolder> =>
+  ipcMain.handle('library-folder-create', (_e, name: string, parent?: string): Promise<LibraryFolder> =>
     editLibrary((library) => {
-      const folder = { id: randomUUID(), name: name.trim(), createdAt: Date.now() };
+      const folder: LibraryFolder = { id: randomUUID(), name: name.trim(), createdAt: Date.now() };
+      if (parent && library.folders.some((f) => f.id === parent)) folder.parent = parent;
       library.folders.push(folder);
       return folder;
+    }),
+  );
+  ipcMain.handle('library-folder-move', (_e, id: string, parent: string | null) =>
+    editLibrary((library) => {
+      if (!moveFolder(library, id, parent)) throw new Error(t('library.moveInvalid'));
     }),
   );
   ipcMain.handle('library-folder-rename', (_e, id: string, name: string) =>
@@ -348,13 +379,29 @@ function registerIpc() {
     send('library-progress', { done: 0, total: todo.length });
     for (const [i, job] of todo.entries()) {
       // Chyba jednoho dokumentu (prázdný text, model neodpověděl) ostatní nezastaví.
-      await queue.exclusive(async () => makeCard(store, job, await store.settings(), () => send('library-changed'))).catch(() => undefined);
+      await queue.exclusive(async () => makeCard(store, job, await store.settings(), libraryChanged)).catch(() => undefined);
+      send('library-progress', { done: i + 1, total: todo.length });
+    }
+    send('library-changed');
+  });
+  ipcMain.handle('library-fill-facts', async () => {
+    const todo: Job[] = [];
+    for (const job of await store.jobs()) {
+      const card = job.status === 'done' ? await store.card(job.id) : undefined;
+      if (card && (card.type === 'invoice' || card.type === 'contract') && !card.edited && !card.facts) todo.push(job);
+    }
+    send('library-progress', { done: 0, total: todo.length });
+    for (const [i, job] of todo.entries()) {
+      const card = await queue.exclusive(async () => makeCard(store, job, await store.settings(), libraryChanged)).catch(() => undefined);
+      // Model nic nenašel: prázdná fakta = už zkoušeno, banner je znovu nenabídne.
+      if (card && !card.facts) await store.saveCard(job.id, { ...card, facts: {} });
       send('library-progress', { done: i + 1, total: todo.length });
     }
     send('library-changed');
   });
   ipcMain.handle('job-delete', async (_e, id: string) => {
     await queue.remove(id);
+    await store.updateLibrary((library) => delete library.assign[id]);
     send('job-removed', id);
   });
   ipcMain.handle('job-open', async (_e, id: string, kind?: OutputKind) => {

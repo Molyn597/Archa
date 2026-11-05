@@ -4,7 +4,7 @@ import path from 'node:path';
 import { t } from '../shared/i18n';
 import { calibrate, costKey } from '../shared/cost';
 import { activeModels, activeRates, isOnline } from '../shared/provider';
-import type { Job, JobOptions, Mode, Rates } from '../shared/types';
+import type { Job, JobOptions, Mode, Placement, Rates } from '../shared/types';
 import { makeCard } from './make-card';
 import { unloadAll } from './lmstudio';
 import { runJob, type Measured } from './pipeline';
@@ -16,8 +16,8 @@ export interface QueueEvents {
   update(job: Job): void;
   finished(job: Job): void;
   idle(): void;
-  /** Vznikla karta nebo se změnila knihovna. */
-  library(): void;
+  /** Vznikla karta nebo se změnila knihovna; `placed` = AI založila složky. */
+  library(placed?: Placement): void;
 }
 
 // Nové měření se do průměru promítne z 30 %, jedna netypická úloha odhad nerozhodí.

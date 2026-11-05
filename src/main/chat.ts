@@ -80,7 +80,7 @@ export async function askDocument(store: Store, job: Job, base: Settings, questi
 }
 
 /** Streamovaná odpověď; selže-li stream dřív než první token, spadne se na obyčejný dotaz. */
-async function answer(llm: Llm, messages: Parameters<typeof ask>[2], hooks?: ChatHooks) {
+export async function answer(llm: Llm, messages: Parameters<typeof ask>[2], hooks?: ChatHooks) {
   if (!hooks) return ask(llm, 'polish', messages, ANSWER_TOKENS);
   let pending: { content?: string; reasoning?: string } = {};
   let timer: NodeJS.Timeout | undefined;

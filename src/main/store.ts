@@ -33,7 +33,7 @@ const mergeRates = (base: Rates, saved?: Partial<Rates>): Rates => {
   return { ocrPerPage, translatePerKChar, fixPerSegment };
 };
 
-/** Úložiště pod userData: settings.json, glossary.json, library.json a jobs/<id>/{job.json, segments.json, study.json, chat.json, card.json, vstup, výstup}. */
+/** Úložiště pod userData: settings.json, glossary.json, library.json, library-chat.json a jobs/<id>/{job.json, segments.json, study.json, chat.json, card.json, vstup, výstup}. */
 export class Store {
   constructor(readonly root: string) {}
 
@@ -86,7 +86,7 @@ export class Store {
   /** Knihovna: složky a zařazení dokumentů (jen v datech aplikace, soubory se nepřesouvají). */
   async library(): Promise<Library> {
     const saved = await this.readJson<Partial<Library> | null>(path.join(this.root, 'library.json'), null);
-    return saved?.folders ? { folders: saved.folders, assign: saved.assign ?? {} } : defaultLibrary();
+    return saved?.folders ? { folders: saved.folders, assign: saved.assign ?? {}, ...(saved.questions?.length && { questions: saved.questions }) } : defaultLibrary();
   }
 
   saveLibrary = (library: Library) => this.writeJson(path.join(this.root, 'library.json'), library);
@@ -120,6 +120,8 @@ export class Store {
   saveRegions = (id: string, regions: RegionTranslation[]) => this.writeJson(path.join(this.jobDir(id), 'study.json'), { regions });
   chat = (id: string) => this.readJson<ChatMessage[]>(path.join(this.jobDir(id), 'chat.json'), []);
   saveChat = (id: string, messages: ChatMessage[]) => this.writeJson(path.join(this.jobDir(id), 'chat.json'), messages);
+  libraryChat = () => this.readJson<ChatMessage[]>(path.join(this.root, 'library-chat.json'), []);
+  saveLibraryChat = (messages: ChatMessage[]) => this.writeJson(path.join(this.root, 'library-chat.json'), messages);
   card = (id: string) => this.readJson<DocumentCard | null>(path.join(this.jobDir(id), 'card.json'), null);
   saveCard = (id: string, card: DocumentCard) => this.writeJson(path.join(this.jobDir(id), 'card.json'), card);
   inputPath = (job: Job) => path.join(this.jobDir(job.id), `input${job.ext}`);

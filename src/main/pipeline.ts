@@ -402,7 +402,7 @@ async function extractPdf(ctx: JobContext, file: string, eta: Eta): Promise<Segm
     const ocrPages = layouts.filter((l) => !layerFirst || l.scanned).map((l) => l.page);
     // Digitální PDF se pozná už z textové vrstvy, dřív než se spustí OCR.
     const layerText = layouts.map((l) => blocksText(l.blocks)).join('\n');
-    if (job.sourceLang === 'auto' && layerText.length > 500) rejectSameLanguage(job, detectLanguage(layerText));
+    if (job.sourceLang === 'auto' && layerText.length > 500) detectedLanguage(job, detectLanguage(layerText));
     eta.setPlan({ ocrPages: ocrPages.length, chars: layouts.reduce((n, l) => n + blocksText(l.blocks).length, 0) });
     ctx.ocrCount = ocrPages.length;
     if (ocrPages.length) await loadModel(ctx, 'ocr');
@@ -754,9 +754,11 @@ function detectLanguage(text: string) {
   return isSupported(code) ? code : 'en';
 }
 
-// Rozpoznaný jazyk = cílový: nejspíš vybraný už přeložený soubor, překlad by jen zabral čas.
-function rejectSameLanguage(job: Job, detected: string) {
-  if (detected === job.targetLang) throw new Error(t('pipeline.alreadyTarget', { lang: languageName(detected) }));
+// Rozpoznaný jazyk = cílový (česká faktura, už přeložený soubor): nepřekládá se, dokument se jen uloží do knihovny
+// (text, karta, zařazení).
+function detectedLanguage(job: Job, detected: string) {
+  job.sourceLang = detected;
+  if (detected === job.targetLang) addJobNote(job, t('pipeline.alreadyTarget', { lang: languageName(detected) }));
 }
 
 export async function runJob(ctx: JobContext): Promise<Measured> {
@@ -781,8 +783,7 @@ export async function runJob(ctx: JobContext): Promise<Measured> {
     if (ctx.ocrCount) measured.ocrPerPage = (Date.now() - tick) / 1000 / ctx.ocrCount;
     job.chars = segments.reduce((n, s) => n + s.source.length, 0);
     if (job.sourceLang === 'auto') {
-      job.sourceLang = detectLanguage(segments.map((s) => s.source).join('\n'));
-      rejectSameLanguage(job, job.sourceLang);
+      detectedLanguage(job, detectLanguage(segments.map((s) => s.source).join('\n')));
     }
     if (job.pickParagraphs) {
       await store.saveSegments(job.id, segments);
@@ -837,7 +838,8 @@ export async function runJob(ctx: JobContext): Promise<Measured> {
   job.output = outputName(job);
   await writeFile(path.join(dir, job.output), await buildDocx(job.name, segments, await loadFigures(dir, segments)));
   await writeFile(path.join(dir, job.output.replace(/\.docx$/, '.md')), segmentsToMarkdown(segments));
-  if (job.ext.toLowerCase() === '.pdf' && settings.layoutPdf && ctx.pages) await writeLayoutPdf(ctx, segments, ctx.pages);
+  // Bez překladu by „přeložené“ PDF bylo jen kopií originálu.
+  if (translating() && job.ext.toLowerCase() === '.pdf' && settings.layoutPdf && ctx.pages) await writeLayoutPdf(ctx, segments, ctx.pages);
   job.warnings = segments.filter((s) => s.warning).length;
   await store.saveSegments(job.id, segments);
   return measured;

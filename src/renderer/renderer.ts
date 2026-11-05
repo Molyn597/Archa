@@ -5,8 +5,8 @@ import { estimateFiles, formatUsd, setCurrency, setCzkRate } from '../shared/est
 import { isValidPageRange } from '../shared/pages';
 import { activeModels, activeRates, isOnline } from '../shared/provider';
 import type { Api, FileInfo, Job, LmStatus, Mode, Models, Provider, Settings } from '../shared/types';
-import { openChat, syncChatSettings } from './chat';
-import { closeDetail, detailJobId, openDetail, setupDetail, updateDetail, type Tab } from './detail';
+import { openChat, renderFolderOpt, setupLibraryChat, showLibraryChat, syncChatSettings } from './chat';
+import { citeSegment, closeDetail, detailJobId, openDetail, setupDetail, updateDetail, type Tab } from './detail';
 import { reloadLibrary, renderLibrary, setupLibrary } from './library';
 import {
   applyI18n,
@@ -68,7 +68,10 @@ function show(next: View) {
   if (next !== 'detail') closeDetail();
   if (next === 'glossary') void renderGlossary();
   if (next === 'settings') void renderSettings(onSettingsSaved);
-  if (next === 'history') reloadLibrary();
+  if (next === 'history') {
+    reloadLibrary();
+    showLibraryChat();
+  }
   if (next === 'help') renderHelp(showWelcome);
   document.querySelector('.main')?.scrollTo(0, 0);
   $('detail-scroll').scrollTo(0, 0);
@@ -594,6 +597,14 @@ async function init() {
     open: (id, tab, withChat) => void openJob(id, tab, withChat),
     modelName,
     showHome: () => show('home'),
+    folderChanged: renderFolderOpt,
+  });
+  setupLibraryChat({
+    title: (id) => jobs.get(id)?.name ?? '',
+    cite: async (ref) => {
+      if (detailJobId() !== ref.jobId) await openJob(ref.jobId);
+      if (detailJobId() === ref.jobId) citeSegment(ref.segment);
+    },
   });
   fillHelpDots(showHelp);
   const pageRange = $<HTMLInputElement>('page-range');

@@ -168,3 +168,14 @@ export function toast(text: string, error = false) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => (el.hidden = true), error ? 7000 : 3500);
 }
+
+/** Oznámení s tlačítkem (např. Vrátit); zůstane déle, aby se akce stihla. */
+export function toastAction(text: string, label: string, onClick: () => void) {
+  const el = document.getElementById('toast')!;
+  const button = h('button', { class: 'btn toast-action', type: 'button', onclick: () => ((el.hidden = true), onClick()) }, label);
+  el.replaceChildren(text, button);
+  el.className = 'toast';
+  el.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => (el.hidden = true), 10000);
+}

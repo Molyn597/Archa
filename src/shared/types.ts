@@ -61,14 +61,39 @@ export interface DocumentCard {
   type: DocType;
   /** Nejvýš 10 klíčových slov v cílovém jazyce. */
   keywords: string[];
-  /** Návrh složky knihovny (název), AI ho jen navrhuje. */
+  /** Návrh složky knihovny jako cesta „Studium / Články / Management“; chybějící úrovně může AI založit. */
   folder?: string;
+  /** AI si návrhem složky není jistá (false) – zeptá se uživatele; chybí = jistá. */
+  folderSure?: boolean;
+  /** Další možné složky (cesty), když si AI není jistá. */
+  folderOptions?: string[];
   biblio: Biblio;
   /** Jazyk shrnutí a klíčových slov. */
   lang: string;
   createdAt: number;
   /** Uživatel kartu ručně upravil – automaticky se už nepřepisuje. */
   edited?: boolean;
+  /** Údaje z faktury nebo smlouvy pro přesné odpovědi chatu s knihovnou. */
+  facts?: DocFacts;
+}
+/** Strukturované údaje faktury / smlouvy; jen to, co v dokumentu doslova stojí. Data jako RRRR-MM-DD. */
+export interface DocFacts {
+  /** Za co (předmět faktury / smlouvy), např. „nájem bytu“. */
+  subject?: string;
+  /** Dodavatel / vystavitel faktury. */
+  supplier?: string;
+  /** Odběratel / příjemce faktury. */
+  customer?: string;
+  /** Částka i s měnou, např. „12 500 Kč“. */
+  amount?: string;
+  issued?: string;
+  due?: string;
+  /** Zúčtovací období nebo doba trvání smlouvy. */
+  period?: string;
+  /** Smluvní strany. */
+  parties?: string[];
+  /** Výpovědní lhůta. */
+  notice?: string;
 }
 
 export interface LibraryFolder {
@@ -77,11 +102,37 @@ export interface LibraryFolder {
   /** Vlastní název; bez hodnoty u výchozí složky = přeložený název z i18n. */
   name?: string;
   createdAt: number;
+  /** F5: zamčená (šifrovaná) složka; chat s knihovnou ji ani její podsložky neprohledává. */
+  locked?: boolean;
+  /** Nadřazená složka; bez hodnoty = nejvyšší úroveň. */
+  parent?: string;
 }
 export interface Library {
   folders: LibraryFolder[];
   /** Zařazení dokumentu: id složky; `manual` = uživatel ho přesunul ručně a AI ho už nepřesune. */
   assign: Record<string, { folder: string; manual?: boolean }>;
+  /** Dokumenty, u kterých se AI ptá, kam je zařadit. */
+  questions?: FolderQuestion[];
+}
+/** Dotaz, kam zařadit dokument; možnosti jsou cesty složek (i dosud neexistujících). */
+export interface FolderQuestion {
+  jobId: string;
+  options: string[];
+  at: number;
+}
+/** Zařazení, při kterém AI sama založila složky; jde vrátit. */
+export interface Placement {
+  jobId: string;
+  path: string;
+  /** Založené složky od nejvyšší úrovně. */
+  created: string[];
+  /** Složka dokumentu před zařazením (bez = nezařazeno). */
+  previous?: string;
+}
+/** Návrh roztřídění: cesty složek s dokumenty a dotazy u nejistých dokumentů. */
+export interface OrganizePlan {
+  folders: { path: string; jobIds: string[] }[];
+  questions: FolderQuestion[];
 }
 export interface LibraryState {
   library: Library;
@@ -136,6 +187,21 @@ export interface ChatMessage {
   /** Zobrazovaný název modelu, který odpověděl. */
   model?: string;
   at: number;
+  /** Chat s knihovnou: citace [n] → dokument a segment (jen citované). */
+  refs?: LibraryRef[];
+  /** Chat s knihovnou: počet dokumentů, ve kterých se hledalo. */
+  docs?: number;
+  /** Chat s knihovnou: návrh roztřídění k potvrzení (příkaz místo otázky). */
+  plan?: OrganizePlan;
+}
+
+/** Odkaz citace chatu s knihovnou. */
+export interface LibraryRef {
+  n: number;
+  jobId: string;
+  /** Segment, na který se dokument otevře. */
+  segment: number;
+  page?: number;
 }
 
 /** Průběh odpovědi chatu (main → renderer). */
@@ -413,6 +479,13 @@ export interface Api {
   jobChat(id: string): Promise<ChatMessage[]>;
   /** Odpověď na dotaz k dokumentu; otázka i odpověď se uloží do historie. */
   askDocument(id: string, question: string, model?: ChatModel): Promise<ChatMessage>;
+  libraryChat(): Promise<ChatMessage[]>;
+  /**
+   * Dotaz na celou knihovnu (nebo jen složku `folder`); `focus` = dokumenty, na které se uživatel v Knihovně dívá
+   * („toto“). Průběh chodí jako chat-progress s jobId LIBRARY_CHAT (shared/folders).
+   */
+  askLibrary(question: string, model?: ChatModel, folder?: string, focus?: string[]): Promise<ChatMessage>;
+  clearLibraryChat(): Promise<void>;
   clearChat(id: string): Promise<void>;
   getCard(id: string): Promise<DocumentCard | null>;
   /** Vytvoří (nebo znovu vytvoří) kartu dokumentu pomocí modelu. */
@@ -421,7 +494,20 @@ export interface Api {
   saveCard(id: string, card: DocumentCard): Promise<void>;
   deleteJob(id: string): Promise<void>;
   libraryState(): Promise<LibraryState>;
-  createFolder(name: string): Promise<LibraryFolder>;
+  /** Nová složka, s `parent` jako podsložka. */
+  createFolder(name: string, parent?: string): Promise<LibraryFolder>;
+  /** Přesune složku pod jinou (`null` = nejvyšší úroveň); do vlastní podsložky nejde. */
+  moveFolder(id: string, parent: string | null): Promise<void>;
+  /** Odpověď na dotaz, kam dokument patří; `null` = nechat, jak je. Vybraná cesta se případně založí. */
+  answerFolder(jobId: string, path: string | null): Promise<void>;
+  /** Vrátí zařazení, při kterém AI založila složky (prázdné založené složky smaže). */
+  undoPlacement(placement: Placement): Promise<void>;
+  /** Návrh podsložek a zařazení pro složku (`null` = celá knihovna); nic nemění. */
+  organizeFolder(folderId: string | null, model?: ChatModel): Promise<OrganizePlan>;
+  /** Provede potvrzený návrh: založí složky a zařadí dokumenty (jako ruční zařazení). */
+  applyPlan(plan: OrganizePlan): Promise<void>;
+  /** AI zařadila dokument a založila přitom složky (nabídnout Vrátit). */
+  onLibraryPlaced(handler: (p: Placement) => void): void;
   renameFolder(id: string, name: string): Promise<void>;
   /** Dokumenty složky přejdou mezi nezařazené, soubory zůstanou. */
   deleteFolder(id: string): Promise<void>;
@@ -429,6 +515,8 @@ export interface Api {
   moveToFolder(jobIds: string[], folderId: string | null): Promise<void>;
   /** Vytvoří karty hotovým dokumentům, které je nemají; chyby jednotlivých dokumentů neskončí celé. */
   makeMissingCards(): Promise<void>;
+  /** Znovu vytvoří karty faktur a smluv, které nejsou upravené ručně a nemají fakta. */
+  fillFacts(): Promise<void>;
   onLibraryChanged(handler: () => void): void;
   onLibraryProgress(handler: (p: { done: number; total: number }) => void): void;
   openOutput(id: string, kind?: OutputKind): Promise<void>;

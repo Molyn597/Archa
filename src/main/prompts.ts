@@ -114,15 +114,23 @@ export function cardPrompt(sample: string, target: string, folders: string[]) {
   const lang = englishName(target);
   return (
     'Read the beginning of the document below and describe it as JSON only, without any other text:\n' +
-    '{"summary": "...", "type": "...", "keywords": ["..."], "folder": "...", ' +
+    '{"summary": "...", "type": "...", "keywords": ["..."], "folder": "...", "folderSure": true, "folderOptions": [], ' +
     '"biblio": {"authors": [{"family": "...", "given": "..."}], "title": "...", "year": "...", "container": "...", ' +
-    '"publisher": "...", "place": "...", "edition": "...", "volume": "...", "issue": "...", "pages": "...", "doi": "...", "url": "..."}}\n' +
+    '"publisher": "...", "place": "...", "edition": "...", "volume": "...", "issue": "...", "pages": "...", "doi": "...", "url": "..."}, ' +
+    '"facts": {"subject": "...", "supplier": "...", "customer": "...", "amount": "...", "issued": "...", "due": "...", "period": "...", "parties": ["..."], "notice": "..."}}\n' +
     `Write summary (3–5 sentences) and keywords (at most 10) in ${lang}. ` +
     'type must be exactly one of: article, book, chapter, thesis, report, contract, invoice, manual, letter, law, web, other. ' +
-    `folder is the best fitting name from this list: ${folders.join(', ')}; use "" when none fits. ` +
+    `folder is the library folder for the document, written as a path from this folder tree: ${folders.join('; ')}. ` +
+    'Prefer an existing folder. When the document clearly belongs to a narrower topic that has no folder yet, propose a new subfolder ' +
+    `under the best fitting existing folder (at most two new levels, e.g. "Studium / Články / Management"), with short names in ${lang}. ` +
+    'Choose the most specific folder: never a folder that has subfolders – then pick one of its subfolders or propose a new one under it. ' +
+    'Use "" only when nothing fits. folderSure is true when you are confident about folder, false when the document could just as well belong elsewhere; ' +
+    'then folderOptions lists 1–2 other plausible folder paths, otherwise []. ' +
     'biblio contains only what is literally stated in the document (title page, header, citation line, DOI); never invent anything and use "" when unknown. ' +
     'Write authors as family and given name; an organisation goes into family with an empty given. ' +
-    'container is the journal, proceedings or book the document was published in; pages is the page range in that container.' +
+    'container is the journal, proceedings or book the document was published in; pages is the page range in that container. ' +
+    'Fill facts only when type is invoice or contract, otherwise use {}; write only what is literally stated in the document, never invent anything, use "" when unknown. ' +
+    `Write dates as YYYY-MM-DD, amount including its currency, subject briefly in ${lang}.` +
     `\n\nDOCUMENT:\n${sample}`
   );
 }
@@ -142,3 +150,61 @@ export const DOCUMENT_CHAT_SYSTEM =
   'Cite only numbers that appear below.\n' +
   '- Answer in the language of the question, concisely and in your own words; quote only short phrases.\n' +
   '- For a summary, cover the main points in the order of the document.\n\nPassages:\n';
+
+/**
+ * Chat s knihovnou, krok 1: z katalogu karet vybrat dokumenty, navrhnout hledací slova,
+ * u příliš vágního dotazu doplňující otázku.
+ */
+export const libraryRoutePrompt = (question: string, catalog: string, langs: string[], previous?: string, tree: string[] = [], focus: number[] = []) =>
+  'A user searches their personal library of documents (invoices, contracts, articles, letters …).\n' +
+  (previous ? `Their previous question was: ${previous}\n` : '') +
+  `Question: ${question}\n\n` +
+  'Catalog of the library, one document per line: [id] file name | folder | type | year | title | summary | keywords | facts.\n' +
+  `${catalog}\n\n` +
+  (tree.length ? `Folder tree: ${tree.join('; ')}\n\n` : '') +
+  (focus.length ? `The user is now looking at documents ${focus.map((n) => `[${n}]`).join(', ')}; "this", "it" or "these" mean them unless the question names other documents.\n\n` : '') +
+  'Answer with JSON only, without any other text:\n' +
+  '{"action": "search", "scope": "", "docs": [1, 5], "terms": ["..."], "clarify": ""}\n' +
+  'action: "organize" when the user wants documents sorted, organised, filed or moved into folders or subfolders, ' +
+  'or asks where a document belongs or should be moved (e.g. "kam bys to zařadil", "where would you put this"); otherwise "search". ' +
+  'For "organize" about particular documents (also "this", "it" from the previous question), list them in docs. ' +
+  'scope: for "organize" of a whole folder, its path from the folder tree; "" otherwise.\n' +
+  'docs: ids of documents most likely to contain the answer, best first, at most 8; [] when none fits. ' +
+  'Prefer documents whose type, facts, dates and summary match the question.\n' +
+  `terms: 10–20 search keywords and short phrases that passages answering the question would contain, in ${langs.map(englishName).join(' and ')}, including synonyms.\n` +
+  'clarify: only when the question is too vague to search (e.g. no subject at all), a short question in the language of the user asking what they mean; otherwise "".';
+
+export const LIBRARY_CHAT_SYSTEM =
+  "You answer questions about the user's document library using only the numbered passages below (p. = page). " +
+  'Passages are grouped by document; a passage starting with "## Document:" names the document and may list facts from its card. Rules:\n' +
+  '- Use only information from the passages, never outside knowledge. If they do not contain the answer, say so plainly in one sentence ' +
+  'and suggest how to make the question more specific (time period, name, type of document). If you are not sure, say what is uncertain.\n' +
+  '- After each sentence based on a passage, cite it by its number in square brackets, e.g. [12]; several as [12][15]. Cite only numbers that appear below.\n' +
+  '- Name the document(s) the answer comes from.\n' +
+  '- Answer in the language of the question, concisely and in your own words; quote only short phrases.\n\nPassages:\n';
+
+/** Návrh roztřídění dokumentů do (pod)složek; `scope` = cesta složky, jinak celá knihovna. */
+export const organizePrompt = (tree: string[], scope: string, catalog: string, lang: string, instruction?: string) =>
+  'You organise a personal library of documents into folders and subfolders.\n' +
+  (instruction ? `The user asks: ${instruction}\n` : '') +
+  `Existing folder tree: ${tree.join('; ') || '(none)'}\n` +
+  (scope ? `Organise only inside the folder "${scope}"; every path must start with "${scope} / ".\n` : '') +
+  'Documents, one per line: [id] file name | current folder | type | year | title | summary | keywords | facts.\n' +
+  `${catalog}\n\n` +
+  'Group the documents by topic. Reuse existing folders where they fit; create a new folder only for a topic with at least 2 documents, ' +
+  'unless the user asks about particular documents or asks for new folders – then propose the best specific subfolder even for one document. ' +
+  `Use short folder names in ${englishName(lang)}, at most 2 new levels.\n` +
+  'Answer with JSON only, without any other text:\n' +
+  '{"folders": [{"path": "Studium / Články / Management", "docs": [1, 2]}], "questions": [{"doc": 3, "options": ["...", "..."]}]}\n' +
+  'Never put a document directly into a folder that has subfolders – use one of the subfolders or a new one; documents lying directly in such a folder need a subfolder too. ' +
+  'Put each document into at most one folder and leave out documents that already fit their current folder. ' +
+  'When you are not sure where a document belongs, do not put it into folders; list it in questions with 2–3 plausible folder paths.';
+
+/** Doptání: navržená složka má podsložky, dokument patří do některé z nich (nebo do nové pod ní). */
+export const subfolderPrompt = (summary: string, keywords: string[], path: string, children: string[], lang: string) =>
+  `A document should be filed in the library folder "${path}", which has these subfolders: ${children.join('; ')}.\n` +
+  `Document summary: ${summary}\nKeywords: ${keywords.join(', ')}\n\n` +
+  `Choose the best fitting subfolder. If none fits, propose a new subfolder of "${path}" with a short name in ${englishName(lang)}. ` +
+  'Never answer the folder itself.\n' +
+  'Answer with JSON only, without any other text: {"folder": "<full path>", "folderSure": true, "folderOptions": []}\n' +
+  'folderSure is false when the document could just as well belong to another subfolder; then folderOptions lists 1–2 other full paths.';

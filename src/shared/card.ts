@@ -1,9 +1,12 @@
-import type { Author, Biblio, DocType } from './types';
+import type { Author, Biblio, DocFacts, DocType } from './types';
 
 export const DOC_TYPES: DocType[] = ['article', 'book', 'chapter', 'thesis', 'report', 'contract', 'invoice', 'manual', 'letter', 'law', 'web', 'other'];
 
 /** Textová pole bibliografie ve vykreslovaném pořadí. */
 export const BIBLIO_FIELDS = ['title', 'year', 'container', 'publisher', 'place', 'edition', 'volume', 'issue', 'pages', 'doi', 'url'] as const satisfies readonly (keyof Biblio)[];
+
+/** Textová pole faktů faktury / smlouvy v pořadí zobrazení (parties se řeší zvlášť). */
+export const FACT_FIELDS = ['subject', 'supplier', 'customer', 'amount', 'issued', 'due', 'period', 'notice'] as const satisfies readonly (keyof DocFacts)[];
 
 /** Autoři jako text, jeden na řádek: „Příjmení, Jméno“. */
 export const authorsText = (authors: Author[]) => authors.map((a) => (a.given ? `${a.family}, ${a.given}` : a.family)).join('\n');
