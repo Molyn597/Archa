@@ -163,6 +163,10 @@ export async function renderSettings(onSaved: (s: Settings) => void) {
         settings.notify = v;
         void save();
       }),
+      toggle(t('settings.autoCard'), t('settings.autoCardHint'), settings.autoCard, (v) => {
+        settings.autoCard = v;
+        void save();
+      }),
       toggle(t('settings.layoutPdf'), t('settings.layoutPdfHint'), settings.layoutPdf, (v) => {
         settings.layoutPdf = v;
         void save();

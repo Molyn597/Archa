@@ -110,6 +110,23 @@ export function contextPrompt(sample: string, target: string) {
   );
 }
 
+export function cardPrompt(sample: string, target: string, folders: string[]) {
+  const lang = englishName(target);
+  return (
+    'Read the beginning of the document below and describe it as JSON only, without any other text:\n' +
+    '{"summary": "...", "type": "...", "keywords": ["..."], "folder": "...", ' +
+    '"biblio": {"authors": [{"family": "...", "given": "..."}], "title": "...", "year": "...", "container": "...", ' +
+    '"publisher": "...", "place": "...", "edition": "...", "volume": "...", "issue": "...", "pages": "...", "doi": "...", "url": "..."}}\n' +
+    `Write summary (3–5 sentences) and keywords (at most 10) in ${lang}. ` +
+    'type must be exactly one of: article, book, chapter, thesis, report, contract, invoice, manual, letter, law, web, other. ' +
+    `folder is the best fitting name from this list: ${folders.join(', ')}; use "" when none fits. ` +
+    'biblio contains only what is literally stated in the document (title page, header, citation line, DOI); never invent anything and use "" when unknown. ' +
+    'Write authors as family and given name; an organisation goes into family with an empty given. ' +
+    'container is the journal, proceedings or book the document was published in; pages is the page range in that container.' +
+    `\n\nDOCUMENT:\n${sample}`
+  );
+}
+
 /** Klíčová slova pro hledání v dokumentu v obou jazycích (dotaz česky na anglický originál). */
 export const searchTermsPrompt = (question: string, source: string, target: string) =>
   `A user asks about a document written in ${englishName(source)} and translated into ${englishName(target)}.\n` +

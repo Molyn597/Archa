@@ -1716,6 +1716,39 @@ input[type='checkbox'] {
   background: var(--panel);
 }
 
+.card h2 {
+  justify-content: space-between;
+}
+
+.card-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.card-summary {
+  margin: 0;
+  line-height: 1.55;
+}
+
+.card-row {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 4px 16px;
+  overflow-wrap: anywhere;
+}
+
+.card-biblio {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.card-biblio h3 {
+  margin: 0 0 2px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
 .info-view ul {
   margin: 0;
   padding-left: 18px;

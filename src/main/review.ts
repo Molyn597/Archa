@@ -193,8 +193,8 @@ export function acceptFix(source: string, before: string, after: string, beforeI
   return issueCount(afterIssues) <= issueCount(beforeIssues);
 }
 
-/** Kontext dokumentu z odpovědi modelu: bez ```json ohrad, první {...} blok; při chybě undefined. */
-export function parseContext(text: string): DocumentContext | undefined {
+/** První vyvážený {...} blok z odpovědi modelu (bez ```json ohrad) rozparsovaný jako JSON; při chybě undefined. */
+export function extractJsonObject(text: string): Record<string, unknown> | undefined {
   const body = text.replace(/```(?:json)?/gi, '');
   const start = body.indexOf('{');
   if (start < 0) return undefined;
@@ -218,7 +218,13 @@ export function parseContext(text: string): DocumentContext | undefined {
     return undefined;
   }
   if (!data || typeof data !== 'object' || Array.isArray(data)) return undefined;
-  const d = data as Record<string, unknown>;
+  return data as Record<string, unknown>;
+}
+
+/** Kontext dokumentu z odpovědi modelu; při chybě undefined. */
+export function parseContext(text: string): DocumentContext | undefined {
+  const d = extractJsonObject(text);
+  if (!d) return undefined;
   const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
   const gender = str(d.authorGender).toLowerCase();
   const terms = Array.isArray(d.terms) ? d.terms : [];

@@ -1,7 +1,7 @@
 import { mkdir, readFile, readdir, rm, writeFile, rename } from 'node:fs/promises';
 import path from 'node:path';
 import { RECOMMENDED_REMOTE_MODEL } from '../shared/provider';
-import type { ChatMessage, GlossaryEntry, Job, Rates, RegionTranslation, Segment, Settings } from '../shared/types';
+import type { ChatMessage, DocumentCard, GlossaryEntry, Job, Rates, RegionTranslation, Segment, Settings } from '../shared/types';
 
 export const DEFAULT_SETTINGS: Settings = {
   uiLang: 'system',
@@ -13,6 +13,7 @@ export const DEFAULT_SETTINGS: Settings = {
   sourceLang: 'auto',
   targetLang: 'cs',
   notify: true,
+  autoCard: true,
   unloadWhenIdle: true,
   theme: 'system',
   layoutPdf: true,
@@ -30,7 +31,7 @@ const mergeRates = (base: Rates, saved?: Partial<Rates>): Rates => {
   return { ocrPerPage, translatePerKChar, fixPerSegment };
 };
 
-/** Úložiště pod userData: settings.json, glossary.json a jobs/<id>/{job.json, segments.json, study.json, chat.json, vstup, výstup}. */
+/** Úložiště pod userData: settings.json, glossary.json a jobs/<id>/{job.json, segments.json, study.json, chat.json, card.json, vstup, výstup}. */
 export class Store {
   constructor(readonly root: string) {}
 
@@ -93,6 +94,8 @@ export class Store {
   saveRegions = (id: string, regions: RegionTranslation[]) => this.writeJson(path.join(this.jobDir(id), 'study.json'), { regions });
   chat = (id: string) => this.readJson<ChatMessage[]>(path.join(this.jobDir(id), 'chat.json'), []);
   saveChat = (id: string, messages: ChatMessage[]) => this.writeJson(path.join(this.jobDir(id), 'chat.json'), messages);
+  card = (id: string) => this.readJson<DocumentCard | null>(path.join(this.jobDir(id), 'card.json'), null);
+  saveCard = (id: string, card: DocumentCard) => this.writeJson(path.join(this.jobDir(id), 'card.json'), card);
   inputPath = (job: Job) => path.join(this.jobDir(job.id), `input${job.ext}`);
   deleteJob = (id: string) => rm(this.jobDir(id), { recursive: true, force: true });
 }

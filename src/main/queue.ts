@@ -5,6 +5,7 @@ import { t } from '../shared/i18n';
 import { calibrate, costKey } from '../shared/cost';
 import { activeModels, activeRates, isOnline } from '../shared/provider';
 import type { Job, JobOptions, Mode, Rates } from '../shared/types';
+import { makeCard } from './make-card';
 import { unloadAll } from './lmstudio';
 import { runJob, type Measured } from './pipeline';
 import type { Store } from './store';
@@ -222,6 +223,14 @@ export class Queue {
         },
       });
       job.status = measured.paused ? 'picking' : 'done';
+      // Karta dokumentu: selhání nesmí shodit hotový překlad, jen se zapíše poznámka.
+      if (job.status === 'done' && settings.autoCard && !abort.signal.aborted && !(await this.store.card(job.id))) {
+        try {
+          await makeCard(this.store, job, settings);
+        } catch (e) {
+          (job.notes ??= []).push(t('card.failed', { error: (e as Error).message || String(e) }));
+        }
+      }
       const fresh = await this.store.settings();
       // Rychlosti se zpřesňují u toho poskytovatele, který úlohu zpracoval.
       const key = isOnline(settings) ? 'remoteRates' : 'rates';

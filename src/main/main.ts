@@ -16,8 +16,9 @@ import {
 import { resolveLang, setLang, t, type MessageKey } from '../shared/i18n';
 import { languageName } from '../shared/languages';
 import { findRegion, normalizeCrop } from '../shared/regions';
-import type { ChatModel, GlossaryEntry, Job, JobOptions, Mode, OutputKind, Provider, RegionTranslation, Settings, Stage } from '../shared/types';
+import type { ChatModel, DocumentCard, GlossaryEntry, Job, JobOptions, Mode, OutputKind, Provider, RegionTranslation, Settings, Stage } from '../shared/types';
 import { isOnline } from '../shared/provider';
+import { makeCard } from './make-card';
 import { askDocument } from './chat';
 import { fileInfo } from './fileinfo';
 import { usdCzk } from './fx';
@@ -295,6 +296,15 @@ function registerIpc() {
     return answer;
   });
   ipcMain.handle('job-chat-clear', (_e, id: string) => store.saveChat(id, []));
+  ipcMain.handle('job-card', (_e, id: string) => store.card(id));
+  ipcMain.handle('job-card-make', async (_e, id: string) => {
+    const job = await store.job(id);
+    if (!job) throw new Error(t('study.noJob'));
+    const card = await queue.exclusive(async () => makeCard(store, job, await store.settings()));
+    send('job-update', job);
+    return card;
+  });
+  ipcMain.handle('job-card-save', (_e, id: string, card: DocumentCard) => store.saveCard(id, { ...card, edited: true }));
   ipcMain.handle('job-delete', async (_e, id: string) => {
     await queue.remove(id);
     send('job-removed', id);

@@ -5,7 +5,8 @@ import { languageName } from '../shared/languages';
 import { PDFJS_OPTIONS } from '../shared/pdf';
 import { isOnline } from '../shared/provider';
 import { findRegion, normalizeCrop } from '../shared/regions';
-import type { DocumentContext, Job, JobDetail, Mode, RegionTranslation, Segment, Stage } from '../shared/types';
+import { authorsText, BIBLIO_FIELDS, DOC_TYPES, parseAuthors } from '../shared/card';
+import type { Biblio, DocType, DocumentCard, DocumentContext, Job, JobDetail, Mode, RegionTranslation, Segment, Stage } from '../shared/types';
 import { resetChat, setupChat, showChat } from './chat';
 import { createPages, releasePages, setupPdfZoom } from './pdf-zoom';
 import {
@@ -620,6 +621,113 @@ const stageName = (stage: string) => {
   return key ? t(key) : stage;
 };
 
+/** Sekce „O dokumentu“: karta se shrnutím, klíčovými slovy a bibliografií; načítá se zvlášť, ať Informace naskočí hned. */
+function cardSection(job: Job) {
+  const box = h('section', { class: 'setting-group card' });
+  const busyButton = (label: string, work: () => Promise<void>, confirmText?: string) => {
+    const button = h('button', { class: 'btn' }, label);
+    button.onclick = async () => {
+      if (confirmText && !confirm(confirmText)) return;
+      button.disabled = true;
+      button.textContent = t('card.creating');
+      try {
+        await work();
+      } catch (e) {
+        toast(cleanError(e), true);
+        button.disabled = false;
+        button.textContent = label;
+      }
+    };
+    return button;
+  };
+  const create = (label: string, confirmText?: string) =>
+    busyButton(label, async () => show(await window.api.makeCard(job.id)), confirmText);
+  const head = (...buttons: HTMLElement[]) => h('h2', {}, t('card.title'), h('span', { class: 'card-actions' }, ...buttons));
+  const line = (label: string, value: string | Node) => h('div', { class: 'card-row' }, h('span', { class: 'muted' }, label), value);
+
+  function show(card: DocumentCard | null) {
+    if (!card) {
+      box.replaceChildren(head(), h('p', { class: 'muted' }, t('card.none')), h('div', {}, create(t('card.create'))));
+      return;
+    }
+    const edit = h('button', { class: 'btn' }, t('card.edit'));
+    edit.onclick = () => editForm(card);
+    const recreate = create(t('card.recreate'), card.edited ? t('card.confirmRecreate') : undefined);
+    const b = card.biblio;
+    const facts = [
+      b.title && line(t('card.biblio.title'), b.title),
+      b.authors.length && line(t('card.authors'), b.authors.map((a) => (a.given ? `${a.family}, ${a.given}` : a.family)).join('; ')),
+      ...BIBLIO_FIELDS.filter((k) => k !== 'title' && b[k]).map((k) => line(t(`card.biblio.${k}` as MessageKey), b[k]!)),
+    ].filter(Boolean) as HTMLElement[];
+    box.replaceChildren(
+      head(edit, recreate),
+      h('p', { class: 'card-summary' }, card.summary),
+      h('div', { class: 'chips' }, h('span', { class: 'chip accent' }, t(`docType.${card.type}` as MessageKey)), ...card.keywords.map((k) => h('span', { class: 'chip' }, k)), card.edited && h('span', { class: 'chip' }, t('card.edited'))),
+      ...(card.folder ? [line(t('card.folder'), card.folder)] : []),
+      ...(facts.length ? [h('div', { class: 'card-biblio' }, h('h3', {}, t('card.biblio')), ...facts)] : []),
+    );
+  }
+
+  function editForm(card: DocumentCard) {
+    const summary = h('textarea', { rows: '5' });
+    summary.value = card.summary;
+    const type = h('select', {}, ...DOC_TYPES.map((d) => h('option', { value: d }, t(`docType.${d}` as MessageKey))));
+    type.value = card.type;
+    const keywords = h('input', { type: 'text' });
+    keywords.value = card.keywords.join(', ');
+    const folder = h('input', { type: 'text' });
+    folder.value = card.folder ?? '';
+    const authors = h('textarea', { rows: '3' });
+    authors.value = authorsText(card.biblio.authors);
+    const inputs = Object.fromEntries(
+      BIBLIO_FIELDS.map((k) => {
+        const input = h('input', { type: 'text' });
+        input.value = card.biblio[k] ?? '';
+        return [k, input];
+      }),
+    );
+    const field = (label: string, control: HTMLElement) => h('label', { class: 'field' }, h('span', {}, label), control);
+    const save = h('button', { class: 'btn primary' }, t('card.save'));
+    const cancel = h('button', { class: 'btn' }, t('card.cancel'));
+    cancel.onclick = () => show(card);
+    save.onclick = async () => {
+      const text = (v: string) => v.trim() || undefined;
+      const biblio: Biblio = { authors: parseAuthors(authors.value), title: inputs.title.value.trim() };
+      for (const k of BIBLIO_FIELDS) if (k !== 'title') biblio[k] = text(inputs[k].value);
+      const edited: DocumentCard = {
+        ...card,
+        summary: summary.value.trim() || card.summary,
+        type: type.value as DocType,
+        keywords: [...new Set(keywords.value.split(',').map((k) => k.trim()).filter(Boolean))].slice(0, 10),
+        folder: text(folder.value),
+        biblio,
+        edited: true,
+      };
+      save.disabled = true;
+      try {
+        await window.api.saveCard(job.id, edited);
+        show(edited);
+      } catch (e) {
+        toast(cleanError(e), true);
+        save.disabled = false;
+      }
+    };
+    box.replaceChildren(
+      head(),
+      field(t('card.summary'), summary),
+      field(t('card.type'), type),
+      field(`${t('card.keywords')} (${t('card.keywordsHint')})`, keywords),
+      field(t('card.folder'), folder),
+      field(`${t('card.authors')} (${t('card.authorsHint')})`, authors),
+      ...BIBLIO_FIELDS.map((k) => field(t(`card.biblio.${k}` as MessageKey), inputs[k])),
+      h('div', { class: 'card-actions' }, save, cancel),
+    );
+  }
+
+  void window.api.getCard(job.id).then(show, () => show(null));
+  return box;
+}
+
 function infoView(detail: JobDetail) {
   const { job, segments } = detail;
   const dl = h('dl', { class: 'info' });
@@ -662,7 +770,7 @@ function infoView(detail: JobDetail) {
       timings.map(([stage, s]) => `${stageName(stage)}: ${duration(s)}`).join(' · '),
     );
   }
-  const box = h('div', { class: 'info-view' }, dl);
+  const box = h('div', { class: 'info-view' }, cardSection(job), dl);
   if (job.error) box.prepend(h('div', { class: 'error-box' }, job.error));
   const warned = segments.filter((s) => s.warning);
   if (warned.length) {

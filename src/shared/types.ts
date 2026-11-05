@@ -34,6 +34,43 @@ export interface SegmentLink {
   rects: Rect[];
 }
 
+export type DocType = 'article' | 'book' | 'chapter' | 'thesis' | 'report' | 'contract' | 'invoice' | 'manual' | 'letter' | 'law' | 'web' | 'other';
+export interface Author {
+  family: string;
+  given: string;
+}
+/** Bibliografické údaje pro citace; chybějící = prázdný řetězec / undefined. */
+export interface Biblio {
+  authors: Author[];
+  title: string;
+  year?: string;
+  /** Časopis, sborník nebo kniha, ve které dokument vyšel. */
+  container?: string;
+  publisher?: string;
+  place?: string;
+  edition?: string;
+  volume?: string;
+  issue?: string;
+  pages?: string;
+  doi?: string;
+  url?: string;
+}
+export interface DocumentCard {
+  /** 3–5 vět v cílovém jazyce úlohy. */
+  summary: string;
+  type: DocType;
+  /** Nejvýš 10 klíčových slov v cílovém jazyce. */
+  keywords: string[];
+  /** Návrh složky knihovny (název), AI ho jen navrhuje. */
+  folder?: string;
+  biblio: Biblio;
+  /** Jazyk shrnutí a klíčových slov. */
+  lang: string;
+  createdAt: number;
+  /** Uživatel kartu ručně upravil – automaticky se už nepřepisuje. */
+  edited?: boolean;
+}
+
 export interface Segment {
   id: number;
   kind: SegmentKind;
@@ -231,6 +268,8 @@ export interface Settings {
   sourceLang: string;
   targetLang: string;
   notify: boolean;
+  /** Po dokončení překladu vytvořit kartu dokumentu (shrnutí, klíčová slova, bibliografie). */
+  autoCard: boolean;
   unloadWhenIdle: boolean;
   theme: Theme;
   /** U PDF vytvořit i přeložené PDF se zachovaným vzhledem. */
@@ -349,6 +388,11 @@ export interface Api {
   /** Odpověď na dotaz k dokumentu; otázka i odpověď se uloží do historie. */
   askDocument(id: string, question: string, model?: ChatModel): Promise<ChatMessage>;
   clearChat(id: string): Promise<void>;
+  getCard(id: string): Promise<DocumentCard | null>;
+  /** Vytvoří (nebo znovu vytvoří) kartu dokumentu pomocí modelu. */
+  makeCard(id: string): Promise<DocumentCard>;
+  /** Uloží ručně upravenou kartu (označí ji jako `edited`). */
+  saveCard(id: string, card: DocumentCard): Promise<void>;
   deleteJob(id: string): Promise<void>;
   openOutput(id: string, kind?: OutputKind): Promise<void>;
   revealOutput(id: string): Promise<void>;
