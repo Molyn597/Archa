@@ -2,6 +2,7 @@ import { t } from '../shared/i18n';
 import { catalogRows } from '../shared/catalog-view';
 import { FAST_REMOTE_MODEL, isOnline, RECOMMENDED_REMOTE_MODEL } from '../shared/provider';
 import type { ChatMessage, ChatModel, Job, LmStatus, Segment, Settings } from '../shared/types';
+import { citationEnabled, copyWithCitation } from './citation-copy';
 import { cleanError, h, icon, ICONS } from './dom';
 
 export interface ChatHost {
@@ -15,6 +16,7 @@ const textOf = (s: Segment) => s.edited ?? s.polished ?? s.translation ?? s.sour
 
 let host: ChatHost;
 let jobId: string | null = null;
+let job: Job | null = null;
 let history: ChatMessage[] = [];
 let pending: string | null = null;
 interface Step {
@@ -125,7 +127,12 @@ function runEl() {
 
 function messageEl(m: ChatMessage, byId: Map<number, Segment>) {
   if (m.role === 'user') return h('div', { class: 'chat-msg user' }, h('div', { class: 'chat-text' }, m.text));
-  return h('div', { class: 'chat-msg assistant' }, stepsSummary(m), answerText(m.text, byId), h('div', { class: 'chat-note' }, [m.whole ? t('chat.whole') : t('chat.found'), m.model].filter(Boolean).join(' · ')));
+  const pages = (m.sources ?? []).flatMap((id) => byId.get(id)?.page ?? []);
+  const copy =
+    citationEnabled() && m.sources?.length && job
+      ? h('button', { class: 'chat-copy-cite', onclick: () => void copyWithCitation(job!.id, job!, { text: m.text, pdfPages: pages, translated: true }) }, icon(ICONS.copy), t('citation.copy'))
+      : null;
+  return h('div', { class: 'chat-msg assistant' }, stepsSummary(m), answerText(m.text, byId), h('div', { class: 'chat-note' }, [m.whole ? t('chat.whole') : t('chat.found'), m.model].filter(Boolean).join(' · ')), copy);
 }
 
 function renderMessages() {
@@ -339,9 +346,10 @@ function setOpen(value: boolean) {
 }
 
 /** Panel se otevře až na žádost, historie se načte pro aktuální úlohu. */
-export function showChat(job: Job) {
-  if (jobId === job.id) return;
-  jobId = job.id;
+export function showChat(j: Job) {
+  if (jobId === j.id) return;
+  jobId = j.id;
+  job = j;
   syncRail();
   void load();
 }

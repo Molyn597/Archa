@@ -3,7 +3,7 @@ import { formatUsd } from '../shared/estimate';
 import { locale, t, type MessageKey, type UiLangSetting } from '../shared/i18n';
 import { activeRates, FAST_REMOTE_MODEL, isFreeModel, RECOMMENDED_REMOTE_MODEL } from '../shared/provider';
 import { catalogRows, filterCatalog, formatContext, isFree, sharedModel, sortCatalog, visionWarnings } from '../shared/catalog-view';
-import type { Currency, GlossaryEntry, LmStatus, ModelPrice, Models, Settings, Theme } from '../shared/types';
+import type { CitationStyle, Currency, GlossaryEntry, LmStatus, ModelPrice, Models, Settings, Theme } from '../shared/types';
 import { duration, h, icon, ICONS, toast } from './dom';
 
 const $ = (id: string) => document.getElementById(id)!;
@@ -167,6 +167,7 @@ export async function renderSettings(onSaved: (s: Settings) => void) {
         settings.autoCard = v;
         void save();
       }),
+      citationRow(settings, save),
       toggle(t('settings.layoutPdf'), t('settings.layoutPdfHint'), settings.layoutPdf, (v) => {
         settings.layoutPdf = v;
         void save();
@@ -182,6 +183,28 @@ export async function renderSettings(onSaved: (s: Settings) => void) {
       ),
     ),
   );
+}
+
+/** Přepínač kopírování s citací a vedle něj výběr stylu (při vypnutí zakázaný). */
+function citationRow(settings: Settings, save: () => Promise<void>) {
+  const style = h('select');
+  for (const [value, label] of [
+    ['iso690', 'ČSN ISO 690'],
+    ['apa7', 'APA 7'],
+  ] as [CitationStyle, string][]) {
+    style.append(h('option', { value, selected: settings.citation.style === value }, label));
+  }
+  style.disabled = !settings.citation.enabled;
+  style.addEventListener('change', () => {
+    settings.citation.style = style.value as CitationStyle;
+    void save();
+  });
+  const row = toggle(t('settings.citation'), t('settings.citationHint'), settings.citation.enabled, (v) => {
+    settings.citation.enabled = v;
+    style.disabled = !v;
+    void save();
+  });
+  return h('div', { class: 'citation-row' }, row, h('label', { class: 'field' }, h('span', {}, t('settings.citationStyle')), style));
 }
 
 function groupTitle(text: string, active: boolean) {

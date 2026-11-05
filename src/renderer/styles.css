@@ -2305,6 +2305,50 @@ input[type='checkbox'] {
   font-variant-numeric: tabular-nums;
 }
 
+.chat-copy-cite,
+.cite-pop {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.chat-copy-cite {
+  align-self: flex-start;
+  margin-top: 4px;
+  padding: 3px 8px;
+  color: var(--muted);
+}
+
+.chat-copy-cite:hover,
+.cite-pop:hover {
+  background: var(--raised);
+  color: var(--text);
+}
+
+.chat-copy-cite svg,
+.cite-pop svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Plovoucí tlačítko u konce výběru textu v detailu. */
+.cite-pop {
+  position: fixed;
+  z-index: 110;
+  padding: 6px 10px;
+  box-shadow: var(--shadow);
+}
+
 .cite-chip:hover {
   background: color-mix(in srgb, var(--accent) 30%, transparent);
 }
@@ -2534,6 +2578,21 @@ input[type='checkbox'] {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+}
+
+.citation-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+}
+
+.citation-row .toggle {
+  flex: 1;
+}
+
+.citation-row .field {
+  flex: none;
+  width: 150px;
 }
 
 .toggle input {

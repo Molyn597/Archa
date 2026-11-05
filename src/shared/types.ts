@@ -255,6 +255,9 @@ export interface Rates {
   fixPerSegment: number;
 }
 
+/** Styl citací při kopírování úryvků. */
+export type CitationStyle = 'iso690' | 'apa7';
+
 export interface Settings {
   /** Jazyk rozhraní aplikace (ne překladu). */
   uiLang: UiLangSetting;
@@ -270,6 +273,8 @@ export interface Settings {
   notify: boolean;
   /** Po dokončení překladu vytvořit kartu dokumentu (shrnutí, klíčová slova, bibliografie). */
   autoCard: boolean;
+  /** Kopírování úryvků a odpovědí chatu s citací. */
+  citation: { enabled: boolean; style: CitationStyle };
   unloadWhenIdle: boolean;
   theme: Theme;
   /** U PDF vytvořit i přeložené PDF se zachovaným vzhledem. */

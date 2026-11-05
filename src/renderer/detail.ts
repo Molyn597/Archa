@@ -8,6 +8,8 @@ import { findRegion, normalizeCrop } from '../shared/regions';
 import { authorsText, BIBLIO_FIELDS, DOC_TYPES, parseAuthors } from '../shared/card';
 import type { Biblio, DocType, DocumentCard, DocumentContext, Job, JobDetail, Mode, RegionTranslation, Segment, Stage } from '../shared/types';
 import { resetChat, setupChat, showChat } from './chat';
+import { refreshCitation } from './citation-copy';
+import { setupSelectionCite } from './selection-cite';
 import { createPages, releasePages, setupPdfZoom } from './pdf-zoom';
 import {
   cleanError,
@@ -249,8 +251,8 @@ function compareView(segments: Segment[]) {
     const figure = s.snapshot ? h('div', { class: 'compare-figure' }, figureEl(s)) : null;
     if (figure && s.snapshot?.position === 'before') grid.append(figure);
     grid.append(
-      h('div', { class: cls, 'data-seg': String(s.id) }, s.source),
-      h('div', { class: cls, 'data-seg': String(s.id) }, s.skipped ? t('detail.skipped') : finalText(s) || '…', s.warning ? h('span', { class: 'warning-note' }, `⚠ ${s.warning}`) : null),
+      h('div', { class: cls, 'data-seg': String(s.id), 'data-side': 'source' }, s.source),
+      h('div', { class: cls, 'data-seg': String(s.id), 'data-side': 'target' }, s.skipped ? t('detail.skipped') : finalText(s) || '…', s.warning ? h('span', { class: 'warning-note' }, `⚠ ${s.warning}`) : null),
     );
     if (figure && s.snapshot?.position !== 'before') grid.append(figure);
   }
@@ -479,8 +481,8 @@ function selectablePage(pdf: PDFDocumentProxy, number: number, canvas: HTMLCanva
   return wrap;
 }
 
-function tableEl(text: string) {
-  const table = h('table');
+function tableEl(text: string, attrs: Record<string, string> = {}) {
+  const table = h('table', attrs);
   for (const line of text.split('\n')) {
     if (!line.trim().startsWith('|') || /^\|[\s|:-]+\|$/.test(line.trim())) continue;
     const row = h('tr');
@@ -490,25 +492,26 @@ function tableEl(text: string) {
   return table;
 }
 
-function documentView(segments: Segment[], text: (s: Segment) => string) {
+function documentView(segments: Segment[], text: (s: Segment) => string, side: 'source' | 'target' = 'target') {
   const doc = h('article', { class: 'doc' });
   for (const s of segments) {
     const body = text(s);
     if (s.snapshot?.position === 'before') doc.append(figureEl(s));
-    if (s.kind === 'heading') doc.append(h('h2', {}, body));
+    const mark = { 'data-seg': String(s.id), 'data-side': side };
+    if (s.kind === 'heading') doc.append(h('h2', mark, body));
     else if (s.kind === 'list') {
-      const ul = h('ul');
+      const ul = h('ul', mark);
       for (const li of body.split('\n').filter((l) => l.trim())) ul.append(h('li', {}, li.replace(/^\s*([-*•–]|\d+[.)])\s+/, '')));
       doc.append(ul);
-    } else if (s.kind === 'table') doc.append(tableEl(body));
-    else doc.append(h('p', {}, body));
+    } else if (s.kind === 'table') doc.append(tableEl(body, mark));
+    else doc.append(h('p', mark, body));
     if (s.snapshot && s.snapshot.position !== 'before') doc.append(figureEl(s));
   }
   return doc;
 }
 
 async function originalView(detail: JobDetail, token: number) {
-  if (detail.job.ext !== '.pdf') return documentView(visible(detail.segments), (s) => s.source);
+  if (detail.job.ext !== '.pdf') return documentView(visible(detail.segments), (s) => s.source, 'source');
   return pdfView(await window.api.readInput(detail.job.id), token, true);
 }
 
@@ -850,6 +853,7 @@ export async function openDetail(id: string, initialTab: Tab = 'compare') {
   current = detail;
   clearCite();
   showChat(detail.job);
+  void refreshCitation();
   tab = initialTab;
   picking = false;
   renderHeader();
@@ -881,6 +885,7 @@ export async function updateDetail(job: Job) {
 export function setupDetail(onBack: () => void) {
   setupChat({ segments: () => current?.segments ?? [], cite: showCite });
   setupPdfZoom();
+  setupSelectionCite($('detail-body'), () => current);
   $('detail-back').addEventListener('click', onBack);
   document.addEventListener('click', () => {
     for (const m of document.querySelectorAll<HTMLElement>('.menu')) m.hidden = true;
