@@ -212,7 +212,7 @@ body::before {
 .sidebar {
   position: relative;
   flex: none;
-  width: 232px;
+  width: 260px;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -242,6 +242,8 @@ body::before {
 }
 
 .nav-panel {
+  flex: 0 1 auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -263,6 +265,21 @@ body::before {
   background: none;
   color: var(--muted);
   text-align: left;
+  flex: none;
+}
+
+/* Šipka u Knihovny: strom složek je rozbalený jen v Knihovně a v detailu dokumentu. */
+.nav-item .nav-chevron {
+  width: 12px;
+  height: 12px;
+  margin-left: -6px;
+  transform: rotate(-90deg);
+  transition: transform 0.12s;
+}
+
+body[data-view='history'] .nav-chevron,
+body[data-view='detail'] .nav-chevron {
+  transform: none;
 }
 
 .nav-item svg {
@@ -443,7 +460,7 @@ body::before {
 
 /* Sbalený levý panel: jen ikony, popisky v tooltipu. */
 .nav-collapsed .sidebar {
-  width: 60px;
+  width: 56px;
   padding-inline: 8px;
 }
 
@@ -454,7 +471,8 @@ body::before {
 
 .nav-collapsed .brand-name,
 .nav-collapsed .status-text,
-.nav-collapsed .nav-item > span:not(.nav-badge) {
+.nav-collapsed .nav-item > span:not(.nav-badge),
+.nav-collapsed .nav-item .nav-chevron {
   display: none;
 }
 
@@ -3185,19 +3203,53 @@ input[type='checkbox'] {
   gap: 20px;
 }
 
-/* Panel složek stojí; strom se při velkém počtu posouvá sám, Zařadila AI a Koš jsou připnuté dole. */
+/* Strom složek v levém panelu pod Knihovnou jako podpoložky; posouvá se celý sám, Projekty, Duplicity, Zařadila AI a Koš jsou na jeho konci. */
 .library-folders {
-  flex: none;
-  width: 200px;
-  display: flex;
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: none;
   flex-direction: column;
-  padding-bottom: 20px;
+  padding: 2px 0 6px 14px;
+}
+
+/* Posuvník stromu jen při najetí myší; scrollovat jde i bez něj. */
+.library-folders,
+.library-folders * {
+  scrollbar-width: none;
+}
+
+.library-folders:hover {
+  scrollbar-width: thin;
+}
+
+body[data-view='history'] .library-folders,
+body[data-view='detail'] .library-folders {
+  display: flex;
+}
+
+/* V liště se strom ukáže jen jako plovoucí panel u levého okraje. */
+.nav-collapsed .library-folders {
+  display: none;
+}
+
+.nav-collapsed.tree-pop .library-folders {
+  display: flex;
+  position: fixed;
+  top: calc(var(--titlebar) + 96px);
+  left: 62px;
+  z-index: 40;
+  width: 260px;
+  max-height: calc(100vh - var(--titlebar) - 112px);
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
 }
 
 .folder-tree {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
+  flex: none;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -3521,51 +3573,6 @@ button.folder-toggle:hover {
   font-weight: 600;
 }
 
-@media (max-width: 1100px) {
-  .library-body {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 14px;
-  }
-
-  /* Úzké okno: složky nad seznamem, posouvá se celá stránka. */
-  .main:has(> .view.library:not([hidden])) {
-    display: block;
-    overflow: auto;
-  }
-
-  .library-main {
-    overflow: visible;
-  }
-
-  .library-folders {
-    width: auto;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .folder-tree,
-  .folder-pinned {
-    flex-direction: row;
-    flex-wrap: wrap;
-    gap: 6px;
-    overflow: visible;
-  }
-
-  .folder-pinned {
-    margin-top: 0;
-  }
-
-  .folder-item {
-    border-color: var(--line);
-  }
-
-  .folder-item .menu {
-    left: 0;
-    right: auto;
-  }
-}
-
 /* Nastavení: sekce Modely s přepínačem poskytovatele a řádkem pro každou úlohu */
 .models-switch {
   align-self: flex-start;
@@ -3842,8 +3849,6 @@ button.folder-toggle:hover {
   padding-top: 10px;
   border-top: 1px solid var(--line);
   font-size: 13px;
-  max-height: 30%;
-  overflow-y: auto;
 }
 
 .folder-section {

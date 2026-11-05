@@ -16,6 +16,8 @@ export interface LibraryHost {
   open(id: string, tab?: Tab, withChat?: boolean): void;
   modelName(id: string): string;
   showHome(): void;
+  /** Strom složek je v levém panelu i mimo Knihovnu (detail dokumentu): výběr přepne na její view. */
+  showLibrary(): void;
   /** Výběr nebo seznam složek se změnil (chat s knihovnou nabízí „Jen ve složce“). */
   folderChanged(): void;
 }
@@ -223,6 +225,7 @@ function renderAsk(jobs: Job[]) {
 }
 
 function select(value: string) {
+  host.showLibrary();
   flushProject();
   selected = value;
   openId = null;

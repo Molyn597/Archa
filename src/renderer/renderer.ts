@@ -63,6 +63,8 @@ let catalog: LmStatus['models'] = [];
 function show(next: View) {
   if (view !== 'detail') previousView = view;
   view = next;
+  document.body.dataset.view = next;
+  setTreePopover(false);
   for (const el of document.querySelectorAll<HTMLElement>('.view')) el.hidden = el.dataset.view !== next;
   for (const b of document.querySelectorAll<HTMLButtonElement>('.nav-item[data-nav]')) {
     b.classList.toggle('active', b.dataset.nav === next || (next === 'detail' && b.dataset.nav === 'history'));
@@ -576,34 +578,73 @@ function onSettingsSaved(next: Settings) {
   void refreshStatus();
 }
 
-// ---------- Sbalení levého panelu ----------
+// ---------- Levý panel: plný / lišta ----------
 
 const NAV_KEY = 'navCollapsed';
+// Při otevřeném chatu a užším okně se levý panel sám složí na lištu.
+const AUTO_RAIL_WIDTH = 1500;
+
+let navUser = false; // volba uživatele (uložená)
+let navOverride: boolean | null = null; // ruční přepnutí, platí do změny stavu chatu / okna
+let chatOpen = false;
+let lastAuto = false;
+
+const autoRail = () => chatOpen && window.innerWidth < AUTO_RAIL_WIDTH;
+
+function setTreePopover(on: boolean) {
+  document.body.classList.toggle('tree-pop', on && document.body.classList.contains('nav-collapsed'));
+}
 
 function setNavCollapsed(collapsed: boolean) {
   document.body.classList.toggle('nav-collapsed', collapsed);
+  if (!collapsed) setTreePopover(false);
   const toggle = $('nav-toggle');
   const label = t(collapsed ? 'nav.expand' : 'nav.collapse');
   toggle.title = label;
   toggle.setAttribute('aria-label', label);
   toggle.classList.toggle('active', !collapsed);
-  // Ve sbaleném panelu jsou jen ikony; popisek ukáže tooltip.
+  // V liště jsou jen ikony; popisek ukáže tooltip.
   for (const b of document.querySelectorAll<HTMLElement>('.nav-item[data-nav]')) b.title = collapsed ? (b.querySelector('span')?.textContent ?? '') : '';
 }
 
+function applyNav() {
+  const auto = autoRail();
+  if (auto !== lastAuto) navOverride = null;
+  lastAuto = auto;
+  setNavCollapsed(navOverride ?? (navUser || auto));
+}
+
 function setupNavToggle() {
-  let collapsed = false;
   try {
-    collapsed = localStorage.getItem(NAV_KEY) === '1';
+    navUser = localStorage.getItem(NAV_KEY) === '1';
   } catch {}
-  setNavCollapsed(collapsed);
+  applyNav();
   $('nav-toggle').addEventListener('click', () => {
-    collapsed = !document.body.classList.contains('nav-collapsed');
-    setNavCollapsed(collapsed);
-    try {
-      localStorage.setItem(NAV_KEY, collapsed ? '1' : '0');
-    } catch {}
+    const next = !document.body.classList.contains('nav-collapsed');
+    navOverride = next;
+    // Ruční přepnutí při automatickém složení se neukládá.
+    if (!autoRail()) {
+      navUser = next;
+      try {
+        localStorage.setItem(NAV_KEY, next ? '1' : '0');
+      } catch {}
+    }
+    setNavCollapsed(next);
   });
+  document.addEventListener('chat-open-changed', (e) => {
+    chatOpen = (e as CustomEvent<boolean>).detail;
+    navOverride = null;
+    applyNav();
+  });
+  window.addEventListener('resize', applyNav);
+  // Plovoucí strom v liště: zavře klik mimo, Escape nebo výběr složky.
+  document.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    if (!document.body.classList.contains('tree-pop')) return;
+    if (target.closest('.nav-item[data-nav="history"]')) return;
+    if (!target.closest('#library-folders') || target.closest('.folder-main')) setTreePopover(false);
+  }, true); // zachytávání: obslužné funkce složek stromu překreslují a ztratily by cestu k #library-folders
+  document.addEventListener('keydown', (e) => e.key === 'Escape' && setTreePopover(false));
 }
 
 // ---------- Start ----------
@@ -621,7 +662,13 @@ async function init() {
   await refreshVault();
 
   for (const b of document.querySelectorAll<HTMLButtonElement>('.nav-item[data-nav]')) {
-    b.addEventListener('click', () => show(b.dataset.nav as View));
+    b.addEventListener('click', () => {
+      // V liště ikona Knihovny (už otevřené) vysune strom složek jako plovoucí panel.
+      if (b.dataset.nav === 'history' && view === 'history' && document.body.classList.contains('nav-collapsed')) {
+        return setTreePopover(!document.body.classList.contains('tree-pop'));
+      }
+      show(b.dataset.nav as View);
+    });
   }
   setupNavToggle();
   setupStatus();
@@ -636,6 +683,7 @@ async function init() {
     open: (id, tab, withChat) => void openJob(id, tab, withChat),
     modelName,
     showHome: () => show('home'),
+    showLibrary: () => view !== 'history' && show('history'),
     folderChanged: renderFolderOpt,
   });
   setupLibraryChat({

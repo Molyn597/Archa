@@ -402,6 +402,8 @@ function setOpen(value: boolean) {
   open = value;
   panel().hidden = !open;
   syncRail();
+  // Levý panel se podle toho automaticky skládá na lištu.
+  document.dispatchEvent(new CustomEvent<boolean>('chat-open-changed', { detail: open }));
   if (open) {
     buildPanel();
     renderFolderOpt();
