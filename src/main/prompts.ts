@@ -208,3 +208,12 @@ export const subfolderPrompt = (summary: string, keywords: string[], path: strin
   'Never answer the folder itself.\n' +
   'Answer with JSON only, without any other text: {"folder": "<full path>", "folderSure": true, "folderOptions": []}\n' +
   'folderSure is false when the document could just as well belong to another subfolder; then folderOptions lists 1–2 other full paths.';
+
+/** Návrh sloučení složek se stejným významem (synonyma, jednotné/množné číslo, jiný jazyk). */
+export const mergePrompt = (tree: string, lang: string) =>
+  'Below is the folder tree of a personal document library; each line is a folder path and the number of documents in it, including subfolders.\n' +
+  `${tree}\n\n` +
+  'Find folders that mean the same thing and should be merged: synonyms, singular and plural, the same topic in another language, or near-duplicates. ' +
+  'Do not merge folders that are only related (e.g. "Economics" and "Management") or a folder with its own subfolder.\n' +
+  `Answer with JSON only, without any other text: {"merges": [{"from": "<path>", "into": "<path>", "reason": "<short reason in ${englishName(lang)}>"}]}. ` +
+  'into is the folder to keep, usually the one with more documents; use [] when nothing should be merged.';

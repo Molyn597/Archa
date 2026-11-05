@@ -57,6 +57,8 @@ const api: Api = {
   undoPlacement: (placement) => ipcRenderer.invoke('library-undo', placement),
   organizeFolder: (folderId, model) => ipcRenderer.invoke('library-organize', folderId, model),
   applyPlan: (plan) => ipcRenderer.invoke('library-apply', plan),
+  mergeFolders: (from, into) => ipcRenderer.invoke('library-merge', from, into),
+  suggestMerges: (model) => ipcRenderer.invoke('library-merge-suggest', model),
   onLibraryPlaced: (handler) => ipcRenderer.on('library-placed', (_e, p) => handler(p)),
   renameFolder: (id, name) => ipcRenderer.invoke('library-folder-rename', id, name),
   deleteFolder: (id) => ipcRenderer.invoke('library-folder-delete', id),

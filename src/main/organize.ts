@@ -1,12 +1,12 @@
-import { fold, folderPath, openPaths } from '../shared/folders';
+import { fold, folderPath, isLocked, openPaths, resolvePath, subtree } from '../shared/folders';
 import { getLang, t } from '../shared/i18n';
 import { chatSettings, isOnline } from '../shared/provider';
-import type { ChatModel, Job, Library, OrganizePlan, Settings } from '../shared/types';
+import type { ChatModel, FolderMerge, Job, Library, OrganizePlan, Settings } from '../shared/types';
 import { readKey } from './keystore';
-import { pathParts } from './library';
+import { pathParts, similarFolders } from './library';
 import { cardText, libraryDocs, type LibDoc } from './library-docs';
 import { ask, connect, loadModel, type Llm } from './pipeline';
-import { organizePrompt } from './prompts';
+import { mergePrompt, organizePrompt } from './prompts';
 import { extractJsonObject } from './review';
 import type { Store } from './store';
 
@@ -98,4 +98,48 @@ export async function organizeFolder(store: Store, base: Settings, folderId: str
   const llm: Llm = { job: { cost: 0 } as Job, settings, signal: new AbortController().signal, endpoint: await connect(settings, store.root) };
   await loadModel(llm, 'polish');
   return planOrganize(llm, library, docs, folderId);
+}
+
+const MERGE_TOKENS = 1500;
+
+/** Strom nezamčených složek s počtem dokumentů (včetně podsložek), řádek na složku. */
+export function treeWithCounts(library: Library) {
+  const all = library.folders;
+  return all
+    .filter((f) => !isLocked(all, f))
+    .map((f) => {
+      const ids = subtree(all, f.id);
+      return `${folderPath(all, f)} (${Object.values(library.assign).filter((a) => ids.has(a.folder)).length})`;
+    })
+    .join('\n');
+}
+
+/** Návrhy modelu z JSONu: obě cesty musí existovat, nejsou zamčené a cíl neleží uvnitř zdroje. */
+export function parseMerges(text: string, library: Library): FolderMerge[] {
+  const d = extractJsonObject(text);
+  const all = library.folders;
+  const out: FolderMerge[] = [];
+  for (const raw of Array.isArray(d?.merges) ? d.merges : []) {
+    const r = (raw ?? {}) as Record<string, unknown>;
+    const from = typeof r.from === 'string' ? resolvePath(all, r.from) : undefined;
+    const into = typeof r.into === 'string' ? resolvePath(all, r.into) : undefined;
+    if (!from || !into || from === into || subtree(all, from).has(into)) continue;
+    if ([from, into].some((id) => isLocked(all, all.find((f) => f.id === id)!))) continue;
+    if (out.some((m) => m.from === from || m.into === from)) continue;
+    out.push({ from, into, ...(typeof r.reason === 'string' && r.reason.trim() && { reason: r.reason.trim() }) });
+  }
+  return out;
+}
+
+/** Podobné složky: nejdřív podle názvů (bez modelu), pak synonyma a jiné jazyky podle modelu. */
+export async function suggestMerges(store: Store, base: Settings, model?: ChatModel): Promise<FolderMerge[]> {
+  const library = await store.library();
+  const byName = similarFolders(library).map((m) => ({ ...m, reason: t('merge.reasonName') }));
+  const settings = chatSettings(base, model);
+  if (isOnline(settings) && !(await readKey(store.root))) throw new Error(t('openrouter.noKey'));
+  const llm: Llm = { job: { cost: 0 } as Job, settings, signal: new AbortController().signal, endpoint: await connect(settings, store.root) };
+  await loadModel(llm, 'polish');
+  const byModel = parseMerges(await ask(llm, 'polish', [{ role: 'user', content: mergePrompt(treeWithCounts(library), getLang()) }], MERGE_TOKENS), library);
+  const seen = new Set(byName.map((m) => m.from));
+  return [...byName, ...byModel.filter((m) => !seen.has(m.from) && !seen.has(m.into))];
 }

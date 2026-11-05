@@ -3239,12 +3239,39 @@ input[type='checkbox'] {
   gap: 20px;
 }
 
+/* Panel složek zůstává při posunu seznamu na místě; strom se posouvá sám, Zařadila AI a Koš jsou připnuté dole. */
 .library-folders {
   flex: none;
   width: 200px;
   display: flex;
   flex-direction: column;
+  position: sticky;
+  top: 12px;
+  height: calc(100vh - var(--titlebar) - 130px);
+}
+
+.folder-tree {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
   gap: 2px;
+}
+
+.folder-pinned {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+}
+
+.folder-pinned .folder-item:not(.active) {
+  opacity: 0.8;
 }
 
 .library-main {
@@ -3553,9 +3580,22 @@ button.folder-toggle:hover {
 
   .library-folders {
     width: auto;
+    position: static;
+    height: auto;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .folder-tree,
+  .folder-pinned {
     flex-direction: row;
     flex-wrap: wrap;
     gap: 6px;
+    overflow: visible;
+  }
+
+  .folder-pinned {
+    margin-top: 0;
   }
 
   .folder-item {
@@ -3720,4 +3760,52 @@ button.folder-toggle:hover {
 .ai-row .lib-line > .chip {
   flex: none;
   margin-right: 14px;
+}
+
+/* ---------- Slučování složek ---------- */
+
+.merge-modal {
+  width: min(520px, 100%);
+}
+
+.merge-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.merge-foot {
+  justify-content: flex-end;
+}
+
+.merge-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.merge-row input {
+  margin-top: 3px;
+}
+
+.merge-row > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.merge-reason {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.folder-find {
+  margin-top: 0;
+  height: 28px;
+  font-size: 12px;
+}
+
+.folder-find:disabled {
+  opacity: 0.6;
 }

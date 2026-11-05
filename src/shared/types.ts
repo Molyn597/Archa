@@ -136,6 +136,12 @@ export interface Placement {
   /** Uživatel zařazení vrátil. */
   undone?: boolean;
 }
+/** Návrh sloučení dvou složek (id); `into` zůstane. */
+export interface FolderMerge {
+  from: string;
+  into: string;
+  reason?: string;
+}
 /** Návrh roztřídění: cesty složek s dokumenty a dotazy u nejistých dokumentů. */
 export interface OrganizePlan {
   folders: { path: string; jobIds: string[] }[];
@@ -523,6 +529,10 @@ export interface Api {
   organizeFolder(folderId: string | null, model?: ChatModel): Promise<OrganizePlan>;
   /** Provede potvrzený návrh: založí složky a zařadí dokumenty (jako ruční zařazení). */
   applyPlan(plan: OrganizePlan): Promise<void>;
+  /** Sloučí složku do jiné (dokumenty i podsložky); do vlastní podsložky nejde. */
+  mergeFolders(from: string, into: string): Promise<void>;
+  /** Návrhy sloučení podobných složek (podle názvů a modelem i synonyma); nic nemění. */
+  suggestMerges(model?: ChatModel): Promise<FolderMerge[]>;
   /** AI zařadila dokument a založila přitom složky (nabídnout Vrátit). */
   onLibraryPlaced(handler: (p: Placement) => void): void;
   renameFolder(id: string, name: string): Promise<void>;

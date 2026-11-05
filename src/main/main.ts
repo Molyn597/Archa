@@ -21,8 +21,8 @@ import { findRegion, normalizeCrop } from '../shared/regions';
 import type { ChatModel, DocumentCard, GlossaryEntry, Job, Library, LibraryFolder, JobOptions, Mode, OrganizePlan, OutputKind, Placement, Provider, RegionTranslation, Settings, Stage } from '../shared/types';
 import { isOnline } from '../shared/provider';
 import { makeCard } from './make-card';
-import { answerQuestion, applyPlan, moveDocs, moveFolder, removeFolder, undoPlacement } from './library';
-import { organizeFolder } from './organize';
+import { answerQuestion, applyPlan, mergeFolders, moveDocs, moveFolder, removeFolder, undoPlacement } from './library';
+import { organizeFolder, suggestMerges } from './organize';
 import { askDocument } from './chat';
 import { askLibrary } from './library-chat';
 import { fileInfo } from './fileinfo';
@@ -319,6 +319,12 @@ function registerIpc() {
     queue.exclusive(async () => organizeFolder(store, await store.settings(), folderId, model)),
   );
   ipcMain.handle('library-apply', (_e, plan: OrganizePlan) => editLibrary((library) => applyPlan(library, plan)));
+  ipcMain.handle('library-merge', (_e, from: string, into: string) =>
+    editLibrary((library) => {
+      if (!mergeFolders(library, from, into)) throw new Error(t('library.moveInvalid'));
+    }),
+  );
+  ipcMain.handle('library-merge-suggest', async (_e, model?: ChatModel) => queue.exclusive(async () => suggestMerges(store, await store.settings(), model)));
   ipcMain.handle('library-chat', () => store.libraryChat());
   ipcMain.handle('library-chat-ask', async (_e, question: string, model?: ChatModel, folder?: string, focus?: string[]) => {
     if (queue.busy) send('chat-progress', { jobId: LIBRARY_CHAT, step: t('chat.stepQueue') });

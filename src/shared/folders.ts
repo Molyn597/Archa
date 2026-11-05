@@ -72,5 +72,31 @@ export const openPaths = (folders: LibraryFolder[]) => folders.filter((f) => !is
 /** Zařazení AI ještě platí (dokument je pořád tam, kam ho AI dala, a nikdo ho nepřesunul). */
 export const placementActive = (library: Library, p: Placement) => !p.undone && library.assign[p.jobId]?.folder === p.folder && !library.assign[p.jobId]?.manual;
 
+/** Levenshteinova vzdálenost (pro krátké názvy složek). */
+function distance(a: string, b: string) {
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const row = [i];
+    for (let j = 1; j <= b.length; j++) row[j] = Math.min(prev[j] + 1, row[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = row;
+  }
+  return prev[b.length];
+}
+
+const STEM = 6;
+
+/**
+ * Skoro stejný název složky: stejný bez diakritiky, stejný kmen (prvních 6 písmen: „Ekonomie“ / „Ekonomika“),
+ * nebo jedno písmeno rozdílu u delších názvů („Smlouva“ / „Smlouvy“). Synonyma pozná až model.
+ */
+export function similarName(a: string, b: string) {
+  const x = fold(a).replace(/[^\p{L}\p{N}]+/gu, '');
+  const y = fold(b).replace(/[^\p{L}\p{N}]+/gu, '');
+  if (!x || !y) return false;
+  if (x === y) return true;
+  if (x.length >= STEM && y.length >= STEM && x.slice(0, STEM) === y.slice(0, STEM)) return true;
+  return Math.min(x.length, y.length) >= 5 && distance(x, y) <= 1;
+}
+
 /** Text bez diakritiky a velikosti písmen, pro hledání a porovnání názvů. */
 export const fold = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim();

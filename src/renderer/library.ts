@@ -1,7 +1,7 @@
 import { t, type MessageKey } from '../shared/i18n';
-import { childFolders, fold, folderName, placementActive, resolvePath, subtree, TRASH_DAYS } from '../shared/folders';
+import { childFolders, fold, folderName, folderPath, placementActive, resolvePath, subtree, TRASH_DAYS } from '../shared/folders';
 import { isOnline } from '../shared/provider';
-import type { DocumentCard, Job, LibraryState, OrganizePlan, Placement } from '../shared/types';
+import type { DocumentCard, FolderMerge, Job, LibraryState, OrganizePlan, Placement } from '../shared/types';
 import type { Tab } from './detail';
 import { cleanError, date, h, icon, ICONS, jobDuration, jobTitle, langPair, MODES, progressInfo, statusIcon, STATUS_TEXT, toast, toastAction } from './dom';
 import { planView } from './plan-view';
@@ -354,6 +354,111 @@ function folderItem(id: string, label: string, count: number, opts: FolderOpts =
   return item;
 }
 
+// ---------- Slučování složek ----------
+
+/** Obecné malé modální okno; vrací funkci pro zavření. */
+function openModal(title: string, body: HTMLElement[], foot: HTMLElement[]) {
+  const close = () => {
+    overlay.remove();
+    document.removeEventListener('keydown', onKey);
+  };
+  const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close();
+  const overlay: HTMLElement = h(
+    'div',
+    { class: 'modal-overlay', onmousedown: (e: Event) => e.target === overlay && close() },
+    h(
+      'div',
+      { class: 'modal merge-modal', role: 'dialog', 'aria-modal': 'true' },
+      h('div', { class: 'modal-head' }, h('strong', {}, title), h('button', { class: 'btn', type: 'button', title: t('region.close'), 'aria-label': t('region.close'), onclick: close }, icon(ICONS.x))),
+      h('div', { class: 'modal-body' }, ...body),
+      h('div', { class: 'modal-foot merge-foot' }, ...foot),
+    ),
+  );
+  document.addEventListener('keydown', onKey);
+  document.body.append(overlay);
+  return close;
+}
+
+/** Sloučení jedné složky do vybrané (cíl nesmí být ona ani její podsložka). */
+function mergeInto(from: string, name: string) {
+  for (const m of document.querySelectorAll<HTMLElement>('.menu')) m.hidden = true;
+  const { folders } = state.library;
+  const inside = subtree(folders, from);
+  const targets = flatFolders().filter((f) => !inside.has(f.id));
+  if (!targets.length) return void toast(t('merge.noTarget'));
+  const field = h('select', {}, ...targets.map((f) => h('option', { value: f.id }, `${'\u00a0\u00a0\u00a0'.repeat(f.depth)}${f.name}`)));
+  const apply = h('button', { class: 'btn primary', type: 'button' }, t('merge.apply'));
+  const close = openModal(
+    t('merge.title'),
+    [h('p', { class: 'merge-hint' }, t('merge.hint', { name })), h('label', { class: 'field' }, t('merge.target'), field)],
+    [h('button', { class: 'btn', type: 'button', onclick: () => close() }, t('merge.cancel')), apply],
+  );
+  apply.addEventListener('click', () => {
+    const into = field.value;
+    apply.disabled = true;
+    window.api.mergeFolders(from, into).then(
+      () => {
+        if (selected === from) select(into);
+        toast(t('merge.done'));
+        close();
+      },
+      (e) => {
+        toast(cleanError(e), true);
+        apply.disabled = false;
+      },
+    );
+  });
+}
+
+let findingMerges = false;
+
+/** Najde podobné složky (AI, trvá) a nabídne jejich sloučení. */
+async function findMerges() {
+  findingMerges = true;
+  renderLibrary();
+  try {
+    const merges = await window.api.suggestMerges();
+    if (merges.length) showMerges(merges);
+    else toast(t('merge.none'));
+  } catch (e) {
+    toast(cleanError(e), true);
+  } finally {
+    findingMerges = false;
+    renderLibrary();
+  }
+}
+
+function showMerges(merges: FolderMerge[]) {
+  const { folders } = state.library;
+  const path = (id: string) => {
+    const f = folders.find((x) => x.id === id);
+    return f ? folderPath(folders, f) : '';
+  };
+  const rows = merges.map((m) => {
+    const box = h('input', { type: 'checkbox', checked: true });
+    return { m, box, row: h('label', { class: 'merge-row' }, box, h('span', {}, h('span', {}, `${path(m.from)} → ${path(m.into)}`), m.reason && h('span', { class: 'merge-reason' }, m.reason))) };
+  });
+  const apply = h('button', { class: 'btn primary', type: 'button' }, t('merge.applySelected'));
+  const close = openModal(t('merge.suggestTitle'), rows.map((r) => r.row), [h('button', { class: 'btn', type: 'button', onclick: () => close() }, t('merge.cancel')), apply]);
+  apply.addEventListener('click', async () => {
+    apply.disabled = true;
+    let count = 0;
+    for (const { m, box } of rows) {
+      // Složka mohla mezitím zmizet (např. dřívějším sloučením) – návrh přeskočíme.
+      if (!box.checked || !path(m.from) || !path(m.into)) continue;
+      await window.api.mergeFolders(m.from, m.into).then(
+        () => {
+          count++;
+          if (selected === m.from) select(m.into);
+        },
+        (e) => toast(cleanError(e), true),
+      );
+    }
+    if (count) toast(t('merge.doneCount', { count }));
+    close();
+  });
+}
+
 function folderMenu(id: string, name: string) {
   const menu = h(
     'div',
@@ -385,6 +490,7 @@ function folderMenu(id: string, name: string) {
       },
       t('library.rename'),
     ),
+    h('button', { type: 'button', role: 'menuitem', onclick: () => mergeInto(id, name) }, t('merge.menu')),
     h(
       'button',
       {
@@ -452,7 +558,6 @@ function renderFolders(jobs: Job[]) {
   branch(undefined, 0);
   if (unsorted || selected === UNSORTED) items.push(folderItem(UNSORTED, t('library.unsorted'), unsorted, { docTarget: null }));
 
-  items.push(folderItem(AI_LOG, t('aiLog.title'), aiActive().length, { iconPath: ICONS.fast }), folderItem(TRASH, t('trash.title'), trash.length, { iconPath: ICONS.trash, trash: true }));
   items.push(
     editing === '+'
       ? h('div', { class: 'folder-item active' }, nameInput('', (value) => void window.api.createFolder(value).then((f) => select(f.id))))
@@ -469,8 +574,16 @@ function renderFolders(jobs: Job[]) {
           icon(ICONS.plus),
           t('library.newFolder'),
         ),
+    h('button', { class: 'folder-add folder-find', type: 'button', disabled: findingMerges, onclick: () => void findMerges() }, t(findingMerges ? 'merge.finding' : 'merge.find')),
   );
-  $('library-folders').replaceChildren(...items);
+  // Zvláštní pohledy (ne složky) připnuté dole, oddělené od stromu.
+  const pinned = h(
+    'div',
+    { class: 'folder-pinned' },
+    folderItem(AI_LOG, t('aiLog.title'), aiActive().length, { iconPath: ICONS.fast }),
+    folderItem(TRASH, t('trash.title'), trash.length, { iconPath: ICONS.trash, trash: true }),
+  );
+  $('library-folders').replaceChildren(h('div', { class: 'folder-tree' }, ...items), pinned);
 }
 
 // ---------- Banner s chybějícími kartami ----------

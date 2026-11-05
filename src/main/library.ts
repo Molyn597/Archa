@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { childFolders, DEFAULT_FOLDER_KEYS, fold, folderName, folderPath, isLocked, placementActive, subtree } from '../shared/folders';
+import { childFolders, DEFAULT_FOLDER_KEYS, fold, folderName, folderPath, isLocked, placementActive, similarName, subtree } from '../shared/folders';
 
 export { placementActive };
 import type { DocumentCard, Library, OrganizePlan, Placement } from '../shared/types';
@@ -91,6 +91,12 @@ export function ensurePath(library: Library, path: string, create: boolean, newI
       continue;
     }
     if (!create) return { created };
+    // Skoro stejná sourozenecká složka („Ekonomika“ vedle „Ekonomie“) se použije místo zakládání duplicity.
+    const similar = childFolders(library.folders, parent).find((f) => similarName(folderName(f), part));
+    if (similar) {
+      parent = similar.id;
+      continue;
+    }
     const folder = { id: newId(), name: part.slice(0, 60), createdAt: Date.now(), ...(parent && { parent }) };
     library.folders.push(folder);
     created.push(folder.id);
@@ -188,4 +194,36 @@ export function subfolderTarget(library: Library, path: string): { path: string;
   if (!folder) return undefined;
   const children = childFolders(library.folders, folder.id).filter((f) => !isLocked(library.folders, f));
   return children.length ? { path: folderPath(library.folders, folder), children: children.map((f) => folderPath(library.folders, f)) } : undefined;
+}
+
+/**
+ * Sloučí složku `from` do `into`: dokumenty i podsložky přejdou do cílové, stejnojmenné (i skoro stejné) podsložky
+ * se sloučí také, `from` zmizí. Do vlastní podsložky ani do sebe nejde: vrací false.
+ */
+export function mergeFolders(library: Library, from: string, into: string): boolean {
+  const source = library.folders.find((f) => f.id === from);
+  if (!source || !library.folders.some((f) => f.id === into) || subtree(library.folders, from).has(into)) return false;
+  for (const a of Object.values(library.assign)) if (a.folder === from) a.folder = into;
+  for (const child of childFolders(library.folders, from)) {
+    const twin = childFolders(library.folders, into).find((f) => similarName(folderName(f), folderName(child)));
+    if (twin) mergeFolders(library, child.id, twin.id);
+    else child.parent = into;
+  }
+  library.folders = library.folders.filter((f) => f.id !== from);
+  for (const e of library.aiLog ?? []) if (e.folder === from) e.folder = into;
+  return true;
+}
+
+/** Dvojice skoro stejně pojmenovaných sourozeneckých složek (bez AI); cílem je ta s víc dokumenty. */
+export function similarFolders(library: Library): { from: string; into: string }[] {
+  const count = (id: string) => [...subtree(library.folders, id)].reduce((n, f) => n + Object.values(library.assign).filter((a) => a.folder === f).length, 0);
+  const pairs: { from: string; into: string }[] = [];
+  const open = library.folders.filter((f) => !isLocked(library.folders, f));
+  for (const [i, a] of open.entries()) {
+    for (const b of open.slice(i + 1)) {
+      if ((a.parent ?? '') !== (b.parent ?? '') || !similarName(folderName(a), folderName(b))) continue;
+      pairs.push(count(a.id) >= count(b.id) ? { from: b.id, into: a.id } : { from: a.id, into: b.id });
+    }
+  }
+  return pairs;
 }
