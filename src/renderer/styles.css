@@ -3228,8 +3228,8 @@ body[data-view='detail'] .library-folders {
   display: flex;
 }
 
-/* V liště se strom ukáže jen jako plovoucí panel u levého okraje. */
-.nav-collapsed .library-folders {
+/* V liště se strom ukáže jen jako plovoucí panel u levého okraje (body.… přebije pravidlo podle view výše). */
+body.nav-collapsed .library-folders {
   display: none;
 }
 
