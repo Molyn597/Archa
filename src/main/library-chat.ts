@@ -3,6 +3,7 @@ import { chatSettings, isOnline } from '../shared/provider';
 import { openPaths } from '../shared/folders';
 import type { ChatMessage, ChatModel, Job, Library, LibraryRef, Settings } from '../shared/types';
 import { answer, type ChatHooks } from './chat';
+import { dot, embedder, embedModelFor, loadIndex, rrf, type VectorIndex } from './embed';
 import { ensurePath, matchFolder } from './library';
 import { cardText, factsText, libraryDocs, type LibDoc } from './library-docs';
 import { planOrganize, planSize } from './organize';
@@ -39,6 +40,49 @@ export { cardText, factsText, libraryDocs, type LibDoc } from './library-docs';
 const ORGANIZE_RE =
   /(za[řr]a[dď]|p[řr]esu[nň]|p[řr]esunout|rozt[řr][ií][dď]|rozd[ěe]l.*slo[žz]k|kam\s+(?:to\s+|ho\s+|ji\s+|je\s+)?pat[řr]|vytvo[řr]\w*\s+(?:n[ěe]jak[éeou]\s+)?(?:pod)?slo[žz]k|\b(?:move|sort|organi[sz]e|file)\b.*\b(?:folder|this|it|documents?)\b|where\s+(?:would|should|does)\b.*\b(?:go|belong|put|file|move)\b)/i;
 export const isOrganizeRequest = (question: string) => ORGANIZE_RE.test(question);
+
+const SIMILAR = 40;
+
+/**
+ * Vektor dotazu a indexy dokumentů pro hledání podle významu; bez embedding modelu nebo bez jediného indexu undefined.
+ * `cardRank` = pořadí dokumentů podle karty, `passageRank` = nejpodobnější úseky korpusu.
+ */
+export async function semantic(store: Store, settings: Settings, docs: LibDoc[], query: string) {
+  const model = embedModelFor(settings);
+  if (!model) return undefined;
+  const indexes = new Map<string, VectorIndex>();
+  for (const d of docs) {
+    const index = await loadIndex(store, d.job.id, model);
+    if (index) indexes.set(d.job.id, index);
+  }
+  if (!indexes.size) return undefined;
+  const emb = await embedder(settings, store.root);
+  if (!emb) return undefined;
+  const [q] = await emb.embed([query], 'query');
+  return {
+    cardRank: () =>
+      docs
+        .flatMap((d, i) => {
+          const card = indexes.get(d.job.id)?.card;
+          return card ? [{ i, s: dot(q, card) }] : [];
+        })
+        .sort((a, b) => b.s - a.s)
+        .map((e) => e.i),
+    passageRank: (corpus: Corpus) => {
+      const bySeg = new Map([...indexes].map(([job, index]) => [job, new Map(index.ids.map((id, k) => [id, index.vectors[k]]))]));
+      const titleIds = new Set(corpus.titles.values());
+      return corpus.items
+        .flatMap((p) => {
+          const ref = corpus.refs.get(p.id)!;
+          const v = titleIds.has(p.id) ? undefined : bySeg.get(ref.jobId)?.get(ref.segment);
+          return v ? [{ p, s: dot(q, v) }] : [];
+        })
+        .sort((a, b) => b.s - a.s)
+        .slice(0, SIMILAR)
+        .map((e) => e.p);
+    },
+  };
+}
 
 const tree = (library: Library) => openPaths(library.folders);
 
@@ -124,11 +168,15 @@ export function buildCorpus(parts: { doc: LibDoc; items: Passage[] }[]): Corpus 
  * `force` = dokumenty, jejichž úvod se přidá i bez zásahu (vybral je model podle karty).
  * `hits` = počet skutečných zásahů v textu (bez úvodů).
  */
-export function pickPassages(corpus: Corpus, query: string, maxChars: number, force: string[] = []): { chosen: Passage[]; hits: number } {
+export function pickPassages(corpus: Corpus, query: string, maxChars: number, force: string[] = [], similar: Passage[] = []): { chosen: Passage[]; hits: number } {
   const titleIds = new Set(corpus.titles.values());
-  const found = search(corpus.items, query, HITS);
+  const words = search(corpus.items, query, HITS);
+  // Hybridní pořadí: zásahy podle slov (BM25) a podle významu (embeddingy) spojené přes RRF.
+  const found = similar.length ? rrf([words, similar], (p) => p.id).slice(0, HITS) : words;
   const chosen = new Map(selectPassages(corpus.items, found, maxChars).map((p) => [p.id, p]));
-  const hits = [...chosen.keys()].filter((id) => !titleIds.has(id)).length;
+  // Zásah podle slov rozhoduje, zda hledat ve všech dokumentech (podle významu se „najde“ vždy něco).
+  const wordIds = new Set(words.map((p) => p.id));
+  const hits = [...chosen.keys()].filter((id) => !titleIds.has(id) && wordIds.has(id)).length;
   const jobs = new Set([...[...chosen.keys()].map((id) => corpus.refs.get(id)!.jobId), ...force]);
   const index = new Map(corpus.items.map((p, i) => [p.id, i]));
   for (const job of jobs) {
@@ -211,7 +259,11 @@ export async function askLibrary(
   const routeDocs = routed.docs.map((k) => shown[k]);
   const query = `${question} ${previous} ${routed.terms.join(' ')}`;
   if (routed.terms.length) step(t('chat.stepTerms'), routed.terms.slice(0, KEYWORDS_SHOWN));
-  const picked = [...new Set([...routeDocs, ...focused, ...cardHits(docs, query, CARD_HITS)])].slice(0, MAX_DOCS);
+  // Hledání podle významu, když má aktivní embedding model index aspoň u jednoho dokumentu.
+  const vec = await semantic(store, settings, docs, `${question} ${previous}`.trim()).catch(() => undefined);
+  if (vec) step(t('libraryChat.stepSemantic'));
+  const byCard = vec ? rrf([cardHits(docs, query, docs.length), vec.cardRank()], (i) => i) : cardHits(docs, query, CARD_HITS);
+  const picked = [...new Set([...routeDocs, ...focused, ...byCard.slice(0, CARD_HITS)])].slice(0, MAX_DOCS);
   if (picked.length) step(t('libraryChat.stepDocs'), picked.slice(0, SHOWN).map((i) => docs[i].job.name));
 
   const segments = new Map<string, Passage[]>();
@@ -223,7 +275,7 @@ export async function askLibrary(
       parts.push({ doc: docs[i], items: segments.get(id)! });
     }
     const corpus = buildCorpus(parts);
-    return { corpus, ...pickPassages(corpus, query, limit.found, routeDocs.map((i) => docs[i].job.id)) };
+    return { corpus, ...pickPassages(corpus, query, limit.found, routeDocs.map((i) => docs[i].job.id), vec?.passageRank(corpus) ?? []) };
   };
   let found = await gather(picked);
   let searched = picked.length;

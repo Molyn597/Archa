@@ -25,11 +25,12 @@ import { answerQuestion, applyPlan, mergeFolders, moveDocs, moveFolder, removeFo
 import { organizeFolder, suggestMerges } from './organize';
 import { askDocument } from './chat';
 import { askLibrary } from './library-chat';
+import { buildIndex, embedder, embedModelFor, indexModel } from './embed';
 import { fileInfo } from './fileinfo';
 import { usdCzk } from './fx';
 import { clearKey, readKey, saveKey } from './keystore';
-import { status } from './lmstudio';
-import { openrouterStatus, refreshCatalog } from './provider';
+import { listModels, status } from './lmstudio';
+import { fetchEmbedCatalog, openrouterStatus, refreshCatalog } from './provider';
 import { relayoutJob, translateRegion } from './pipeline';
 import { Queue, SUPPORTED } from './queue';
 import { checkUpdate, downloadUpdate } from './updates';
@@ -325,6 +326,32 @@ function registerIpc() {
     }),
   );
   ipcMain.handle('library-merge-suggest', async (_e, model?: ChatModel) => queue.exclusive(async () => suggestMerges(store, await store.settings(), model)));
+  ipcMain.handle('embed-models', async (_e, provider: Provider) =>
+    provider === 'openrouter' ? fetchEmbedCatalog(await readKey(store.root)) : (await listModels('embedding')).map((m) => ({ key: m.modelKey, name: m.displayName ?? m.modelKey })),
+  );
+  const unindexed = async () => {
+    const model = embedModelFor(await store.settings());
+    const jobs = (await store.jobs()).filter((j) => j.status === 'done');
+    const missing = model ? (await Promise.all(jobs.map(async (j) => ((await indexModel(store, j.id)) === model ? undefined : j)))).filter((j): j is Job => !!j) : [];
+    return { model, total: jobs.length, missing };
+  };
+  ipcMain.handle('index-status', async () => {
+    const { model, total, missing } = await unindexed();
+    return { model, total, missing: missing.length };
+  });
+  ipcMain.handle('index-build', async () => {
+    const { missing } = await unindexed();
+    send('index-progress', { done: 0, total: missing.length });
+    for (const [i, job] of missing.entries()) {
+      await queue
+        .exclusive(async () => {
+          const emb = await embedder(await store.settings(), store.root);
+          if (emb) await buildIndex(store, job.id, job.name, emb);
+        })
+        .catch(() => undefined);
+      send('index-progress', { done: i + 1, total: missing.length });
+    }
+  });
   ipcMain.handle('library-chat', () => store.libraryChat());
   ipcMain.handle('library-chat-ask', async (_e, question: string, model?: ChatModel, folder?: string, focus?: string[]) => {
     if (queue.busy) send('chat-progress', { jobId: LIBRARY_CHAT, step: t('chat.stepQueue') });

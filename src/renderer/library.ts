@@ -589,6 +589,30 @@ function renderFolders(jobs: Job[]) {
 // ---------- Banner s chybějícími kartami ----------
 
 let making = false;
+let index = { model: undefined as string | undefined, missing: 0 };
+let indexing: { done: number; total: number } | null = null;
+
+async function loadIndexStatus() {
+  try {
+    const { model, missing } = await window.api.indexStatus();
+    index = { model, missing };
+  } catch {
+    index = { model: undefined, missing: 0 };
+  }
+  renderLibrary();
+}
+
+function buildIndex() {
+  indexing = { done: 0, total: index.missing };
+  renderLibrary();
+  window.api
+    .buildIndexes()
+    .catch((e) => toast(t('index.failed', { error: cleanError(e) }), true))
+    .finally(() => {
+      indexing = null;
+      void loadIndexStatus();
+    });
+}
 
 function renderBanner(jobs: Job[]) {
   const missing = jobs.filter((j) => j.status === 'done' && !state.cards[j.id]).length;
@@ -599,8 +623,15 @@ function renderBanner(jobs: Job[]) {
   }).length;
   const fillFacts = !missing && noFacts > 0;
   const banner = $('library-banner');
-  banner.hidden = !missing && !noFacts && !making;
+  // Banner indexu až po kartách a faktech a jen v běžné knihovně.
+  const showIndex = !missing && !noFacts && !making && !special() && Boolean(index.model) && (index.missing > 0 || indexing !== null);
+  banner.hidden = !missing && !noFacts && !making && !showIndex;
   if (banner.hidden) return;
+  if (showIndex) {
+    const button = h('button', { class: 'btn', type: 'button', disabled: indexing !== null, onclick: buildIndex }, t('index.build'));
+    banner.replaceChildren(h('span', {}, indexing ? t('index.building', indexing) : t('index.missing', { count: index.missing })), button);
+    return;
+  }
   const total = fillFacts ? noFacts : missing;
   const label = making && progress ? t('library.makingCards', progress) : fillFacts ? t('library.missingFacts', { count: noFacts }) : t('library.missing', { count: missing });
   const button = h(
@@ -973,6 +1004,7 @@ export async function reloadLibrary() {
     toast(cleanError(e), true);
   }
   renderLibrary();
+  void loadIndexStatus();
 }
 
 export function setupLibrary(libraryHost: LibraryHost) {
@@ -996,6 +1028,10 @@ export function setupLibrary(libraryHost: LibraryHost) {
   });
   window.api.onLibraryChanged(() => void reloadLibrary());
   window.api.onTrashChanged(() => void reloadTrash());
+  window.api.onIndexProgress((p) => {
+    indexing = p;
+    renderLibrary();
+  });
   window.api.onLibraryProgress((p) => {
     progress = p;
     renderLibrary();

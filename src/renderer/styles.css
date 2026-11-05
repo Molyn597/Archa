@@ -3233,21 +3233,34 @@ input[type='checkbox'] {
   max-width: 1080px;
 }
 
-.library-body {
+/* Knihovna jako detail: hlavička a panel složek stojí, posouvá se jen seznam dokumentů. */
+.main:has(> .view.library:not([hidden])) {
   display: flex;
-  align-items: flex-start;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.view.library {
+  flex: 1;
+  min-height: 0;
+  padding-bottom: 0;
+}
+
+.library-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: stretch;
   gap: 20px;
 }
 
-/* Panel složek zůstává při posunu seznamu na místě; strom se posouvá sám, Zařadila AI a Koš jsou připnuté dole. */
+/* Panel složek stojí; strom se při velkém počtu posouvá sám, Zařadila AI a Koš jsou připnuté dole. */
 .library-folders {
   flex: none;
   width: 200px;
   display: flex;
   flex-direction: column;
-  position: sticky;
-  top: 12px;
-  height: calc(100vh - var(--titlebar) - 130px);
+  padding-bottom: 20px;
 }
 
 .folder-tree {
@@ -3277,6 +3290,8 @@ input[type='checkbox'] {
 .library-main {
   flex: 1;
   min-width: 0;
+  overflow-y: auto;
+  padding-bottom: 40px;
 }
 
 .folder-item {
@@ -3578,10 +3593,18 @@ button.folder-toggle:hover {
     gap: 14px;
   }
 
+  /* Úzké okno: složky nad seznamem, posouvá se celá stránka. */
+  .main:has(> .view.library:not([hidden])) {
+    display: block;
+    overflow: auto;
+  }
+
+  .library-main {
+    overflow: visible;
+  }
+
   .library-folders {
     width: auto;
-    position: static;
-    height: auto;
     flex-direction: column;
     gap: 6px;
   }

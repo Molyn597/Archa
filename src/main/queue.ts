@@ -5,6 +5,7 @@ import { t } from '../shared/i18n';
 import { calibrate, costKey } from '../shared/cost';
 import { activeModels, activeRates, isOnline } from '../shared/provider';
 import type { Job, JobOptions, Mode, Placement, Rates } from '../shared/types';
+import { buildIndex, embedder, embedModelFor } from './embed';
 import { makeCard } from './make-card';
 import { unloadAll } from './lmstudio';
 import { runJob, type Measured } from './pipeline';
@@ -257,6 +258,15 @@ export class Queue {
           await makeCard(this.store, job, settings, this.events.library);
         } catch (e) {
           (job.notes ??= []).push(t('card.failed', { error: (e as Error).message || String(e) }));
+        }
+      }
+      // Index pro hledání podle významu; bez embedding modelu se přeskočí, chyba překlad neshodí.
+      if (job.status === 'done' && embedModelFor(settings) && !abort.signal.aborted) {
+        try {
+          const emb = await embedder(settings, this.store.root, (usd) => (job.cost = (job.cost ?? 0) + usd));
+          if (emb) await buildIndex(this.store, job.id, job.name, emb, abort.signal);
+        } catch (e) {
+          (job.notes ??= []).push(t('index.failed', { error: (e as Error).message || String(e) }));
         }
       }
       const fresh = await this.store.settings();

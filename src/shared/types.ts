@@ -376,6 +376,8 @@ export interface Settings {
   unloadWhenIdle: boolean;
   /** Modely chatu s dokumentem; bez hodnoty se bere role polish (automaticky). */
   chatModels?: { local?: string; remote?: string };
+  /** Modely pro hledání podle významu (embeddingy); bez hodnoty se hledá jen podle slov. */
+  embedModels?: { local?: string; remote?: string };
   theme: Theme;
   /** U PDF vytvořit i přeložené PDF se zachovaným vzhledem. */
   layoutPdf: boolean;
@@ -529,6 +531,13 @@ export interface Api {
   organizeFolder(folderId: string | null, model?: ChatModel): Promise<OrganizePlan>;
   /** Provede potvrzený návrh: založí složky a zařadí dokumenty (jako ruční zařazení). */
   applyPlan(plan: OrganizePlan): Promise<void>;
+  /** Embedding modely poskytovatele (lokálně stažené v LM Studiu, online katalog OpenRouteru). */
+  embedModels(provider: Provider): Promise<{ key: string; name: string; price?: ModelPrice }[]>;
+  /** Kolik hotových dokumentů nemá index aktivního embedding modelu (`model` undefined = model není zvolený). */
+  indexStatus(): Promise<{ model?: string; total: number; missing: number }>;
+  /** Vytvoří chybějící indexy; průběh přes onIndexProgress. */
+  buildIndexes(): Promise<void>;
+  onIndexProgress(handler: (p: { done: number; total: number }) => void): void;
   /** Sloučí složku do jiné (dokumenty i podsložky); do vlastní podsložky nejde. */
   mergeFolders(from: string, into: string): Promise<void>;
   /** Návrhy sloučení podobných složek (podle názvů a modelem i synonyma); nic nemění. */

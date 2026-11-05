@@ -369,6 +369,28 @@ function remoteTask(task: (typeof TASKS)[number], settings: Settings, remote: Lm
   return taskRow(task, remote.models.length ? pick : h('span', { class: 'selected-model-name' }, key), remote.models.length ? body : '', all, ...taskNotes(task.key, key, remote.models, settings.remoteModels));
 }
 
+/** Řádek „Hledání podle významu“: výběr embedding modelu poskytovatele, prázdná volba = vypnuto. Seznam se načte až po vykreslení. */
+function embedRow(provider: Provider, settings: Settings, save: () => Promise<void>) {
+  const slot = provider === 'local' ? 'local' : 'remote';
+  const body = h('div', { class: 'stack' });
+  const hint = h('p', { class: 'muted small' }, t(provider === 'local' ? 'settings.embed.localHint' : 'settings.embed.remoteHint'));
+  window.api.embedModels(provider).then(
+    (models) => {
+      const chosen = settings.embedModels?.[slot];
+      const select = h('select', {}, h('option', { value: '', selected: !chosen }, t('settings.embed.off')));
+      if (chosen && !models.some((m) => m.key === chosen)) select.append(h('option', { value: chosen, selected: true }, t('settings.modelMissing', { model: chosen })));
+      for (const m of models) select.append(h('option', { value: m.key, selected: m.key === chosen }, m.price ? t('settings.embed.price', { name: m.name, price: usd(m.price.input) }) : m.name));
+      select.addEventListener('change', () => {
+        settings.embedModels = { ...settings.embedModels, [slot]: select.value || undefined };
+        void save();
+      });
+      body.replaceChildren(select);
+    },
+    (e) => body.replaceChildren(h('p', { class: 'error-box' }, t('settings.embed.failed', { error: (e as Error).message }))),
+  );
+  return h('div', { class: 'field task-row' }, h('span', { class: 'task-title' }, t('settings.embed.title')), body, hint);
+}
+
 function providerTitle(text: string, active: boolean) {
   return h('h3', { class: 'models-subtitle' }, text, active ? h('span', { class: 'chip accent in-use-now' }, t('settings.inUseNow')) : '');
 }
@@ -384,6 +406,7 @@ function modelsGroup(settings: Settings, lm: LmStatus, remote: LmStatus, url: HT
   }
   // Změna modelu oprav posouvá i „automatický“ model chatu, proto se po změně obnoví všechny řádky.
   local.addEventListener('change', () => fills.forEach((f) => f()));
+  local.append(embedRow('local', settings, save));
   local.append(h('label', { class: 'field' }, h('span', {}, t('settings.serverUrl')), url));
   if (!lm.cli) local.append(h('p', { class: 'error-box' }, t('settings.noCli')));
 
@@ -391,6 +414,7 @@ function modelsGroup(settings: Settings, lm: LmStatus, remote: LmStatus, url: HT
   if (!remote.models.length) online.append(h('p', { class: 'error-box' }, t('settings.remote.noCatalog')));
   for (const task of TASKS) online.append(remoteTask(task, settings, remote, save, rerender));
   if (Object.values(settings.remoteModels).some(isFreeModel)) online.append(h('p', { class: 'muted small' }, t('settings.remote.freeHint')));
+  online.append(embedRow('openrouter', settings, save));
   online.append(...remoteExtras(settings, remote, save, rerender));
 
   const panels: Record<Provider, HTMLElement> = { local, openrouter: online };

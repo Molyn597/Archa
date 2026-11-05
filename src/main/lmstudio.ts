@@ -31,8 +31,8 @@ export async function isVisionModel(modelKey: string) {
   return (await listModels().catch(() => [])).some((m) => m.modelKey === modelKey && m.vision);
 }
 
-export async function listModels(): Promise<LmsModel[]> {
-  return (JSON.parse(await lms(['ls', '--json'])) as LmsModel[]).filter((m) => m.type === 'llm');
+export async function listModels(type: 'llm' | 'embedding' = 'llm'): Promise<LmsModel[]> {
+  return (JSON.parse(await lms(['ls', '--json'])) as LmsModel[]).filter((m) => m.type === type);
 }
 
 async function loadedModels(): Promise<LmsModel[]> {
@@ -82,17 +82,42 @@ export async function ensureServer(apiUrl: string) {
   if (!(await serverUp(apiUrl))) throw new Error(t('lmstudio.noResponse', { url: apiUrl }));
 }
 
-/** V paměti je vždy jen jeden model (12B modely se do 16 GB vejdou jen po jednom). */
+/**
+ * V paměti je vždy jen jeden jazykový model (12B modely se do 16 GB vejdou jen po jednom);
+ * malý embedding model pro hledání může zůstat načtený vedle něj.
+ */
 export async function ensureModel(modelKey: string, identifier: string) {
   const loaded = await loadedModels();
   if (loaded.some((m) => m.identifier === identifier && m.modelKey === modelKey)) return;
-  if (loaded.length) await lms(['unload', '--all']);
+  for (const m of loaded) if (m.type !== 'embedding' && m.identifier) await lms(['unload', m.identifier]);
   try {
     // 16k kontextu: LM Studio ho dělí mezi souběžné požadavky (pipeline jich posílá až 4).
     await lms(['load', modelKey, '-y', '-c', '16384', '--identifier', identifier]);
   } catch (e) {
     throw new Error(t('lmstudio.loadFailed', { model: modelKey, error: (e as Error).message }));
   }
+}
+
+export const EMBED_ID = 'translatte-embed';
+
+/** Embedding model pod pevným identifikátorem; jazykový model nechá načtený. */
+export async function ensureEmbedModel(modelKey: string) {
+  const loaded = await loadedModels();
+  if (loaded.some((m) => m.identifier === EMBED_ID && m.modelKey === modelKey)) return;
+  if (loaded.some((m) => m.identifier === EMBED_ID)) await lms(['unload', EMBED_ID]);
+  try {
+    await lms(['load', modelKey, '-y', '--identifier', EMBED_ID]);
+  } catch (e) {
+    throw new Error(t('lmstudio.loadFailed', { model: modelKey, error: (e as Error).message }));
+  }
+}
+
+/** Vektory textů z /v1/embeddings (LM Studio i OpenRouter), v pořadí vstupu. */
+export async function embeddings(endpoint: Endpoint, model: string, input: string[], signal?: AbortSignal, onCost?: (usd: number) => void): Promise<number[][]> {
+  const data = await post<{ data?: { embedding: number[]; index: number }[]; usage?: { cost?: number }; error?: { message?: string } }>(endpoint, '/v1/embeddings', { model, input }, signal);
+  if (data.error || !data.data) throw new Error(t('lmstudio.httpError', { status: 200, body: data.error?.message ?? '' }));
+  if (data.usage?.cost) onCost?.(data.usage.cost);
+  return [...data.data].sort((a, b) => a.index - b.index).map((d) => d.embedding);
 }
 
 export async function unloadAll() {

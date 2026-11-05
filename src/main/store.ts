@@ -70,6 +70,7 @@ export class Store {
       remoteRates: mergeRates(DEFAULT_SETTINGS.remoteRates, saved.remoteRates),
       remoteCostFactors: { ...saved.remoteCostFactors },
       chatModels: saved.chatModels ? { ...saved.chatModels } : undefined,
+      embedModels: saved.embedModels ? { ...saved.embedModels } : undefined,
     };
   }
 

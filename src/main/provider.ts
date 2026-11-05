@@ -174,3 +174,11 @@ export async function openrouterStatus(models: Models, apiKey?: string): Promise
     missing: catalog.length ? (Object.keys(models) as (keyof Models)[]).filter((role) => !ids.has(models[role])) : [],
   };
 }
+
+/** Embedding modely OpenRouteru (zvláštní katalog). */
+export async function fetchEmbedCatalog(apiKey?: string): Promise<{ key: string; name: string; price?: ModelPrice }[]> {
+  const res = await fetch(`${OPENROUTER_API}/v1/embeddings/models`, { headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {}, signal: AbortSignal.timeout(15000) });
+  if (!res.ok) throw new Error(t('lmstudio.httpError', { status: res.status, body: (await res.text()).slice(0, 200) }));
+  const data = (await res.json()) as { data?: RawModel[] };
+  return (data.data ?? []).map((m) => ({ key: m.id, name: m.name ?? m.id, price: m.pricing?.prompt ? { input: perMillion(m.pricing.prompt), output: 0 } : undefined }));
+}
