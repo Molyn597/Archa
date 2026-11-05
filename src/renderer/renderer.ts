@@ -4,7 +4,7 @@ import { CHARS_PER_PAGE } from '../shared/cost';
 import { estimateFiles, formatUsd, setCurrency, setCzkRate } from '../shared/estimate';
 import { isValidPageRange } from '../shared/pages';
 import { activeModels, activeRates, isOnline } from '../shared/provider';
-import type { Api, FileInfo, Job, LmStatus, Mode, Models, Provider, Settings } from '../shared/types';
+import type { Api, DuplicateMatch, FileInfo, Job, LmStatus, Mode, Models, Provider, Settings } from '../shared/types';
 import { openChat, renderFolderOpt, setupLibraryChat, showLibraryChat, syncChatSettings } from './chat';
 import { citeSegment, closeDetail, detailJobId, openDetail, setupDetail, updateDetail, type Tab } from './detail';
 import { reloadLibrary, renderLibrary, setupLibrary } from './library';
@@ -14,6 +14,7 @@ import {
   date,
   duration,
   chatWarningText,
+  cleanError,
   h,
   icon,
   ICONS,
@@ -52,7 +53,7 @@ let jobs = new Map<string, Job>();
 let view: View = 'home';
 let previousView: View = 'home';
 // Vybrané soubory čekají na tlačítko Přeložit; info se dotáhne kvůli počtu stran a odhadu ceny.
-let pending: { path: string; name: string; info?: FileInfo | null }[] = [];
+let pending: { path: string; name: string; info?: FileInfo | null; dups?: DuplicateMatch[] }[] = [];
 const TYPICAL_PAGES = 15;
 let lastStatus: LmStatus | undefined;
 let catalog: LmStatus['models'] = [];
@@ -379,8 +380,11 @@ async function addFiles(paths: string[]) {
   const added: typeof pending = fresh.map((path) => ({ path, name: path.split(/[\\/]/).pop()! }));
   pending.push(...added);
   renderPending();
-  const infos = await window.api.fileInfo(fresh).catch(() => []);
-  added.forEach((p, i) => (p.info = infos[i] ?? null));
+  const [infos, dups] = await Promise.all([window.api.fileInfo(fresh).catch(() => []), window.api.checkDuplicates(fresh).catch(() => [])]);
+  added.forEach((p, i) => {
+    p.info = infos[i] ?? null;
+    p.dups = dups[i] ?? [];
+  });
   renderPending();
 }
 
@@ -390,6 +394,40 @@ function fileMeta(info: FileInfo | null | undefined) {
   if (info.kind === 'pdf') return t('cost.pages', { count: info.pages });
   if (info.kind === 'text') return t('home.fileChars', { chars: info.chars.toLocaleString(getLang()) });
   return 'Word';
+}
+
+/** Upozornění, že soubor už v knihovně (nebo v koši) je; překlad to nebrání. */
+function dupNotice(p: (typeof pending)[number]) {
+  const match = p.dups?.[0];
+  if (!match) return null;
+  const drop = () => {
+    pending = pending.filter((x) => x !== p);
+    renderPending();
+  };
+  const link = (label: string, onclick: () => void) => h('button', { class: 'btn', type: 'button', onclick }, label);
+  return h(
+    'div',
+    { class: 'pending-dup' },
+    h('span', { class: `chip ${match.trashed ? 'warn' : 'accent'}`, title: match.name }, t(match.trashed ? 'home.dupTrash' : 'home.dupLibrary')),
+    match.trashed
+      ? link(t('home.dupRestore'), () =>
+          void window.api.restoreJobs([match.id]).then(
+            () => {
+              drop();
+              toast(t('home.dupRestored'));
+            },
+            (e) => toast(cleanError(e), true),
+          ),
+        )
+      : link(t('home.dupOpen'), () => {
+          drop();
+          void openJob(match.id);
+        }),
+    link(t('home.dupAnyway'), () => {
+      p.dups = [];
+      renderPending();
+    }),
+  );
 }
 
 function renderPending() {
@@ -416,6 +454,7 @@ function renderPending() {
           },
           icon(ICONS.x),
         ),
+        dupNotice(p),
       ),
     ),
   );

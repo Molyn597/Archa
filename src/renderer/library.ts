@@ -1,5 +1,6 @@
 import { t, type MessageKey } from '../shared/i18n';
 import { childFolders, fold, folderName, folderPath, isLocked, placementActive, resolvePath, subtree, TRASH_DAYS } from '../shared/folders';
+import { duplicateGroups, type DuplicateGroup } from '../shared/duplicates';
 import { isOnline } from '../shared/provider';
 import type { DocumentCard, FolderMerge, Job, LibraryState, OrganizePlan, Placement } from '../shared/types';
 import type { Tab } from './detail';
@@ -23,6 +24,7 @@ const UNSORTED = 'unsorted';
 // Pseudo-složky: koš a přehled toho, co zařadila AI.
 const TRASH = 'trash';
 const AI_LOG = 'aiLog';
+const DUPLICATES = 'duplicates';
 const DAY = 86_400_000;
 const FOLDER_KEY = 'libraryFolder';
 const SUMMARY_PREVIEW = 140;
@@ -67,7 +69,7 @@ function saveCollapsed() {
 }
 
 /** Složka dokumentu; zařazení do smazané složky se bere jako nezařazeno. */
-const special = () => selected === TRASH || selected === AI_LOG;
+const special = () => selected === TRASH || selected === AI_LOG || selected === DUPLICATES;
 
 const folderOf = (id: string) => {
   const folder = state.library.assign[id]?.folder;
@@ -581,9 +583,11 @@ function renderFolders(jobs: Job[]) {
     h('button', { class: 'folder-add folder-find', type: 'button', disabled: findingMerges, onclick: () => void findMerges() }, t(findingMerges ? 'merge.finding' : 'merge.find')),
   );
   // Zvláštní pohledy (ne složky) připnuté dole, oddělené od stromu.
+  const dups = duplicateGroups(jobs, state.cards, state.library);
   const pinned = h(
     'div',
     { class: 'folder-pinned' },
+    dups.length ? folderItem(DUPLICATES, t('dup.title'), dups.length, { iconPath: ICONS.copy }) : null,
     folderItem(AI_LOG, t('aiLog.title'), aiActive().length, { iconPath: ICONS.fast }),
     folderItem(TRASH, t('trash.title'), trash.length, { iconPath: ICONS.trash, trash: true }),
   );
@@ -755,6 +759,88 @@ function renderTrashBar() {
   );
   restore.disabled = purge.disabled = !chosen.size;
   bar.replaceChildren(allLabel, restore, purge, empty);
+}
+
+// Vybraný dokument k ponechání v každé skupině duplicit (klíč = ids skupiny), přežije překreslení.
+const keepChoice = new Map<string, string>();
+
+async function dedupe(keep: string, drop: string[]) {
+  try {
+    await window.api.dedupe(keep, drop);
+    toastAction(t('trash.moved', { count: drop.length }), t('trash.undo'), () => void window.api.restoreJobs(drop).catch((e) => toast(cleanError(e), true)));
+  } catch (e) {
+    toast(cleanError(e), true);
+  }
+}
+
+function dupGroup(g: DuplicateGroup) {
+  const key = g.ids.join('|');
+  const keep = g.ids.includes(keepChoice.get(key) ?? '') ? keepChoice.get(key)! : g.ids[0];
+  const rows = g.ids.map((id) => {
+    const job = host.jobs().find((j) => j.id === id)!;
+    const card = state.cards[id];
+    const folder = folderOf(id);
+    const folderLabel = folder ? folderPath(state.library.folders, state.library.folders.find((f) => f.id === folder)!) : '';
+    const meta = [date(job.createdAt), t(STATUS_TEXT[job.status]), folderLabel, card ? t('dup.hasCard') : ''].filter(Boolean);
+    const radio = h('input', { type: 'radio', name: `keep-${key}`, class: 'lib-check', title: t('dup.keep'), 'aria-label': t('dup.keep') });
+    radio.checked = id === keep;
+    radio.addEventListener('change', () => {
+      keepChoice.set(key, id);
+      renderLibrary();
+    });
+    return h(
+      'div',
+      { class: 'lib-line' },
+      h('label', { class: 'dup-keep' }, radio, h('span', {}, t('dup.keep'))),
+      h('button', { class: 'job-row', type: 'button', onclick: () => host.open(id) }, h('span', {}, h('div', { class: 'job-row-name' }, card?.biblio.title || `${job.name}${job.ext}`), h('div', { class: 'job-row-meta' }, meta.join(' · ')))),
+    );
+  });
+  const drop = g.ids.filter((id) => id !== keep);
+  const act = h(
+    'button',
+    {
+      class: 'btn',
+      type: 'button',
+      onclick: () => {
+        if (g.kind === 'similar' && !confirm(t('dup.confirmSimilar', { count: drop.length }))) return;
+        void dedupe(keep, drop);
+      },
+    },
+    icon(ICONS.trash),
+    t('dup.resolve'),
+  );
+  return h(
+    'div',
+    { class: 'lib-item dup-group' },
+    h('div', { class: 'dup-head' }, h('strong', {}, t(g.kind === 'same' ? 'dup.same' : 'dup.similar')), g.kind === 'similar' && h('span', { class: 'muted small' }, t('dup.similarHint'))),
+    ...rows,
+    h('div', { class: 'dup-actions' }, act),
+  );
+}
+
+/** Lišta nad skupinami: hromadně vyřeší všechny shodné soubory (ponechá první z každé skupiny). */
+function renderDupBar(groups: DuplicateGroup[]) {
+  const bar = $('library-bar');
+  const same = groups.filter((g) => g.kind === 'same');
+  bar.hidden = !same.length;
+  if (bar.hidden) return;
+  const all = h(
+    'button',
+    {
+      class: 'btn',
+      type: 'button',
+      onclick: () => {
+        const drop = same.flatMap((g) => g.ids.slice(1));
+        if (!confirm(t('dup.confirmAll', { count: drop.length }))) return;
+        void (async () => {
+          for (const g of same) await window.api.dedupe(g.ids[0], g.ids.slice(1)).catch((e) => toast(cleanError(e), true));
+          toastAction(t('trash.moved', { count: drop.length }), t('trash.undo'), () => void window.api.restoreJobs(drop).catch((e) => toast(cleanError(e), true)));
+        })();
+      },
+    },
+    t('dup.resolveAll', { count: same.length }),
+  );
+  bar.replaceChildren(all);
 }
 
 function aiRow(p: Placement) {
@@ -955,6 +1041,16 @@ function renderBar() {
 
 /** Seznam Koše nebo přehledu AI místo běžných dokumentů. */
 function drawSpecial(query: string) {
+  if (selected === DUPLICATES) {
+    const groups = duplicateGroups(host.jobs(), state.cards, state.library);
+    visible = [];
+    chosen.clear();
+    renderDupBar(groups);
+    $('history-list').replaceChildren(...groups.map(dupGroup));
+    $('history-empty').hidden = true;
+    $('history-empty-action').hidden = true;
+    return;
+  }
   const inTrash = selected === TRASH;
   const jobs = trash.filter((j) => !query || fold(j.name).includes(query));
   const log = aiEntries();
@@ -992,6 +1088,7 @@ function draw() {
   const { folders } = state.library;
   if (selected !== ALL && selected !== UNSORTED && !special() && !folders.some((f) => f.id === selected)) selected = ALL;
   if (selected === UNSORTED && !jobs.some((j) => !folderOf(j.id))) selected = ALL;
+  if (selected === DUPLICATES && !duplicateGroups(jobs, state.cards, state.library).length) selected = ALL;
 
   renderFolders(jobs);
   renderBanner(jobs);

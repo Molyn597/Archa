@@ -23,7 +23,7 @@ import { resolveLang, setLang, t, type MessageKey } from '../shared/i18n';
 import { LIBRARY_CHAT, TRASH_DAYS } from '../shared/folders';
 import { languageName } from '../shared/languages';
 import { findRegion, normalizeCrop } from '../shared/regions';
-import type { ChatModel, DocumentCard, GlossaryEntry, Job, Library, LibraryFolder, JobOptions, Mode, OrganizePlan, OutputKind, Placement, Provider, RegionTranslation, Settings, Stage } from '../shared/types';
+import type { ChatModel, DocumentCard, DuplicateMatch, GlossaryEntry, Job, Library, LibraryFolder, JobOptions, Mode, OrganizePlan, OutputKind, Placement, Provider, RegionTranslation, Settings, Stage } from '../shared/types';
 import { isOnline } from '../shared/provider';
 import { makeCard } from './make-card';
 import { answerQuestion, applyPlan, mergeFolders, moveDocs, moveFolder, removeFolder, shouldBeLocked, undoPlacement } from './library';
@@ -32,6 +32,8 @@ import { askDocument } from './chat';
 import { askLibrary } from './library-chat';
 import { buildIndex, embedder, embedModelFor, indexModel } from './embed';
 import { fileInfo } from './fileinfo';
+import { fillHashes, hashFile } from './hash';
+import { adoptFolder } from '../shared/duplicates';
 import { usdCzk } from './fx';
 import { clearKey, readKey, saveKey } from './keystore';
 import { listModels, status } from './lmstudio';
@@ -68,6 +70,11 @@ let quitting = false;
 const active = new Map<string, Job>();
 
 const send = (channel: string, ...args: unknown[]) => win?.webContents.send(channel, ...args);
+
+/** Doplní otisky starších dokumentů na pozadí a pošle je oknu (přehled duplicit). */
+const refreshHashes = async () => {
+  for (const job of await fillHashes(store).catch(() => [] as Job[])) send('job-update', job);
+};
 /** Knihovna se změnila; když AI přitom založila složky, renderer nabídne Vrátit. */
 /** Trezor zamčených složek; změna stavu = renderer znovu načte úlohy i knihovnu. */
 const vault = new VaultState(store, () => {
@@ -273,6 +280,24 @@ function registerIpc() {
     if (errors.length) throw new Error(errors.join('\n'));
   });
   ipcMain.handle('jobs', () => store.jobs());
+  // Shodné soubory v knihovně (i v koši); zamčené dokumenty jen s odemčeným trezorem.
+  ipcMain.handle('duplicates-check', async (_e, paths: string[]): Promise<DuplicateMatch[][]> => {
+    const jobs = [...(await store.jobs()), ...(await store.jobs(true))];
+    return Promise.all(
+      paths.map(async (p) => {
+        const hash = await hashFile(p).catch(() => undefined);
+        return hash ? jobs.filter((j) => j.inputHash === hash).map((j) => ({ id: j.id, name: j.name, trashed: !!j.trashedAt })) : [];
+      }),
+    );
+  });
+  ipcMain.handle('library-dedupe', async (_e, keep: string, drop: string[]) => {
+    await editLibrary((library) => adoptFolder(library, keep, drop));
+    for (const id of drop) {
+      await queue.trash(id);
+      send('job-removed', id);
+    }
+    send('trash-changed');
+  });
   ipcMain.handle('job', async (_e, id: string) => {
     const job = active.get(id) ?? (await store.job(id));
     return job ? { job, segments: await store.segments(id) } : null;
@@ -423,6 +448,7 @@ function registerIpc() {
     } catch (e) {
       throw new Error(e instanceof WrongPasswordError ? t('vault.wrong') : (e as Error).message);
     }
+    void refreshHashes();
   });
   ipcMain.handle('vault-lock', () => vault.lock());
   ipcMain.handle('vault-change', async (_e, oldPassword: string, newPassword: string) => {
@@ -569,6 +595,7 @@ if (!app.requestSingleInstanceLock()) {
     powerMonitor.on('lock-screen', () => void vault.lock());
     await queue.recover();
     await queue.purgeOld(TRASH_DAYS).catch(() => undefined);
+    void refreshHashes();
     applyTheme(settings.theme);
     createWindow();
     createTray();

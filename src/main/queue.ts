@@ -5,6 +5,7 @@ import { t } from '../shared/i18n';
 import { calibrate, costKey } from '../shared/cost';
 import { activeModels, activeRates, isOnline } from '../shared/provider';
 import type { Job, JobOptions, Mode, Placement, Rates } from '../shared/types';
+import { hashFile } from './hash';
 import { buildIndex, embedder, embedModelFor } from './embed';
 import { makeCard } from './make-card';
 import { unloadAll } from './lmstudio';
@@ -80,6 +81,7 @@ export class Queue {
       id: randomUUID(),
       name: path.basename(file, path.extname(file)),
       ext,
+      inputHash: await hashFile(file),
       ...options,
       pageRange: options.pageRange?.trim() || undefined,
       status: 'queued',

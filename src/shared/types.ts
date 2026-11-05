@@ -147,6 +147,13 @@ export interface OrganizePlan {
   folders: { path: string; jobIds: string[] }[];
   questions: FolderQuestion[];
 }
+/** Dokument v knihovně se stejným originálem jako přidávaný soubor. */
+export interface DuplicateMatch {
+  id: string;
+  name: string;
+  trashed: boolean;
+}
+
 export interface LibraryState {
   library: Library;
   cards: Record<string, DocumentCard>;
@@ -260,6 +267,8 @@ export interface Job {
   id: string;
   /** V koši od (ms); po TRASH_DAYS se smaže natrvalo. */
   trashedAt?: number;
+  /** SHA-256 originálu (hex) pro hlídání duplicit; u starších dokumentů se doplní dodatečně. */
+  inputHash?: string;
   name: string;
   ext: string;
   mode: Mode;
@@ -465,6 +474,8 @@ export interface Api {
   /** Rozsah souborů pro odhad ceny; nečitelný soubor se vynechá. */
   /** Ve stejném pořadí jako `paths`; nečitelný soubor = null. */
   fileInfo(paths: string[]): Promise<(FileInfo | null)[]>;
+  /** Ke každému souboru dokumenty se stejným originálem (i v koši). */
+  checkDuplicates(paths: string[]): Promise<DuplicateMatch[][]>;
   usdCzk(): Promise<number | undefined>;
   appVersion(): Promise<string>;
   /** `auto`: automatická kontrola, nejvýš jednou denně. */
@@ -511,6 +522,8 @@ export interface Api {
   saveCard(id: string, card: DocumentCard): Promise<void>;
   /** Přesune dokument do koše (zařazení do složky zůstane pro obnovení). */
   deleteJob(id: string): Promise<void>;
+  /** Nechá `keep`, ostatní do koše; ponechaný bez složky převezme složku odstraněného. */
+  dedupe(keep: string, drop: string[]): Promise<void>;
   /** Dokumenty v koši, od naposledy smazaného. */
   trashList(): Promise<Job[]>;
   restoreJobs(ids: string[]): Promise<void>;
