@@ -3,6 +3,7 @@ import { bibliography, bibliographyHtml, bibliographyText, type BiblioEntry } fr
 import { isStudy, kindName, PROJECT_KINDS } from '../shared/projects';
 import type { CitationStyle, DocumentCard, Job, Project, ProjectKind } from '../shared/types';
 import type { Tab } from './detail';
+import { openChat } from './chat';
 import { cleanError, h, icon, ICONS, openModal, toast, writeClipboard } from './dom';
 import { filterSources } from './project-filter';
 
@@ -334,6 +335,7 @@ export function renderProject(root: HTMLElement, id: string, c: ProjectCtx) {
   status = h('span', { class: 'muted small proj-status', role: 'status' });
   const deadline = h('input', { type: 'date', value: p.deadline ?? '', 'aria-label': t('project.deadline') });
   deadline.addEventListener('change', () => void save(p.id, { deadline: deadline.value || undefined }));
+  const chatBtn = h('button', { class: 'btn', type: 'button', onclick: openChat }, icon(ICONS.chat), t('projectChat.open'));
   const del = h(
     'button',
     {
@@ -349,7 +351,7 @@ export function renderProject(root: HTMLElement, id: string, c: ProjectCtx) {
   const head = h(
     'div',
     { class: 'proj-head' },
-    h('div', { class: 'proj-title' }, icon(ICONS.book), nameEditor(p), status, del),
+    h('div', { class: 'proj-title' }, icon(ICONS.book), nameEditor(p), status, chatBtn, del),
     h('div', { class: 'proj-meta' }, h('span', { class: 'chip accent' }, kindName(p.kind)), h('label', { class: 'row gap' }, h('span', { class: 'muted small' }, t('project.deadline')), deadline)),
   );
   const label = (k: ProjectTab) => t(k === 'bibliography' ? (study ? 'project.tab.bibliography' : 'project.tab.materials') : (`project.tab.${k}` as MessageKey));

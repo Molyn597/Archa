@@ -20,7 +20,7 @@ import {
   type MenuItemConstructorOptions,
 } from 'electron';
 import { resolveLang, setLang, t, type MessageKey } from '../shared/i18n';
-import { LIBRARY_CHAT, TRASH_DAYS } from '../shared/folders';
+import { LIBRARY_CHAT, projectChatKey, TRASH_DAYS } from '../shared/folders';
 import { languageName } from '../shared/languages';
 import { findRegion, normalizeCrop } from '../shared/regions';
 import type { ChatModel, DocumentCard, DuplicateMatch, Project, ProjectKind, Job, Library, LibraryFolder, JobOptions, Mode, OrganizePlan, OutputKind, Placement, Provider, RegionTranslation, Settings, Stage } from '../shared/types';
@@ -30,6 +30,7 @@ import { answerQuestion, applyPlan, mergeFolders, moveDocs, moveFolder, removeFo
 import { organizeFolder, suggestMerges } from './organize';
 import { askDocument } from './chat';
 import { askLibrary } from './library-chat';
+import { askProject } from './project-chat';
 import { buildIndex, embedder, embedModelFor, indexModel } from './embed';
 import { fileInfo } from './fileinfo';
 import { fillHashes, hashFile } from './hash';
@@ -307,6 +308,20 @@ function registerIpc() {
     const saved = { ...project, updatedAt: Date.now() };
     await store.saveProject(saved);
     return saved;
+  });
+  ipcMain.handle('project-chat', (_e, id: string) => store.projectChat(id));
+  ipcMain.handle('project-chat-clear', (_e, id: string) => store.saveProjectChat(id, []));
+  ipcMain.handle('project-chat-ask', async (_e, id: string, question: string, model?: ChatModel) => {
+    const project = await store.project(id);
+    if (!project) throw new Error(t('project.missing'));
+    const key = projectChatKey(id);
+    if (queue.busy) send('chat-progress', { jobId: key, step: t('chat.stepQueue') });
+    return queue.exclusive(async () =>
+      askProject(store, await store.settings(), project, question, model, {
+        step: (step, tags) => send('chat-progress', { jobId: key, step, tags }),
+        delta: (d) => send('chat-delta', { jobId: key, ...d }),
+      }),
+    );
   });
   ipcMain.handle('project-delete', (_e, id: string) => store.deleteProject(id));
   ipcMain.handle('project-add', async (_e, id: string, jobIds: string[]) => {

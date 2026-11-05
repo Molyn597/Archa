@@ -9,6 +9,8 @@ export const TRASH_DAYS = 30;
 
 /** jobId v průběhu (chat-progress / chat-delta) chatu s knihovnou. */
 export const LIBRARY_CHAT = 'library';
+/** Klíč průběhu chatu projektu (místo jobId v událostech chat-progress / chat-delta). */
+export const projectChatKey = (id: string) => `project:${id}`;
 
 
 /** Zobrazený název složky: vlastní, jinak přeložený název výchozí složky. */

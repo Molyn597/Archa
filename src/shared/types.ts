@@ -549,6 +549,11 @@ export interface Api {
   saveProject(project: Project): Promise<Project>;
   /** Smaže projekt natrvalo; dokumenty v knihovně zůstanou. */
   deleteProject(id: string): Promise<void>;
+  /** Historie chatu projektu. */
+  projectChat(id: string): Promise<ChatMessage[]>;
+  /** Otázka nebo žádost o návrh textu jen nad zdroji projektu; odpověď s citacemi [n] → dokument a strana (`refs`). */
+  askProject(id: string, question: string, model?: ChatModel): Promise<ChatMessage>;
+  clearProjectChat(id: string): Promise<void>;
   /** Přidá dokumenty do projektu (bez duplicit). */
   addToProject(id: string, jobIds: string[]): Promise<Project>;
   /** Nechá `keep`, ostatní do koše; ponechaný bez složky převezme složku odstraněného. */

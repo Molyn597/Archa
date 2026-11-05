@@ -3865,7 +3865,12 @@ button.folder-toggle:hover {
 .proj-title {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
+}
+
+.proj-title > .btn {
+  flex: none;
 }
 
 .proj-title > svg {
@@ -3876,7 +3881,8 @@ button.folder-toggle:hover {
 }
 
 .proj-name {
-  min-width: 0;
+  flex: 0 1 auto;
+  min-width: 8em;
   padding: 2px 6px;
   border: 0;
   border-radius: 6px;
@@ -3923,6 +3929,7 @@ button.folder-toggle:hover {
 .proj-tabs {
   align-self: flex-start;
   max-width: 100%;
+  flex-wrap: wrap;
 }
 
 .proj-actions {
@@ -3942,6 +3949,23 @@ button.folder-toggle:hover {
 
 .proj-list .lib-item {
   border-radius: 0;
+}
+
+/* Text řádku zdroje se zkrátí, tlačítko Odebrat zůstane vedle něj. */
+.proj-list .job-row > span {
+  flex: 1;
+  min-width: 0;
+}
+
+.proj-list .job-row-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.proj-list .lib-line > .btn {
+  flex: none;
+  margin-right: 10px;
 }
 
 .proj-gone {

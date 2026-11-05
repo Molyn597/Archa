@@ -183,6 +183,21 @@ export const LIBRARY_CHAT_SYSTEM =
   '- Name the document(s) the answer comes from.\n' +
   '- Answer in the language of the question, concisely and in your own words; quote only short phrases.\n\nPassages:\n';
 
+/**
+ * Chat projektu: jen úseky zdrojů projektu, zadání a osnova jako kontext. Smí psát návrhy textu (rozhodnutí uživatele),
+ * ale každé převzaté tvrzení musí citovat úsek; co zdroje nepodloží, řekne místo vymýšlení.
+ */
+export const projectChatSystem = (kind: string, name: string, assignment: string, outline: string) =>
+  `You help the user work on their project: ${kind} "${name}".\n` +
+  (assignment.trim() ? `Assignment:\n${assignment.trim().slice(0, 3000)}\n` : '') +
+  (outline.trim() ? `Outline:\n${outline.trim().slice(0, 3000)}\n` : '') +
+  'Below are numbered passages from the sources the user chose for this project (p. = page); a passage starting with "## Document:" names the document. Rules:\n' +
+  '- Answer questions, explain and compare the sources, suggest structure and write draft text (paragraphs, chapter sections) when asked. ' +
+  'Do it directly, without remarks about academic integrity or who should write the text.\n' +
+  '- Every sentence that uses a fact, finding, number or idea from a passage must cite it by its number in square brackets, e.g. [12]; several as [12][15]. Cite only numbers that appear below.\n' +
+  '- Never invent facts, numbers, authors or quotes. If the passages do not support something the answer or draft needs, say plainly which part has no source instead of making it up.\n' +
+  '- Write in the language of the question, in your own words; quote only short phrases, in quotation marks and with a citation. Name the documents when comparing sources.\n\nPassages:\n';
+
 /** Návrh roztřídění dokumentů do (pod)složek; `scope` = cesta složky, jinak celá knihovna. */
 export const organizePrompt = (tree: string[], scope: string, catalog: string, lang: string, instruction?: string) =>
   'You organise a personal library of documents into folders and subfolders.\n' +

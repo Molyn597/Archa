@@ -270,6 +270,8 @@ export class Store {
 
   project = (id: string) => this.readJson<Project | null>(path.join(this.projectDir(id), 'project.json'), null);
   saveProject = (project: Project) => this.writeJson(path.join(this.projectDir(project.id), 'project.json'), project);
+  projectChat = (id: string) => this.readJson<ChatMessage[]>(path.join(this.projectDir(id), 'chat.json'), []);
+  saveProjectChat = (id: string, messages: ChatMessage[]) => this.writeJson(path.join(this.projectDir(id), 'chat.json'), messages);
   deleteProject = (id: string) => rm(this.projectDir(id), { recursive: true, force: true });
   deleteJob = (id: string) => rm(this.jobDir(id), { recursive: true, force: true });
 }

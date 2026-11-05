@@ -5,6 +5,7 @@ import { isOnline } from '../shared/provider';
 import type { DocumentCard, FolderMerge, Job, LibraryState, OrganizePlan, Placement, Project, ProjectKind } from '../shared/types';
 import type { Tab } from './detail';
 import { cleanError, date, h, icon, ICONS, jobDuration, jobTitle, langPair, MODES, openModal, progressInfo, statusIcon, STATUS_TEXT, toast, toastAction } from './dom';
+import { showProjectChat } from './chat';
 import { planView } from './plan-view';
 import { flushProject, newProjectModal, pickProjectModal, renderProject, type ProjectCtx } from './project-view';
 import { lockFolder, unlockFolder, unlockModal, vault } from './vault';
@@ -1047,6 +1048,8 @@ export function renderLibrary() {
   // Rozepsaný název složky se překreslením (např. při průběhu úlohy) nesmí ztratit.
   if (!editing) draw();
   host.folderChanged();
+  // Chat projektu jen v Knihovně; jinde (detail dokumentu) rozsah panelu nesahá.
+  if (document.querySelector<HTMLElement>('.view[data-view="history"]')?.hidden === false) showProjectChat(inProject() ? (projects.find((p) => p.id === projectId()) ?? null) : null);
 }
 
 /** Lišta hromadných akcí nad seznamem; viditelná u neprázdného seznamu, akce jen s výběrem. */

@@ -1,7 +1,7 @@
 import { t } from '../shared/i18n';
 import { isOnline } from '../shared/provider';
-import { LIBRARY_CHAT } from '../shared/folders';
-import type { ChatMessage, ChatModel, Job, LibraryRef, LmStatus, Provider, Segment, Settings } from '../shared/types';
+import { LIBRARY_CHAT, projectChatKey } from '../shared/folders';
+import type { ChatMessage, ChatModel, Job, LibraryRef, LmStatus, Project, Provider, Segment, Settings } from '../shared/types';
 import { chatWarningText, cleanError, h, icon, ICONS } from './dom';
 import { focusDocs, libraryFolders, selectedFolder } from './library';
 import { planView } from './plan-view';
@@ -27,8 +27,9 @@ let host: ChatHost;
 let libraryHost: LibraryChatHost;
 // Návrhy roztřídění provedené z chatu (podle času zprávy), aby po překreslení zůstaly označené.
 const appliedPlans = new Set<number>();
-/** Rozsah chatu: jeden dokument, nebo celá knihovna (jobId je pak LIBRARY_CHAT). */
-let scope: 'doc' | 'library' = 'doc';
+/** Rozsah chatu: jeden dokument, celá knihovna (jobId je pak LIBRARY_CHAT), nebo projekt (jobId je projectChatKey). */
+let scope: 'doc' | 'library' | 'project' = 'doc';
+let proj: Project | null = null;
 /** Dokument se právě otevírá z citace: panel zůstane v rozsahu knihovna. */
 let viaCite = false;
 /** Panel byl v knihovně otevřený, když se odešlo z view; po návratu se otevře znovu. */
@@ -168,6 +169,7 @@ const refCite = (refs: LibraryRef[] = []) => (n: number): Cite | undefined => {
 
 function messageEl(m: ChatMessage, byId: Map<number, Segment>) {
   if (m.role === 'user') return h('div', { class: 'chat-msg user' }, h('div', { class: 'chat-text' }, m.text));
+  if (scope === 'project') return h('div', { class: 'chat-msg assistant' }, stepsSummary(m), answerText(m.text, refCite(m.refs)), h('div', { class: 'chat-note' }, m.model ?? ''));
   if (scope === 'library') return h('div', { class: 'chat-msg assistant' }, stepsSummary(m), answerText(m.text, refCite(m.refs)), m.plan && planView(m.plan, { title: libraryHost.title, folders: libraryFolders, done: appliedPlans.has(m.at), onDone: () => appliedPlans.add(m.at) }), h('div', { class: 'chat-note' }, m.model ?? ''));
   return h('div', { class: 'chat-msg assistant' }, stepsSummary(m), answerText(m.text, segmentCite(byId)), h('div', { class: 'chat-note' }, [m.whole ? t('chat.whole') : t('chat.found'), m.model].filter(Boolean).join(' · ')));
 }
@@ -176,7 +178,7 @@ function renderMessages() {
   const byId = new Map(host.segments().map((s) => [s.id, s]));
   const list = $('chat-messages');
   list.replaceChildren(
-    h('div', { class: 'chat-intro' }, h('p', {}, t(scope === 'library' ? 'libraryChat.intro' : 'chat.intro')), h('p', { class: 'muted' }, t(settings && current().provider === 'openrouter' ? 'chat.online' : 'chat.private'))),
+    h('div', { class: 'chat-intro' }, h('p', {}, t(scope === 'project' ? 'projectChat.intro' : scope === 'library' ? 'libraryChat.intro' : 'chat.intro')), h('p', { class: 'muted' }, t(settings && current().provider === 'openrouter' ? 'chat.online' : 'chat.private'))),
     ...history.map((m) => messageEl(m, byId)),
   );
   if (pending !== null) list.append(h('div', { class: 'chat-msg user' }, h('div', { class: 'chat-text' }, pending)), runEl() ?? h('div', { class: 'chat-wait muted' }, t('chat.thinking')));
@@ -201,7 +203,12 @@ async function ask(question: string) {
   try {
     const model = settings ? current() : undefined;
     const folder = onlyFolder ? selectedFolder() : null;
-    const answer = scope === 'library' ? await window.api.askLibrary(question, model, folder?.id, focusDocs()) : await window.api.askDocument(id, question, model);
+    const answer =
+      scope === 'project'
+        ? await window.api.askProject(proj!.id, question, model)
+        : scope === 'library'
+          ? await window.api.askLibrary(question, model, folder?.id, focusDocs())
+          : await window.api.askDocument(id, question, model);
     if (jobId !== id) return;
     history.push({ role: 'user', text: question, at: Date.now() }, answer);
   } catch (e) {
@@ -290,10 +297,12 @@ export function renderFolderOpt() {
   box.replaceChildren(...(folder ? [check, h('span', {}, t('libraryChat.onlyFolder', { name: folder.name }))] : []));
 }
 
+const titleText = () => (scope === 'project' ? t('projectChat.title', { name: proj?.name ?? '' }) : t(scope === 'library' ? 'libraryChat.title' : 'chat.tab'));
+
 function buildPanel() {
   closeMenu?.();
   const quick = (label: 'chat.summary' | 'chat.keyPoints', prompt: 'chat.summaryPrompt' | 'chat.keyPointsPrompt') => h('button', { class: 'btn', onclick: () => void ask(t(prompt)) }, t(label));
-  const field = h('textarea', { id: 'chat-input', rows: '2', placeholder: t(scope === 'library' ? 'libraryChat.placeholder' : 'chat.placeholder') });
+  const field = h('textarea', { id: 'chat-input', rows: '2', placeholder: t(scope === 'project' ? 'projectChat.placeholder' : scope === 'library' ? 'libraryChat.placeholder' : 'chat.placeholder') });
   field.addEventListener('keydown', (e) => {
     if (e.key !== 'Enter' || e.shiftKey || e.isComposing) return;
     e.preventDefault();
@@ -303,7 +312,7 @@ function buildPanel() {
     h(
       'div',
       { class: 'chat-head' },
-      h('strong', {}, t(scope === 'library' ? 'libraryChat.title' : 'chat.tab')),
+      h('strong', { id: 'chat-title' }, titleText()),
       h(
         'button',
         {
@@ -313,7 +322,7 @@ function buildPanel() {
           'aria-label': t('chat.clear'),
           onclick: async () => {
             if (!jobId) return;
-            await (scope === 'library' ? window.api.clearLibraryChat() : window.api.clearChat(jobId));
+            await (scope === 'project' ? window.api.clearProjectChat(proj!.id) : scope === 'library' ? window.api.clearLibraryChat() : window.api.clearChat(jobId));
             history = [];
             error = '';
             renderMessages();
@@ -325,6 +334,17 @@ function buildPanel() {
     ),
     h('div', { class: 'chat-messages', id: 'chat-messages' }),
     ...(scope === 'doc' ? [h('div', { class: 'chat-quick' }, quick('chat.summary', 'chat.summaryPrompt'), quick('chat.keyPoints', 'chat.keyPointsPrompt'))] : []),
+    ...(scope === 'project'
+      ? [
+          h(
+            'div',
+            { class: 'chat-quick' },
+            ...(['1', '2', '3'] as const).map((n) =>
+              h('button', { class: 'btn', onclick: () => (field.value = t(`projectChat.q${n}Prompt`), field.focus()) }, t(`projectChat.q${n}`)),
+            ),
+          ),
+        ]
+      : []),
     h('label', { class: 'chat-folder', id: 'chat-folder', hidden: true }),
     h(
       'div',
@@ -350,7 +370,7 @@ async function load() {
   error = '';
   try {
     const [messages, s, local, remote] = await Promise.all([
-      scope === 'library' ? window.api.libraryChat() : window.api.jobChat(id),
+      scope === 'project' ? window.api.projectChat(proj!.id) : scope === 'library' ? window.api.libraryChat() : window.api.jobChat(id),
       window.api.getSettings(),
       window.api.lmStatus('local').catch(() => null),
       window.api.lmStatus('openrouter').catch(() => null),
@@ -374,7 +394,7 @@ function syncRail() {
   const bar = $('chat-bar');
   bar.hidden = jobId === null;
   bar.classList.toggle('active', open);
-  bar.title = t(open ? 'chat.hide' : scope === 'library' ? 'libraryChat.show' : 'chat.show');
+  bar.title = t(open ? 'chat.hide' : scope === 'project' ? 'projectChat.show' : scope === 'library' ? 'libraryChat.show' : 'chat.show');
   bar.setAttribute('aria-label', bar.title);
 }
 
@@ -392,9 +412,9 @@ function setOpen(value: boolean) {
 /** Panel se otevře až na žádost, historie se načte pro aktuální úlohu. */
 export function showChat(j: Job) {
   // Dokument otevřený z citace: panel zůstane v rozsahu knihovna.
-  if (scope === 'library' && viaCite) return;
+  if (scope !== 'doc' && viaCite) return;
   if (scope === 'doc' && jobId === j.id) return;
-  const fromLibrary = scope === 'library';
+  const fromLibrary = scope !== 'doc';
   scope = 'doc';
   jobId = j.id;
   job = j;
@@ -405,8 +425,31 @@ export function showChat(j: Job) {
 
 /** Chat s celou knihovnou ve view Knihovna; panel se otevře až na žádost (nebo znovu, byl-li otevřený). */
 export function showLibraryChat() {
-  scope = 'library';
-  jobId = LIBRARY_CHAT;
+  // Po návratu do Knihovny s vybraným projektem zůstává chat projektu.
+  if (scope === 'project' && proj) return enter('project', projectChatKey(proj.id));
+  enter('library', LIBRARY_CHAT);
+}
+
+/** Chat projektu ve view Knihovna; null = výběr už není projekt, panel se vrátí k chatu s knihovnou. Volá se při každém překreslení. */
+export function showProjectChat(p: Project | null) {
+  if (!p) {
+    if (scope !== 'project') return;
+    proj = null;
+    return enter('library', LIBRARY_CHAT);
+  }
+  if (scope === 'project' && proj?.id === p.id) {
+    proj = p;
+    const title = document.getElementById('chat-title');
+    if (title) title.textContent = titleText();
+    return;
+  }
+  proj = p;
+  enter('project', projectChatKey(p.id));
+}
+
+function enter(next: 'library' | 'project', key: string) {
+  scope = next;
+  jobId = key;
   job = null;
   syncRail();
   if (restore) {
@@ -433,7 +476,7 @@ export const openChat = () => setOpen(true);
 
 /** Mimo detail úlohy se panel zavře. */
 export function resetChat() {
-  if (open) restore = scope === 'library';
+  if (open) restore = scope !== 'doc';
   jobId = null;
   if (open) setOpen(false);
   syncRail();
