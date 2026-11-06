@@ -4124,3 +4124,197 @@ button.folder-toggle:hover {
   border-style: dashed;
   color: var(--muted);
 }
+
+/* Zvýraznění a poznámky v dokumentu; stránky PDF jsou vždy bílé, proto mají rámečky světlé barvy. */
+:root {
+  --hl-yellow: #fde68a;
+  --hl-green: #bbf7d0;
+  --hl-blue: #bfdbfe;
+  --hl-pink: #fbcfe8;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --hl-yellow: #7a5f12;
+    --hl-green: #1f5a36;
+    --hl-blue: #1e4372;
+    --hl-pink: #6e2450;
+  }
+}
+
+.hl-yellow { --hl: var(--hl-yellow); --hl-paper: #fde68a; }
+.hl-green { --hl: var(--hl-green); --hl-paper: #bbf7d0; }
+.hl-blue { --hl: var(--hl-blue); --hl-paper: #bfdbfe; }
+.hl-pink { --hl: var(--hl-pink); --hl-paper: #fbcfe8; }
+
+mark.hl {
+  border-radius: 2px;
+  background: var(--hl);
+  color: inherit;
+  cursor: pointer;
+}
+
+mark.hl.has-note {
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+
+.hl-box {
+  position: absolute;
+  border-radius: 3px;
+  background: var(--hl-paper);
+  mix-blend-mode: multiply;
+  pointer-events: none;
+}
+
+.highlights-hidden mark.hl {
+  background: none;
+  text-decoration: none;
+  cursor: auto;
+}
+
+.highlights-hidden .hl-box {
+  display: none;
+}
+
+mark.hl.hl-flash,
+.hl-box.hl-flash {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.hl-pop {
+  position: fixed;
+  z-index: 110;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  max-width: 320px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.hl-pop-note {
+  flex-direction: column;
+  align-items: stretch;
+  width: 300px;
+}
+
+.hl-note-input {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  font: inherit;
+}
+
+.hl-pop-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.hl-pop-text {
+  flex-basis: 100%;
+  margin: 0 0 2px;
+  max-height: 120px;
+  overflow: auto;
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+.hl-pop-btn {
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.hl-swatch {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--text) 25%, transparent);
+  border-radius: 50%;
+  background: var(--hl);
+  cursor: pointer;
+}
+
+.hl-swatch.active {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.hl-overview-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.hl-overview-head h2 {
+  margin-right: auto;
+}
+
+.hl-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hl-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.hl-item {
+  display: flex;
+  flex: 1;
+  gap: 10px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.hl-item:hover {
+  background: var(--raised);
+}
+
+.hl-dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--hl);
+}
+
+.hl-item-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.hl-item-text q {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.hl-item-note {
+  font-style: italic;
+  white-space: pre-wrap;
+}

@@ -23,7 +23,7 @@ import { resolveLang, setLang, t, type MessageKey } from '../shared/i18n';
 import { LIBRARY_CHAT, projectChatKey, TRASH_DAYS } from '../shared/folders';
 import { languageName } from '../shared/languages';
 import { findRegion, normalizeCrop } from '../shared/regions';
-import type { ChatModel, DocumentCard, DuplicateMatch, Project, ProjectKind, Job, Library, LibraryFolder, JobOptions, Mode, OrganizePlan, OutputKind, Placement, Provider, RegionTranslation, Settings, Stage } from '../shared/types';
+import type { ChatModel, DocumentCard, DuplicateMatch, Highlight, Project, ProjectKind, Job, Library, LibraryFolder, JobOptions, Mode, OrganizePlan, OutputKind, Placement, Provider, RegionTranslation, Settings, Stage } from '../shared/types';
 import { isOnline } from '../shared/provider';
 import { makeCard } from './make-card';
 import { answerQuestion, applyPlan, mergeFolders, moveDocs, moveFolder, removeFolder, shouldBeLocked, undoPlacement } from './library';
@@ -371,6 +371,11 @@ function registerIpc() {
   });
   ipcMain.handle('job-translate-segments', (_e, id: string, ids: number[]) => queue.translateSegments(id, ids));
   ipcMain.handle('job-regions', (_e, id: string) => store.regions(id));
+  ipcMain.handle('job-highlights', (_e, id: string) => store.highlights(id));
+  ipcMain.handle('job-highlights-save', async (_e, id: string, list: Highlight[]) => {
+    if (!(await store.job(id))) throw new Error(t('highlight.missing'));
+    await store.saveHighlights(id, list);
+  });
   ipcMain.handle('job-translate-region', async (_e, id: string, page: number, crop: RegionTranslation['crop'], replaces?: RegionTranslation['crop']) => {
     const job = await store.job(id);
     if (!job) throw new Error(t('study.noJob'));

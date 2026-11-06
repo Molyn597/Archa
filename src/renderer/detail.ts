@@ -9,6 +9,7 @@ import { findRegion, moveCrop, normalizeCrop, resizeCrop, type Handle } from '..
 import { authorsText, BIBLIO_FIELDS, DOC_TYPES, FACT_FIELDS, parseAuthors } from '../shared/card';
 import type { Biblio, DocFacts, DocType, DocumentCard, DocumentContext, Job, JobDetail, Mode, RegionTranslation, Segment, Stage } from '../shared/types';
 import { resetChat, setupChat, showChat } from './chat';
+import { highlightCount, highlightsHidden, highlightsSection, loadHighlights, paint, resetHighlights, setHidden, setupHighlights } from './highlights';
 import { createPages, releasePages, setupPdfZoom } from './pdf-zoom';
 import {
   cleanError,
@@ -970,7 +971,7 @@ function infoView(detail: JobDetail) {
       timings.map(([stage, s]) => `${stageName(stage)}: ${duration(s)}`).join(' · '),
     );
   }
-  const box = h('div', { class: 'info-view' }, cardSection(job), dl);
+  const box = h('div', { class: 'info-view' }, cardSection(job), highlightsSection(), dl);
   if (job.error) box.prepend(h('div', { class: 'error-box' }, job.error));
   const warned = segments.filter((s) => s.warning);
   if (warned.length) {
@@ -994,6 +995,7 @@ async function renderBody() {
   }
   const { job, segments } = current;
   $('regions-toggle').hidden = !(job.ext.toLowerCase() === '.pdf' && (tab === 'original' || tab === 'side-by-side'));
+  syncHighlightsToggle();
   if (tab === 'info') return body.replaceChildren(infoView(current));
   if (tab === 'original' || tab === 'translated-pdf' || tab === 'side-by-side') {
     body.replaceChildren(h('p', { class: 'muted' }, t('detail.loading')));
@@ -1012,6 +1014,7 @@ async function renderBody() {
         body.replaceChildren(view);
         renderedTab = tab;
         applyCite();
+        paint();
       }
     } catch (e) {
       const what = tab === 'original' ? 'detail.tab.original' : tab === 'side-by-side' ? 'detail.tab.sideBySide' : 'detail.translatedPdf';
@@ -1033,6 +1036,7 @@ async function renderBody() {
   body.replaceChildren(tab === 'compare' ? compareView(visible(segments)) : documentView(visible(segments).filter((s) => !s.skipped), finalText));
   renderedTab = tab;
   applyCite();
+  paint();
 }
 
 function renderHeader() {
@@ -1053,6 +1057,7 @@ export async function openDetail(id: string, initialTab: Tab = 'compare') {
   if (!detail) return false;
   current = detail;
   clearCite();
+  await loadHighlights(id);
   showChat(detail.job);
   tab = initialTab;
   picking = false;
@@ -1082,6 +1087,18 @@ export async function updateDetail(job: Job) {
   }
 }
 
+/** Textové zobrazení, ve kterém jde označovat (PDF a výběr odstavců ne). */
+const textView = () =>
+  !isPicking() && (renderedTab === 'compare' || renderedTab === 'translation' || (renderedTab === 'original' && current?.job.ext.toLowerCase() !== '.pdf'));
+
+function syncHighlightsToggle() {
+  const button = $('highlights-toggle');
+  button.hidden = tab === 'info' || !highlightCount();
+  const label = t(highlightsHidden() ? 'highlight.show' : 'highlight.hide');
+  button.replaceChildren(icon(highlightsHidden() ? ICONS.eyeOff : ICONS.eye), label);
+  button.title = label;
+}
+
 function syncRegionsToggle() {
   const label = t(regionsHidden ? 'region.show' : 'region.hide');
   $('regions-toggle').replaceChildren(icon(regionsHidden ? ICONS.eyeOff : ICONS.eye), label);
@@ -1091,6 +1108,22 @@ function syncRegionsToggle() {
 export function setupDetail(onBack: () => void, openSettings: () => void) {
   setupChat({ segments: () => current?.segments ?? [], cite: showCite, openSettings });
   setupPdfZoom();
+  setupHighlights({
+    body: $('detail-body'),
+    current: () => current,
+    textView,
+    pageWraps: () => pageWraps,
+    showCompare: () => {
+      clearCite();
+      tab = 'compare';
+      void renderBody();
+    },
+    changed: () => {
+      syncHighlightsToggle();
+      if (tab === 'info' && current) $('detail-body').replaceChildren(infoView(current));
+    },
+  });
+  $('highlights-toggle').addEventListener('click', () => setHidden(!highlightsHidden()));
   $('detail-back').addEventListener('click', onBack);
   syncRegionsToggle();
   $('regions-toggle').addEventListener('click', () => {
@@ -1120,5 +1153,6 @@ export function closeDetail() {
   renderToken++;
   releasePages();
   clearCite();
+  resetHighlights();
   resetChat();
 }

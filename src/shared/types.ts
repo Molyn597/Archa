@@ -354,6 +354,26 @@ export interface JobOptions {
   provider?: Provider;
 }
 
+export type HighlightColor = 'yellow' | 'green' | 'blue' | 'pink';
+/** Zvýraznění textu v dokumentu s volitelnou poznámkou (highlights.json ve složce úlohy; u zamčeného šifrovaně). */
+export interface Highlight {
+  id: string;
+  /** Originál nebo překlad. */
+  side: 'source' | 'target';
+  /** První a poslední segment výběru. */
+  from: number;
+  to: number;
+  /** Označený text; podle něj se zvýraznění v segmentech dohledá (pozice se mezi zobrazeními liší). */
+  quote: string;
+  /** Začátek výběru v textu prvního segmentu (znaky bez mezer) – rozliší opakovaný citát. */
+  hint: number;
+  page?: number;
+  color: HighlightColor;
+  note?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
 /** Oblast stránky přeložená na vyžádání (study.json ve složce úlohy). */
 export interface RegionTranslation {
   page: number;
@@ -523,6 +543,9 @@ export interface Api {
   /** `replaces` = původní výřez, který se po úspěchu nahradí (a nevrátí se uložený překlad). */
   translateRegion(id: string, page: number, crop: RegionTranslation['crop'], replaces?: RegionTranslation['crop']): Promise<RegionTranslation>;
   deleteRegion(id: string, page: number, crop: RegionTranslation['crop']): Promise<void>;
+  jobHighlights(id: string): Promise<Highlight[]>;
+  /** Uloží celý seznam zvýraznění dokumentu. */
+  saveHighlights(id: string, list: Highlight[]): Promise<void>;
   jobChat(id: string): Promise<ChatMessage[]>;
   /** Odpověď na dotaz k dokumentu; otázka i odpověď se uloží do historie. */
   askDocument(id: string, question: string, model?: ChatModel): Promise<ChatMessage>;

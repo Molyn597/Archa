@@ -2,9 +2,10 @@ import { access, mkdir, readFile, readdir, rm, writeFile, rename } from 'node:fs
 import path from 'node:path';
 import { t } from '../shared/i18n';
 import { RECOMMENDED_REMOTE_MODEL } from '../shared/provider';
+import { cleanHighlights } from '../shared/highlights';
 import { defaultLibrary } from './library';
 import { decrypt, encrypt } from './vault';
-import type { ChatMessage, DocumentCard, Job, Library, Project, Rates, RegionTranslation, Segment, Settings } from '../shared/types';
+import type { ChatMessage, DocumentCard, Highlight, Job, Library, Project, Rates, RegionTranslation, Segment, Settings } from '../shared/types';
 
 export const DEFAULT_SETTINGS: Settings = {
   uiLang: 'system',
@@ -61,7 +62,7 @@ async function listFiles(dir: string, sub = ''): Promise<string[]> {
   return out;
 }
 
-/** Úložiště pod userData: settings.json, library.json, library-chat.json, jobs/<id>/{job.json, segments.json, study.json, chat.json, card.json, vstup, výstup} a projects/<id>/project.json. */
+/** Úložiště pod userData: settings.json, library.json, library-chat.json, jobs/<id>/{job.json, segments.json, study.json, highlights.json, chat.json, card.json, vstup, výstup} a projects/<id>/project.json. */
 export class Store {
   constructor(readonly root: string) {}
 
@@ -252,6 +253,8 @@ export class Store {
   saveSegments = (id: string, segments: Segment[]) => this.writeJson(path.join(this.jobDir(id), 'segments.json'), segments);
   regions = (id: string) => this.readJson<{ regions: RegionTranslation[] }>(path.join(this.jobDir(id), 'study.json'), { regions: [] }).then((s) => s.regions);
   saveRegions = (id: string, regions: RegionTranslation[]) => this.writeJson(path.join(this.jobDir(id), 'study.json'), { regions });
+  highlights = (id: string) => this.readJson<unknown>(path.join(this.jobDir(id), 'highlights.json'), []).then(cleanHighlights);
+  saveHighlights = (id: string, list: Highlight[]) => this.writeJson(path.join(this.jobDir(id), 'highlights.json'), cleanHighlights(list));
   chat = (id: string) => this.readJson<ChatMessage[]>(path.join(this.jobDir(id), 'chat.json'), []);
   saveChat = (id: string, messages: ChatMessage[]) => this.writeJson(path.join(this.jobDir(id), 'chat.json'), messages);
   libraryChat = () => this.readJson<ChatMessage[]>(path.join(this.root, 'library-chat.json'), []);
