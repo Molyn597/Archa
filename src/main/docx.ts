@@ -80,12 +80,12 @@ export async function loadFigures(read: (file: string) => Promise<Buffer>, segme
   return images;
 }
 
-export async function buildDocx(title: string, segments: Segment[], images: Map<string, Buffer> = new Map()): Promise<Buffer> {
+export async function buildDocx(title: string, segments: Segment[], images: Map<string, Buffer> = new Map(), textOf: (s: Segment) => string = finalText): Promise<Buffer> {
   const children: (Paragraph | Table)[] = [];
   for (const s of visibleSegments(segments)) {
     const figure = figureParagraph(s, images);
     if (figure && s.snapshot?.position === 'before') children.push(figure);
-    const text = finalText(s);
+    const text = textOf(s);
     const spans = linkSpans(s, text);
     if (s.kind === 'heading') {
       children.push(new Paragraph({ children: inline(text, 0, text.length, spans), heading: children.length ? HeadingLevel.HEADING_2 : HeadingLevel.TITLE }));

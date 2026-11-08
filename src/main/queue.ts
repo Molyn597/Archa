@@ -91,6 +91,7 @@ export class Queue {
     await mkdir(this.store.jobDir(job.id), { recursive: true });
     await copyFile(file, this.store.inputPath(job));
     await this.enqueue(job);
+    return job.id;
   }
 
   async retry(id: string, mode: Mode, targetLang?: string) {

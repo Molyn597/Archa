@@ -27,6 +27,9 @@ import type { ChatModel, DocumentCard, Libraries, LibraryKind, DuplicateMatch, H
 import { isOnline } from '../shared/provider';
 import { exportTable, invoiceRows, isoDay, toCsv } from '../shared/invoices';
 import { buildXlsx } from './xlsx';
+import { buildDocx, loadFigures } from './docx';
+import { originalText } from './segments';
+import { isTranslated } from '../shared/detail-tabs';
 import { makeCard } from './make-card';
 import { answerQuestion, applyPlan, markOpened, mergeFolders, moveDocs, moveFolder, removeFolder, shouldBeLocked, undoPlacement } from './library';
 import { organizeFolder, suggestMerges } from './organize';
@@ -325,14 +328,16 @@ function registerIpc() {
   });
   ipcMain.handle('jobs-add', async (_e, paths: string[], options: JobOptions) => {
     const errors: string[] = [];
+    const ids: string[] = [];
     for (const p of paths) {
       try {
-        await queue.add(p, options);
+        ids.push(await queue.add(p, options));
       } catch (e) {
         errors.push(`${path.basename(p)}: ${(e as Error).message}`);
       }
     }
     if (errors.length) throw new Error(errors.join('\n'));
+    return ids;
   });
   ipcMain.handle('jobs', () => store.jobs());
   // Shodné soubory v knihovně (i v koši); zamčené dokumenty jen s odemčeným trezorem.
@@ -702,6 +707,26 @@ function registerIpc() {
     // Typ se pozná podle přípony, kterou dialog doplní podle zvoleného filtru; zamčený dokument se uloží dešifrovaný.
     const name = pdf && path.extname(res.filePath).toLowerCase() === '.pdf' ? job.outputPdf! : job.output!;
     await writeFile(res.filePath, await store.readJobFile(id, name));
+  });
+  // Word z knihovny: překlad = hotový výstup, originál = výstup (nepřeložený dokument) nebo Word sestavený ze zdrojového textu.
+  ipcMain.handle('job-save-word', async (_e, id: string, which: 'original' | 'translation') => {
+    const job = await store.job(id);
+    if (!job?.output) return null;
+    const segments = await store.segments(id);
+    const rebuild = which === 'original' && isTranslated(job, segments);
+    const base = path.parse(job.output).name;
+    const res = await dialog.showSaveDialog(win!, {
+      defaultPath: path.join(app.getPath('documents'), rebuild ? `${base} (${t('detail.word.originalSuffix')}).docx` : job.output),
+      filters: [{ name: 'Word', extensions: ['docx'] }],
+    });
+    if (res.canceled || !res.filePath) return null;
+    // Zamčený dokument se čte dešifrovaný jen v paměti a zapíše se až na zvolené místo.
+    const data = rebuild
+      ? // Originál celý, i odstavce nevybrané k překladu.
+        await buildDocx(job.name, segments.map((s) => ({ ...s, skipped: false })), await loadFigures((file) => store.readJobFile(id, file), segments), originalText)
+      : await store.readJobFile(id, job.output);
+    await writeFile(res.filePath, data);
+    return res.filePath;
   });
 }
 

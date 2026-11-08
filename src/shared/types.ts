@@ -567,7 +567,7 @@ export interface Api {
   openUrl(url: string): Promise<void>;
   pickFiles(): Promise<string[]>;
   pathForFile(file: File): string;
-  addJobs(paths: string[], options: JobOptions): Promise<void>;
+  addJobs(paths: string[], options: JobOptions): Promise<string[]>;
   listJobs(): Promise<Job[]>;
   getJob(id: string): Promise<JobDetail | null>;
   readInput(id: string): Promise<Uint8Array | null>;
@@ -694,6 +694,8 @@ export interface Api {
   openOutput(id: string, kind?: OutputKind): Promise<void>;
   revealOutput(id: string): Promise<void>;
   saveOutputAs(id: string): Promise<void>;
+  /** Uloží Word přes systémový dialog; vrátí cestu, nebo null při zrušení. */
+  saveWord(id: string, which: 'original' | 'translation'): Promise<string | null>;
   onJobUpdate(handler: (job: Job) => void): void;
   onJobRemoved(handler: (id: string) => void): void;
   onChatProgress(handler: (p: ChatProgress) => void): void;

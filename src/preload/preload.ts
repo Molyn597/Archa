@@ -96,6 +96,7 @@ const api: Api = {
   openOutput: (id, kind) => ipcRenderer.invoke('job-open', id, kind),
   revealOutput: (id) => ipcRenderer.invoke('job-reveal', id),
   saveOutputAs: (id) => ipcRenderer.invoke('job-save-as', id),
+  saveWord: (id, which) => ipcRenderer.invoke('job-save-word', id, which),
   onChatProgress: (handler) => ipcRenderer.on('chat-progress', (_e, p) => handler(p)),
   onChatDelta: (handler) => ipcRenderer.on('chat-delta', (_e, d) => handler(d)),
   onJobUpdate: (handler) => ipcRenderer.on('job-update', (_e, job) => handler(job)),

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildDocx } from '../src/main/docx';
+import { originalText } from '../src/main/segments';
 import type { Segment } from '../src/shared/types';
 
 describe('buildDocx', () => {
@@ -77,5 +78,27 @@ describe('buildDocx s výřezem originálu', () => {
     expect(before.indexOf('<w:drawing')).toBeLessThan(before.indexOf('Tabulka 1'));
     const none = await JSZip.loadAsync(await buildDocx('Test', [caption('before')]));
     expect(Object.keys(none.files).some((f) => f.startsWith('word/media/'))).toBe(false);
+  });
+});
+
+describe('buildDocx jen s originálem', () => {
+  it('místo překladu vloží zdrojový text a zachová odkazy', async () => {
+    const segments: Segment[] = [
+      { id: 0, kind: 'heading', source: 'OriginalTitle', translation: 'PrelozenyNazev' },
+      {
+        id: 1,
+        kind: 'paragraph',
+        source: 'Read the report by Bersin today.',
+        translation: 'Přečtěte si dnes zprávu od Bersin.',
+        edited: 'UpravenyPreklad',
+        links: [{ url: 'http://www.bersin.com/', source: 'report by Bersin', target: 'zprávu od Bersin', rects: [] }],
+      },
+    ];
+    const { default: JSZip } = await import('jszip');
+    const xml = await (await JSZip.loadAsync(await buildDocx('Test', segments, new Map(), originalText))).file('word/document.xml')!.async('string');
+    expect(xml).toContain('OriginalTitle');
+    expect(xml).not.toContain('PrelozenyNazev');
+    expect(xml).not.toContain('UpravenyPreklad');
+    expect(xml).toMatch(/<w:hyperlink[^>]*>.*report by Bersin.*<\/w:hyperlink>/);
   });
 });

@@ -41,21 +41,23 @@ let libraryState: LibraryState = { library: { folders: [], assign: {} }, cards: 
 let projects: Project[] = [];
 let libraryName = '';
 
-/** Přidá soubory z Přehledu: nejdřív kontrola duplicit, pak rovnou do fronty. */
-export async function addToLibrary(paths: string[]) {
-  if (!paths.length) return;
+/** Přidá soubory z Přehledu: nejdřív kontrola duplicit, pak rovnou do fronty. Vrátí id nově přidaných úloh. */
+export async function addToLibrary(paths: string[], message?: string): Promise<string[]> {
+  if (!paths.length) return [];
   try {
     const dups = await window.api.checkDuplicates(paths);
     if (dups.some((d) => d.length)) {
       host.show('home');
       host.addFiles(paths);
-      return;
+      return [];
     }
     const s = host.settings();
-    await window.api.addJobs(paths, { mode: host.jobMode(), sourceLang: s.sourceLang, targetLang: s.targetLang, keepFigures: s.keepFigures, provider: s.provider });
-    toast(paths.length === 1 ? t('home.queued') : t('home.queuedMany', { count: paths.length }));
+    const ids = await window.api.addJobs(paths, { mode: host.jobMode(), sourceLang: s.sourceLang, targetLang: s.targetLang, keepFigures: s.keepFigures, provider: s.provider });
+    toast(message ?? (paths.length === 1 ? t('home.queued') : t('home.queuedMany', { count: paths.length })));
+    return ids;
   } catch (e) {
     toast(cleanError(e), true);
+    return [];
   }
 }
 

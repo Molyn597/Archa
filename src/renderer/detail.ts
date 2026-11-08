@@ -238,6 +238,8 @@ interface Tool {
   primary?: boolean;
   /** Tlačítko je během práce zamčené, chyba se ukáže jako hláška. */
   run: () => unknown;
+  /** Místo přímého spuštění otevře malé menu s volbami. */
+  options?: { label: string; run: () => unknown }[];
 }
 
 /** Lišta nástrojů pod hlavičkou; další nástroj se přidá do seznamu. */
@@ -246,7 +248,27 @@ function tools(job: Job): Tool[] {
     { label: t('detail.tool.ask'), icon: ICONS.chat, primary: true, run: openChat },
     { label: t('detail.tool.translate'), icon: ICONS.translate, run: () => translateTool(job) },
     { label: t('detail.tool.extract'), icon: ICONS.list, run: () => extractTool(job) },
+    wordTool(job),
   ];
+}
+
+async function saveWord(job: Job, which: 'original' | 'translation') {
+  const file = await window.api.saveWord(job.id, which);
+  if (file) toast(t('detail.word.saved', { path: file }));
+}
+
+/** Nepřeložený dokument uloží originál rovnou, přeložený nabídne Překlad / Originál. */
+function wordTool(job: Job): Tool {
+  const base = { label: t('detail.tool.word'), icon: ICONS.file };
+  if (!translated) return { ...base, run: () => saveWord(job, 'original') };
+  return {
+    ...base,
+    run: () => {},
+    options: [
+      { label: t('detail.word.translation'), run: () => saveWord(job, 'translation') },
+      { label: t('detail.word.original'), run: () => saveWord(job, 'original') },
+    ],
+  };
 }
 
 /** Přeložený dokument: přepne na Překlad. Jinak ho přeloží do výchozího cílového jazyka (nová úloha jako „Přeložit znovu“). */
@@ -1152,6 +1174,19 @@ function renderTools(job: Job) {
   bar.hidden = job.status !== 'done';
   bar.replaceChildren(
     ...tools(job).map((tool) => {
+      if (tool.options) {
+        const menu = actionMenu(tool.options.map((o) => ({ label: o.label, run: o.run })));
+        const trigger = h('button', { class: 'btn tool', type: 'button', 'aria-haspopup': 'menu' }, icon(tool.icon), tool.label);
+        // actionMenu má vlastní tlačítko „⋯“; použije se jen jeho nabídka.
+        const list = menu.querySelector<HTMLElement>('.menu')!;
+        trigger.onclick = (e) => {
+          e.stopPropagation();
+          const open = list.hidden;
+          for (const m of document.querySelectorAll<HTMLElement>('.menu')) m.hidden = true;
+          list.hidden = !open;
+        };
+        return h('div', { class: 'menu-wrap' }, trigger, list);
+      }
       const button = h('button', { class: `btn tool${tool.primary ? ' primary' : ''}`, type: 'button' }, icon(tool.icon), tool.label);
       button.onclick = async () => {
         button.disabled = true;

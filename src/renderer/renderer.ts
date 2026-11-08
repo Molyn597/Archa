@@ -32,6 +32,7 @@ import {
   statusIcon,
   STATUS_TEXT,
   toast,
+  toastAction,
 } from './dom';
 import { updateCard } from './update';
 import { fillHelpDots, renderHelp, scrollToTopic } from './help-view';
@@ -86,7 +87,29 @@ function show(next: View) {
 }
 
 // Nástroje pod hlavním menu; další se přidají jedním řádkem (nav = view, který otevřou).
-const TOOLS: { nav: View; label: MessageKey; icon: string }[] = [{ nav: 'home', label: 'nav.translate', icon: ICONS.translate }];
+const TOOLS: { nav?: View; run?: () => void; label: MessageKey; icon: string }[] = [
+  { nav: 'home', label: 'nav.translate', icon: ICONS.translate },
+  { run: () => void pdfToWord(), label: 'nav.pdfToWord', icon: ICONS.file },
+];
+
+/** Id jediného souboru z „PDF do Wordu“, na jehož dokončení čeká nabídka uložení. */
+let wordJobId: string | undefined;
+
+async function pdfToWord() {
+  const paths = await window.api.pickFiles();
+  const ids = await addToLibrary(paths, t('tool.pdfToWord.queued'));
+  wordJobId = ids.length === 1 ? ids[0] : undefined;
+}
+
+function offerWord(job: Job) {
+  wordJobId = undefined;
+  toastAction(t('tool.pdfToWord.ready', { name: job.name }), t('tool.pdfToWord.save'), () => {
+    window.api
+      .saveWord(job.id, 'original')
+      .then((file) => file && toast(t('detail.word.saved', { path: file })))
+      .catch((e) => toast(cleanError(e), true));
+  });
+}
 
 // Pohledy Dokumentů, které mají vlastní položku v menu (zvýrazní se místo Dokumentů), a nadpis stránky pro ostatní.
 const VIEW_NAV: Partial<Record<LibraryView, NavId>> = { invoices: 'invoices', deadlines: 'deadlines', literature: 'literature' };
@@ -732,7 +755,9 @@ async function init() {
   await refreshVault();
 
   $('nav-tools').replaceChildren(
-    ...TOOLS.map((tool) => h('button', { class: 'nav-item', 'data-nav': tool.nav }, icon(tool.icon), h('span', {}, t(tool.label)))),
+    ...TOOLS.map((tool) =>
+      h('button', { class: 'nav-item', ...(tool.nav ? { 'data-nav': tool.nav } : { onclick: () => tool.run?.() }) }, icon(tool.icon), h('span', {}, t(tool.label))),
+    ),
   );
   for (const b of document.querySelectorAll<HTMLButtonElement>('.nav-item[data-nav]')) b.addEventListener('click', () => onNavClick(b.dataset.nav as View | NavId));
   setupNavToggle();
@@ -797,6 +822,10 @@ async function init() {
   window.api.onJobUpdate((job) => {
     const wasActive = jobs.get(job.id) && isActive(jobs.get(job.id)!);
     jobs.set(job.id, job);
+    if (job.id === wordJobId) {
+      if (job.status === 'done') offerWord(job);
+      else if (job.status === 'error' || job.status === 'cancelled') wordJobId = undefined;
+    }
     renderHome();
     if (view === 'history') renderLibrary();
     if (detailJobId() === job.id) void updateDetail(job);
