@@ -6,7 +6,7 @@ import { languageName } from '../shared/languages';
 import { PDFJS_OPTIONS } from '../shared/pdf';
 import { isOnline } from '../shared/provider';
 import { findRegion, moveCrop, normalizeCrop, resizeCrop, type Handle } from '../shared/regions';
-import { authorsText, BIBLIO_FIELDS, DOC_TYPES, FACT_FIELDS, parseAuthors } from '../shared/card';
+import { authorsText, BIBLIO_FIELDS, CONTRACT_FACTS, DOC_TYPES, FACT_FIELDS, INVOICE_FACTS, parseAuthors } from '../shared/card';
 import type { Biblio, DocFacts, DocType, DocumentCard, DocumentContext, Job, JobDetail, Mode, RegionTranslation, Segment, Stage } from '../shared/types';
 import { resetChat, setupChat, showChat } from './chat';
 import { highlightCount, highlightsHidden, highlightsSection, loadHighlights, paint, resetHighlights, setHidden, setupHighlights } from './highlights';
@@ -838,7 +838,7 @@ function cardSection(job: Job) {
       h('div', { class: 'chips' }, h('span', { class: 'chip accent' }, t(`docType.${card.type}` as MessageKey)), ...card.keywords.map((k) => h('span', { class: 'chip' }, k)), card.edited && h('span', { class: 'chip' }, t('card.edited'))),
       ...(card.folder ? [line(t('card.folder'), card.folder)] : []),
       ...(facts.length ? [h('div', { class: 'card-biblio' }, h('h3', {}, t('card.biblio')), ...facts)] : []),
-      ...(docFacts.length ? [h('div', { class: 'card-biblio' }, h('h3', {}, t('card.facts')), ...docFacts)] : []),
+      ...(docFacts.length ? [h('div', { class: 'card-biblio' }, h('h3', {}, t('card.facts')), ...(card.factsFrom === 'isdoc' ? [h('div', { class: 'chips' }, h('span', { class: 'chip accent' }, t('card.facts.isdoc')))] : []), ...docFacts)] : []),
     );
   }
 
@@ -877,7 +877,12 @@ function cardSection(job: Job) {
       ...FACT_FIELDS.map((k) => field(t(`card.facts.${k}` as MessageKey), factInputs[k])),
       field(`${t('card.facts.parties')} (${t('card.facts.partiesHint')})`, parties),
     );
-    const syncFacts = () => (factsBox.hidden = type.value !== 'invoice' && type.value !== 'contract');
+    // Ukáže se jen pole patřící k zvolenému typu.
+    const syncFacts = () => {
+      const shown: readonly string[] = type.value === 'invoice' ? INVOICE_FACTS : type.value === 'contract' ? CONTRACT_FACTS : [];
+      factsBox.hidden = !shown.length;
+      FACT_FIELDS.forEach((k) => ((factInputs[k].parentElement as HTMLElement).hidden = !shown.includes(k)));
+    };
     type.onchange = syncFacts;
     syncFacts();
     const save = h('button', { class: 'btn primary' }, t('card.save'));
@@ -889,7 +894,8 @@ function cardSection(job: Job) {
       for (const k of BIBLIO_FIELDS) if (k !== 'title') biblio[k] = text(inputs[k].value);
       const hasFacts = type.value === 'invoice' || type.value === 'contract';
       const facts: DocFacts = {};
-      for (const k of FACT_FIELDS) facts[k] = text(factInputs[k].value);
+      const kept: readonly string[] = type.value === 'invoice' ? INVOICE_FACTS : CONTRACT_FACTS;
+      for (const k of FACT_FIELDS) if (kept.includes(k)) facts[k] = text(factInputs[k].value);
       facts.parties = [...new Set(parties.value.split('\n').map((p) => p.trim()).filter(Boolean))];
       if (!facts.parties.length) delete facts.parties;
       const factsClean = Object.fromEntries(Object.entries(facts).filter(([, v]) => v !== undefined)) as DocFacts;

@@ -31,6 +31,7 @@ export async function makeCard(store: Store, job: Job, settings: Settings, chang
   const out = await ask(llm, 'polish', [{ role: 'user', content: cardPrompt(sample, job.targetLang, openPaths((await store.library()).folders)) }], CARD_TOKENS);
   const card = parseCard(out, job.targetLang);
   if (!card) throw new Error(t('card.unreadable'));
+  await applyIsdoc(store, job, card);
   await refineFolder(llm, store, card, job.targetLang);
   await store.saveCard(job.id, card);
   const placed = await store.updateLibrary((library) => {
@@ -59,5 +60,22 @@ export async function refineFolder(llm: Llm, store: Store, card: DocumentCard, l
     }
     card.folder = folder;
     if (choice.folderSure === false) Object.assign(card, { folderSure: false, folderOptions: (choice.folderOptions ?? []).map((o) => scopedPath(o, target.path)) });
+  }
+}
+
+/** E-faktura ISDOC v příloze PDF: přesné údaje mají přednost před odhadem modelu. Selhání čtení se ignoruje. */
+async function applyIsdoc(store: Store, job: Job, card: DocumentCard) {
+  if (job.ext.toLowerCase() !== '.pdf') return;
+  try {
+    // Dynamicky: pdf.ts potřebuje electron, který testy refineFolder nemají.
+    const { isdocFacts } = await import('./isdoc-pdf');
+    const facts = await isdocFacts(job.id, await store.readInput(job));
+    if (!facts) return;
+    card.type = 'invoice';
+    // Předmět od modelu shrnuje celou fakturu; ISDOC má jen popis první položky.
+    card.facts = { ...card.facts, ...facts, ...(card.facts?.subject && { subject: card.facts.subject }) };
+    card.factsFrom = 'isdoc';
+  } catch {
+    // karta se vytvoří i bez ISDOC
   }
 }

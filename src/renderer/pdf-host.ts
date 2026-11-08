@@ -100,6 +100,17 @@ async function run(task: PdfTask): Promise<unknown> {
       out.getContext('2d')!.drawImage(canvas, -x0 * canvas.width, -y0 * canvas.height);
       return out.toDataURL('image/png');
     }
+    case 'attachments': {
+      // pdf.js 6: Map s metadaty, obsah se načítá zvlášť podle klíče.
+      const pdf = doc(task.docId);
+      const out: { name: string; text: string }[] = [];
+      for (const [id, f] of (await pdf.getAttachments()) ?? []) {
+        if (!/\.isdoc$/i.test(f.filename)) continue;
+        const content = f.content ?? (await pdf.getAttachmentContent(id));
+        if (content) out.push({ name: f.filename, text: new TextDecoder('utf-8').decode(content) });
+      }
+      return out;
+    }
     case 'close':
       await docs.get(task.docId)?.task.destroy();
       docs.delete(task.docId);

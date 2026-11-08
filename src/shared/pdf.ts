@@ -26,7 +26,15 @@ export type PdfTask =
   | { op: 'text'; docId: string; page: number }
   /** crop: výřez [x0, y0, x1, y1] jako podíl šířky/výšky stránky (0–1). */
   | { op: 'render'; docId: string; page: number; scale: number; crop?: [number, number, number, number]; noText?: boolean }
+  /** Textové přílohy PDF s příponou .isdoc (e-faktura). */
+  | { op: 'attachments'; docId: string }
   | { op: 'close'; docId: string };
+
+export interface PdfAttachment {
+  name: string;
+  /** Obsah jako UTF-8 text. */
+  text: string;
+}
 
 export interface PdfOpenResult {
   pages: number;

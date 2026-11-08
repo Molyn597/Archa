@@ -1,4 +1,4 @@
-import { DOC_TYPES, FACT_FIELDS } from '../shared/card';
+import { CONTRACT_FACTS, DOC_TYPES, INVOICE_FACTS } from '../shared/card';
 import type { Author, DocFacts, DocType, DocumentCard, Segment } from '../shared/types';
 import { extractJsonObject } from './review';
 
@@ -24,13 +24,25 @@ const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
 /** Datum D.M.RRRR → RRRR-MM-DD; jiný tvar zůstane beze změny. */
 const isoDate = (v: string) => v.replace(/^(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{4})$/, (_, d: string, m: string, y: string) => `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`);
 
-/** Fakta faktury / smlouvy; bez jediného vyplněného pole undefined. */
-function parseFacts(raw: unknown): DocFacts | undefined {
+const DATE_FACTS = new Set<string>(['issued', 'due', 'validFrom', 'validTo']);
+
+/** DIČ / USt-IdNr.: kód země a číslice. */
+const VAT_ID = /^[A-Z]{2}\s?\d[\d\s]{6,}$/;
+
+/** Fakta faktury / smlouvy jen z polí daného typu; bez jediného vyplněného pole undefined. */
+function parseFacts(raw: unknown, type: 'invoice' | 'contract'): DocFacts | undefined {
   const f = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const facts: DocFacts = {};
-  for (const k of FACT_FIELDS) {
+  for (const k of type === 'invoice' ? INVOICE_FACTS : CONTRACT_FACTS) {
     const v = str(f[k]);
-    if (v) facts[k] = k === 'issued' || k === 'due' ? isoDate(v) : v;
+    if (v) facts[k] = DATE_FACTS.has(k) ? isoDate(v) : v;
+  }
+  // Model občas dá DIČ i do IČO: patří jen do DIČ.
+  for (const [id, vat] of [['supplierId', 'supplierVat'], ['customerId', 'customerVat']] as const) {
+    if (facts[id] && VAT_ID.test(facts[id])) {
+      facts[vat] ??= facts[id];
+      delete facts[id];
+    }
   }
   const parties = [...new Set((Array.isArray(f.parties) ? f.parties : []).map(str).filter(Boolean))];
   if (parties.length) facts.parties = parties;
@@ -62,7 +74,7 @@ export function parseCard(text: string, target: string): DocumentCard | undefine
     .filter((a) => a.family || a.given);
   const opt = (v: unknown) => str(v) || undefined;
   const docType = DOC_TYPES.includes(type as DocType) ? (type as DocType) : 'other';
-  const facts = docType === 'invoice' || docType === 'contract' ? parseFacts(d.facts) : undefined;
+  const facts = docType === 'invoice' || docType === 'contract' ? parseFacts(d.facts, docType) : undefined;
   return {
     summary,
     type: docType,

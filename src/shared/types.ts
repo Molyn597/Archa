@@ -75,6 +75,8 @@ export interface DocumentCard {
   edited?: boolean;
   /** Údaje z faktury nebo smlouvy pro přesné odpovědi chatu s knihovnou. */
   facts?: DocFacts;
+  /** Údaje faktury byly přečtené přesně z přílohy ISDOC (ne odhadem modelu). */
+  factsFrom?: 'isdoc';
 }
 /** Strukturované údaje faktury / smlouvy; jen to, co v dokumentu doslova stojí. Data jako RRRR-MM-DD. */
 export interface DocFacts {
@@ -84,10 +86,27 @@ export interface DocFacts {
   supplier?: string;
   /** Odběratel / příjemce faktury. */
   customer?: string;
-  /** Částka i s měnou, např. „12 500 Kč“. */
+  /** Celkem k úhradě i s měnou, např. „12 500 Kč“. */
   amount?: string;
   issued?: string;
   due?: string;
+  /** Faktura: číslo faktury, variabilní symbol. */
+  number?: string;
+  vs?: string;
+  /** IČO a DIČ dodavatele / odběratele. */
+  supplierId?: string;
+  supplierVat?: string;
+  customerId?: string;
+  customerVat?: string;
+  /** Základ daně a DPH i s měnou. */
+  net?: string;
+  vat?: string;
+  /** Smlouva: platnost od / do (RRRR-MM-DD), automatické prodloužení, sankce, rozhodné právo. */
+  validFrom?: string;
+  validTo?: string;
+  autoRenewal?: string;
+  penalty?: string;
+  law?: string;
   /** Zúčtovací období nebo doba trvání smlouvy. */
   period?: string;
   /** Smluvní strany. */

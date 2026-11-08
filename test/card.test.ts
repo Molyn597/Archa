@@ -90,8 +90,24 @@ describe('parseCard – fakta', () => {
       issued: '2024-03-05',
       due: '2024-03-15',
       parties: ['A', 'B'],
-      notice: '2024-12-31',
     });
+  });
+
+  it('u faktury zahodí pole smlouvy a u smlouvy pole faktury', () => {
+    expect(parseCard(JSON.stringify({ ...invoice, facts: { amount: '1 Kč', notice: '3 měsíce', law: 'české' } }), 'cs')?.facts).toEqual({ amount: '1 Kč' });
+    expect(parseCard(JSON.stringify({ ...VALID, type: 'contract', facts: { notice: '3 měsíce', number: 'FV1', vs: '214', supplier: 'X' } }), 'cs')?.facts).toEqual({ notice: '3 měsíce' });
+  });
+
+  it('DIČ v poli IČO přesune do DIČ', () => {
+    const facts = { supplierId: 'DE298765432', customerId: 'CZ27182818', customerVat: 'CZ27182818' };
+    expect(parseCard(JSON.stringify({ ...invoice, facts }), 'cs')?.facts).toEqual({ supplierVat: 'DE298765432', customerVat: 'CZ27182818' });
+  });
+
+  it('přečte nová pole faktury i smlouvy a převede validFrom/validTo', () => {
+    const facts = { number: 'FV1', vs: '123', supplierId: '12345678', supplierVat: 'CZ12345678', customerId: '87654321', customerVat: 'CZ87654321', net: '1 000 Kč', vat: '210 Kč', amount: '1 210 Kč' };
+    expect(parseCard(JSON.stringify({ ...invoice, facts }), 'cs')?.facts).toEqual(facts);
+    const contract = { validFrom: '1.1.2024', validTo: '2025-12-31', autoRenewal: 'ano', penalty: '0,05 % denně', law: 'české' };
+    expect(parseCard(JSON.stringify({ ...VALID, type: 'contract', facts: contract }), 'cs')?.facts).toEqual({ ...contract, validFrom: '2024-01-01' });
   });
 
   it('jiný tvar data nechá být', () => {

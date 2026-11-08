@@ -117,7 +117,9 @@ export function cardPrompt(sample: string, target: string, folders: string[]) {
     '{"summary": "...", "type": "...", "keywords": ["..."], "folder": "...", "folderSure": true, "folderOptions": [], ' +
     '"biblio": {"authors": [{"family": "...", "given": "..."}], "title": "...", "year": "...", "container": "...", ' +
     '"publisher": "...", "place": "...", "edition": "...", "volume": "...", "issue": "...", "pages": "...", "doi": "...", "url": "..."}, ' +
-    '"facts": {"subject": "...", "supplier": "...", "customer": "...", "amount": "...", "issued": "...", "due": "...", "period": "...", "parties": ["..."], "notice": "..."}}\n' +
+    '"facts": {"subject": "...", "number": "...", "vs": "...", "supplier": "...", "supplierId": "...", "supplierVat": "...", "customer": "...", "customerId": "...", "customerVat": "...", ' +
+    '"net": "...", "vat": "...", "amount": "...", "issued": "...", "due": "...", "validFrom": "...", "validTo": "...", "period": "...", "parties": ["..."], "notice": "...", ' +
+    '"autoRenewal": "...", "penalty": "...", "law": "..."}}\n' +
     `Write summary (3–5 sentences) and keywords (at most 10) in ${lang}. ` +
     'type must be exactly one of: article, book, chapter, thesis, report, contract, invoice, manual, letter, law, web, other. ' +
     `folder is the library folder for the document, written as a path from this folder tree: ${folders.join('; ')}. ` +
@@ -130,7 +132,13 @@ export function cardPrompt(sample: string, target: string, folders: string[]) {
     'Write authors as family and given name; an organisation goes into family with an empty given. ' +
     'container is the journal, proceedings or book the document was published in; pages is the page range in that container. ' +
     'Fill facts only when type is invoice or contract, otherwise use {}; write only what is literally stated in the document, never invent anything, use "" when unknown. ' +
-    `Write dates as YYYY-MM-DD, amount including its currency, subject briefly in ${lang}.` +
+    'For an invoice: number is the invoice number, vs the variable symbol, supplierId/customerId the company registration number (Czech IČO has 8 digits; never a VAT ID), ' +
+    'supplierVat/customerVat the VAT ID (DIČ, USt-IdNr., e.g. CZ12345678, DE123456789), net the tax base and vat the VAT amount including currency – only when VAT is stated, ' +
+    'amount the total payable including currency. Leave validFrom, validTo, notice, autoRenewal, penalty and law empty for an invoice. ' +
+    'For a contract: parties are the contracting parties, amount the price, rent or fee including currency and period (e.g. "18 500 Kč monthly"), issued the signing date, ' +
+    'validFrom/validTo the validity dates, notice the notice period, autoRenewal briefly whether and how it renews automatically, penalty briefly the contractual penalties, ' +
+    'law the governing law. Leave number, vs, supplier, customer, their IDs, net, vat and due empty for a contract. ' +
+    `Write dates as YYYY-MM-DD, amounts including their currency, subject, autoRenewal and penalty briefly in ${lang}.` +
     `\n\nDOCUMENT:\n${sample}`
   );
 }

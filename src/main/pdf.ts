@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { BrowserWindow, ipcMain } from 'electron';
 import { t } from '../shared/i18n';
-import type { PdfOpenResult, PdfRenderResult, PdfTask, PdfTextResult } from '../shared/pdf';
+import type { PdfAttachment, PdfOpenResult, PdfRenderResult, PdfTask, PdfTextResult } from '../shared/pdf';
 
 let host: BrowserWindow | undefined;
 let ready: Promise<void> | undefined;
@@ -49,4 +49,5 @@ export const openPdf = (docId: string, data: Uint8Array) => request<PdfOpenResul
 export const pageText = (docId: string, page: number) => request<PdfTextResult>({ op: 'text', docId, page });
 export const renderPage = (docId: string, page: number, scale: number, crop?: [number, number, number, number], noText = false) =>
   request<PdfRenderResult>({ op: 'render', docId, page, scale, crop, noText });
+export const pdfAttachments = (docId: string) => request<PdfAttachment[]>({ op: 'attachments', docId });
 export const closePdf = (docId: string) => request<null>({ op: 'close', docId }).catch(() => null);
