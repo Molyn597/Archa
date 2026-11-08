@@ -7,7 +7,7 @@ import { activeModels, activeRates, isOnline } from '../shared/provider';
 import type { Api, DuplicateMatch, FileInfo, Job, LmStatus, Mode, Models, Provider, Settings } from '../shared/types';
 import { openChat, renderFolderOpt, setupLibraryChat, showLibraryChat, syncChatSettings } from './chat';
 import { citeSegment, closeDetail, detailJobId, openDetail, setupDetail, updateDetail, type Tab } from './detail';
-import { createProject, leaveProject, openProject, projectSelected, reloadLibrary, renderLibrary, setupLibrary, showUnsorted } from './library';
+import { createProject, leaveProject, openProject, projectSelected, reloadLibrary, renderLibrary, setupLibrary, showDeadlines, showUnsorted } from './library';
 import { addToLibrary, refreshOverview, renderOverview, setupOverview } from './overview';
 import { setupLibrarySwitch } from './library-switch';
 import { renderProjectsPage, setupProjectsPage } from './projects-page';
@@ -711,6 +711,8 @@ async function init() {
     jobCard,
     recentRow,
     openProject,
+    openJob: (id) => void openJob(id),
+    showDeadlines,
     newProject: () => createProject(),
     showUnsorted,
     ai: () => (lastStatus ? { remote: lastStatus.provider === 'openrouter', online: lastStatus.online, state: lmState(lastStatus) } : undefined),

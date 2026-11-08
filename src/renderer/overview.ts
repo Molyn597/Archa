@@ -1,7 +1,9 @@
+import type { Deadline } from '../shared/deadlines';
 import { t } from '../shared/i18n';
 import { latestProjects, recentJobs, toSort } from '../shared/overview';
 import { kindName } from '../shared/projects';
 import type { Job, LibraryState, Mode, Project, Settings } from '../shared/types';
+import { deadlineRow, dueSoon } from './deadlines-view';
 import { cleanError, h, icon, ICONS, toast } from './dom';
 import { libraryTitle } from './library-switch';
 
@@ -17,6 +19,8 @@ interface OverviewHost {
   jobCard(job: Job): HTMLElement;
   recentRow(job: Job): HTMLElement;
   openProject(id: string): void;
+  openJob(id: string): void;
+  showDeadlines(): void;
   newProject(): void;
   showUnsorted(): void;
   /** Stav AI pro řádek v Přehledu: kde běží, jestli je dostupná a popis stavu. */
@@ -24,6 +28,8 @@ interface OverviewHost {
 }
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
+// Nejvýš tolik termínů na kartě Blíží se.
+const DUE_LIMIT = 6;
 const isActive = (j: Job) => j.status === 'running' || j.status === 'queued';
 
 let host: OverviewHost;
@@ -73,6 +79,8 @@ export function renderOverview() {
     library,
   );
   const ai = host.ai();
+  const due = dueSoon({ jobs, cards: libraryState.cards, paid: library.paid, projects });
+  const dueRow = (d: Deadline) => deadlineRow(d, { open: host.openJob, openProject: host.openProject });
 
   $('overview-grid').replaceChildren(
     h(
@@ -81,6 +89,15 @@ export function renderOverview() {
       tile(ICONS.folder, t('nav.history'), t('overview.docs', { count: jobs.length }), 'history'),
       tile(ICONS.book, t('nav.projects'), t('overview.projects', { count: projects.length }), 'projects'),
       tile(ICONS.globe, t('nav.translate'), t('overview.translateText'), 'home'),
+    ),
+    card(
+      t('dl.soon'),
+      ...(due.soon.length
+        ? [
+            h('div', { class: 'dl-list' }, ...due.soon.slice(0, DUE_LIMIT).map(dueRow)),
+            h('button', { class: 'btn', type: 'button', onclick: host.showDeadlines }, t('dl.showAll', { count: due.all.length })),
+          ]
+        : [h('p', { class: 'muted small' }, t('dl.empty')), ...(due.all.length ? [h('button', { class: 'btn', type: 'button', onclick: host.showDeadlines }, t('dl.showAll', { count: due.all.length }))] : [])]),
     ),
     card(t('overview.recent'), ...(recent.length ? recent.map(host.recentRow) : [h('p', { class: 'muted small' }, t('overview.recentEmpty'))])),
     card(

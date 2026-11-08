@@ -9,6 +9,7 @@ import { cleanError, date, h, icon, ICONS, jobDuration, jobTitle, langPair, MODE
 import { showProjectChat } from './chat';
 import { planView } from './plan-view';
 import { flushProject, newProjectModal, pickProjectModal, renderProject, type ProjectCtx } from './project-view';
+import { dueSoon, renderDeadlines } from './deadlines-view';
 import { invoiceCount, renderInvoices } from './invoices-view';
 import { lockFolder, unlockFolder, unlockModal, vault } from './vault';
 
@@ -34,6 +35,7 @@ const TRASH = 'trash';
 const AI_LOG = 'aiLog';
 const DUPLICATES = 'duplicates';
 const INVOICES = 'invoices';
+const DEADLINES = 'deadlines';
 // Výběr projektu: PROJECT + id (v hlavní oblasti je pak detail projektu, ne seznam dokumentů).
 const PROJECT = 'project:';
 const DAY = 86_400_000;
@@ -83,7 +85,7 @@ function saveCollapsed() {
 }
 
 /** Složka dokumentu; zařazení do smazané složky se bere jako nezařazeno. */
-const special = () => selected === TRASH || selected === AI_LOG || selected === DUPLICATES || selected === INVOICES || inProject();
+const special = () => selected === TRASH || selected === AI_LOG || selected === DUPLICATES || selected === INVOICES || selected === DEADLINES || inProject();
 const inProject = () => selected.startsWith(PROJECT);
 const projectId = () => selected.slice(PROJECT.length);
 
@@ -599,6 +601,9 @@ export function leaveProject() {
   if (inProject()) select(ALL);
 }
 
+/** Otevře Soubory na pohledu Termíny. */
+export const showDeadlines = () => select(DEADLINES);
+
 /** Otevře Soubory na dokumentech k zařazení: nezařazené, jinak složka Ostatní. */
 export function showUnsorted() {
   const { folders } = state.library;
@@ -675,6 +680,7 @@ function renderFolders(jobs: Job[]) {
     h('button', { class: 'folder-add folder-find', type: 'button', disabled: findingMerges, onclick: () => void findMerges() }, t(findingMerges ? 'merge.finding' : 'merge.find')),
   );
   // Zvláštní pohledy (ne složky) připnuté dole, oddělené od stromu.
+  const deadlineSet = deadlineData(jobs);
   const dups = duplicateGroups(jobs, state.cards, state.library);
   const projectBlock = h(
     'div',
@@ -685,6 +691,7 @@ function renderFolders(jobs: Job[]) {
   const pinned = h(
     'div',
     { class: 'folder-pinned' },
+    deadlineSet.all.length ? folderItem(DEADLINES, t('dl.title'), deadlineSet.soon.length, { iconPath: ICONS.clock }) : null,
     invoiceCount(jobs, state.cards) ? folderItem(INVOICES, t('inv.title'), invoiceCount(jobs, state.cards), { iconPath: ICONS.invoice }) : null,
     dups.length ? folderItem(DUPLICATES, t('dup.title'), dups.length, { iconPath: ICONS.copy }) : null,
     folderItem(AI_LOG, t('aiLog.title'), aiActive().length, { iconPath: ICONS.fast }),
@@ -1163,6 +1170,9 @@ function renderBar() {
   bar.replaceChildren(allLabel, moveTo, toProject, del, clear);
 }
 
+const deadlineCtx = (jobs: Job[]) => ({ jobs, cards: state.cards, paid: state.library.paid, projects });
+const deadlineData = (jobs: Job[]) => dueSoon(deadlineCtx(jobs));
+
 /** Seznam Koše nebo přehledu AI místo běžných dokumentů. */
 function drawSpecial(query: string) {
   if (inProject()) {
@@ -1181,6 +1191,15 @@ function drawSpecial(query: string) {
     $('history-empty').hidden = true;
     $('history-empty-action').hidden = true;
     renderInvoices($('history-list'), { jobs: host.jobs(), cards: state.cards, paid: state.library.paid, query: $<HTMLInputElement>('history-search').value, open: (id) => host.open(id), redraw: renderLibrary });
+    return;
+  }
+  if (selected === DEADLINES) {
+    visible = [];
+    chosen.clear();
+    $('library-bar').hidden = true;
+    $('history-empty').hidden = true;
+    $('history-empty-action').hidden = true;
+    renderDeadlines($('history-list'), { ...deadlineCtx(host.jobs()), open: (id) => host.open(id), openProject: (id) => openProject(id) });
     return;
   }
   if (selected === DUPLICATES) {
@@ -1232,6 +1251,7 @@ function draw() {
   if (selected === UNSORTED && !jobs.some((j) => !folderOf(j.id))) selected = ALL;
   if (inProject() && projectsLoaded && !projects.some((p) => p.id === projectId())) selected = ALL;
   if (selected === INVOICES && !invoiceCount(jobs, state.cards)) selected = ALL;
+  if (selected === DEADLINES && projectsLoaded && !deadlineData(jobs).all.length) selected = ALL;
   if (selected === DUPLICATES && !duplicateGroups(jobs, state.cards, state.library).length) selected = ALL;
 
   renderFolders(jobs);

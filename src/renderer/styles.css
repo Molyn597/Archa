@@ -4750,3 +4750,95 @@ body.in-project[data-view='history'] #library-folders {
   flex-wrap: wrap;
   gap: 4px 18px;
 }
+
+/* ---------- Termíny (karta v Přehledu, pohled v Souborech) ---------- */
+
+.dl-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dl-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dl-line .btn {
+  flex: none;
+}
+
+.dl-row {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 12px;
+  min-width: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--main);
+  text-align: left;
+}
+
+.dl-row:hover {
+  background: var(--raised);
+}
+
+.dl-row.overdue {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.dl-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.dl-date {
+  color: var(--muted);
+  font-size: 13px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.dl-row.overdue .dl-date {
+  color: var(--danger-text);
+  font-weight: 600;
+}
+
+.dl-sub {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.dl-view {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 14px;
+}
+
+.dl-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dl-group h3 {
+  margin: 0 0 2px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.dl-group.overdue h3 {
+  color: var(--danger-text);
+}

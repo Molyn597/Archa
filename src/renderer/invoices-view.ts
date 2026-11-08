@@ -22,7 +22,7 @@ const chosen = new Set<string>();
 /** Počet faktur v knihovně (položka ve stromu je jen když nějaká je). */
 export const invoiceCount = (jobs: Job[], cards: Record<string, DocumentCard>) => jobs.filter((j) => cards[j.id]?.type === 'invoice').length;
 
-const day = (iso: string) => {
+export const day = (iso: string) => {
   const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   return m ? new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString(locale(), { day: 'numeric', month: 'numeric', year: 'numeric' }) : iso;
 };
