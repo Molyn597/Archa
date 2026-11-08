@@ -1,4 +1,7 @@
 import { getDocument, GlobalWorkerOptions, type PDFDocumentProxy } from 'pdfjs-dist';
+import { defaultView, isTranslated, topTab, translationViews, usableView, type View } from '../shared/detail-tabs';
+import { docTitle } from '../shared/doc-title';
+import { day } from '../shared/invoices';
 import { formatUsd } from '../shared/estimate';
 import { TRASH_DAYS } from '../shared/folders';
 import { locale, t, type MessageKey } from '../shared/i18n';
@@ -8,7 +11,7 @@ import { isOnline } from '../shared/provider';
 import { findRegion, moveCrop, normalizeCrop, resizeCrop, type Handle } from '../shared/regions';
 import { authorsText, BIBLIO_FIELDS, CONTRACT_FACTS, DOC_TYPES, FACT_FIELDS, INVOICE_FACTS, parseAuthors } from '../shared/card';
 import type { Biblio, DocFacts, DocType, DocumentCard, DocumentContext, Job, JobDetail, Mode, RegionTranslation, Segment, Stage } from '../shared/types';
-import { resetChat, setupChat, showChat } from './chat';
+import { openChat, resetChat, setupChat, showChat } from './chat';
 import { highlightCount, highlightsHidden, highlightsSection, loadHighlights, paint, resetHighlights, setHidden, setupHighlights } from './highlights';
 import { createPages, releasePages, setupPdfZoom } from './pdf-zoom';
 import {
@@ -19,9 +22,9 @@ import {
   icon,
   ICONS,
   jobDuration,
-  jobTitle,
   langPair,
   MODES,
+  openModal,
   progressBar,
   progressInfo,
   STAGES,
@@ -32,7 +35,7 @@ import {
 
 GlobalWorkerOptions.workerSrc = './pdf.worker.min.mjs';
 
-export type Tab = 'compare' | 'translated-pdf' | 'side-by-side' | 'translation' | 'original' | 'info';
+export type Tab = View;
 
 const $ = (id: string) => document.getElementById(id)!;
 const finalText = (s: Segment) => s.edited ?? s.polished ?? s.translation ?? '';
@@ -49,7 +52,12 @@ const GENDER: Record<DocumentContext['authorGender'], MessageKey> = {
 const OLD_STAGES: Record<string, MessageKey> = { polish: 'stage.polish', glossary: 'stage.glossary' };
 
 let current: JobDetail | null = null;
-let tab: Tab = 'compare';
+let tab: Tab = 'about';
+// Karta otevřeného dokumentu (název a typ v hlavičce, rozhodnutí o výchozí záložce).
+let docCard: DocumentCard | null = null;
+// Dokument má záložku Překlad; naposledy zvolená volba přepínače uvnitř ní.
+let translated = false;
+let lastSub: Tab = 'compare';
 let renderToken = 0;
 // Výběr odstavců u hotové úlohy (u stavu picking se výběr ukazuje vždy).
 let picking = false;
@@ -79,29 +87,31 @@ let renderedTab: Tab | null = null;
 let cite: { segment: Segment; scrolled: boolean } | null = null;
 
 export const detailJobId = () => current?.job.id ?? null;
-const pdfTabs = () => document.querySelectorAll<HTMLButtonElement>('#detail-tabs .tab[data-pdf]');
 // Pod touto šířkou čtecí oblasti se stránky řadí pod sebe; nad ní zůstávají vedle sebe a zmenší se.
 const SIDE_BY_SIDE_MIN = 560;
 const PAIR_GAP = 14;
 
 const statusChip = (job: Job) => h('span', { class: `status-chip is-${job.status}` }, h('i'), t(STATUS_TEXT[job.status]));
 
-/** Druhá lišta vpravo: stránky a jazyky, u upozornění odkaz na první místo ke kontrole. */
-function meta(job: Job) {
-  const text = [job.pages ? t('cost.pages', { count: job.pages }) : '', langPair(job)].filter(Boolean).join(' · ');
-  const list: HTMLElement[] = [h('span', { class: 'detail-meta-text', title: text }, text)];
-  if (job.warnings) list.push(h('button', { class: 'link', type: 'button', onclick: () => void showWarnings() }, t('detail.toReview', { count: job.warnings })));
-  return list;
+async function go(view: Tab) {
+  clearCite();
+  tab = usableView(view, translated, Boolean(current?.job.outputPdf));
+  await renderBody();
 }
 
 async function showWarnings() {
-  clearCite();
-  tab = 'compare';
-  await renderBody();
+  await go('compare');
   $('detail-body').querySelector('.compare-cell.has-warning')?.scrollIntoView({ block: 'center', behavior: 'smooth' });
 }
 
 type MenuItem = { label: string; icon?: string; danger?: boolean; run: () => unknown } | string;
+
+/** Údaje karty, které jsou data (zobrazují se česky, ukládají jako RRRR-MM-DD). */
+const DATE_FACTS = new Set<string>(['issued', 'due', 'validFrom', 'validTo']);
+
+/** Popisek údaje; u smlouvy je částka cena a datum vystavení datum podpisu. */
+const factLabel = (k: string, type?: string) =>
+  t((type === 'contract' && (k === 'amount' || k === 'issued') ? `card.facts.${k}Contract` : `card.facts.${k}`) as MessageKey);
 
 /** Tlačítko „⋯“ s nabídkou; řetězec v seznamu je nadpis skupiny. */
 function actionMenu(items: MenuItem[]) {
@@ -183,7 +193,7 @@ const deleteItem = (job: Job): MenuItem => ({
   },
 });
 
-/** Hlavní akce jako tlačítka (Word, Otevřít PDF), ostatní v nabídce „⋯“. */
+/** Hlavička vpravo: Otevřít PDF (přeložené, jinak originál) a nabídka „⋯“ se zbytkem akcí. */
 function actions(job: Job) {
   if (job.status === 'running' || job.status === 'queued') {
     return [h('button', { class: 'btn danger', type: 'button', onclick: () => window.api.cancelJob(job.id) }, icon(ICONS.stop), t('job.cancel'))];
@@ -191,30 +201,73 @@ function actions(job: Job) {
   const list: HTMLElement[] = [];
   const items: MenuItem[] = [];
   if (job.status === 'done') {
-    list.push(
-      h('button', { class: job.outputPdf ? 'btn' : 'btn primary', type: 'button', title: t('detail.openWord'), onclick: () => window.api.openOutput(job.id, 'docx') }, job.outputPdf ? t('detail.word') : t('detail.openWord')),
-    );
-    if (job.outputPdf) list.push(h('button', { class: 'btn primary', type: 'button', onclick: () => window.api.openOutput(job.id, 'pdf') }, t('detail.openPdf')));
+    const isPdf = job.ext.toLowerCase() === '.pdf';
+    if (job.outputPdf || isPdf) list.push(h('button', { class: 'btn', type: 'button', onclick: () => window.api.openOutput(job.id, job.outputPdf ? 'pdf' : 'input') }, t('detail.openPdf')));
+    if (job.output) items.push({ label: t('detail.openWord'), icon: ICONS.file, run: () => window.api.openOutput(job.id, 'docx') });
     items.push(
       { label: t('detail.saveAs'), icon: ICONS.download, run: () => window.api.saveOutputAs(job.id) },
       { label: t('detail.reveal'), icon: ICONS.folder, run: () => window.api.revealOutput(job.id) },
     );
-    if (job.ext.toLowerCase() === '.pdf') items.push({ label: t('detail.relayout'), icon: ICONS.retry, run: () => relayout(job) });
+    if (isPdf) items.push({ label: t('detail.relayout'), icon: ICONS.retry, run: () => relayout(job) });
     if (current && pickable(current.segments).some((s) => s.skipped)) {
       items.push({
         label: t('pick.more'),
         icon: ICONS.list,
         run: () => {
           startPicking();
-          tab = 'compare';
-          void renderBody();
+          void go('compare');
         },
       });
     }
   }
-  items.push(...retryItems(job), deleteItem(job));
+  items.push({ label: t('detail.technical'), icon: ICONS.list, run: technicalInfo }, ...retryItems(job), deleteItem(job));
   list.push(actionMenu(items));
   return list;
+}
+
+/** Technické informace (soubor, režim, model, cena…) v okně otevřeném z nabídky „⋯“. */
+function technicalInfo() {
+  if (!current) return;
+  let close = () => {};
+  close = openModal(t('detail.technical'), [infoView(current)], [h('button', { class: 'btn', type: 'button', onclick: () => close() }, t('region.close'))]);
+}
+
+interface Tool {
+  label: string;
+  icon: string;
+  primary?: boolean;
+  /** Tlačítko je během práce zamčené, chyba se ukáže jako hláška. */
+  run: () => unknown;
+}
+
+/** Lišta nástrojů pod hlavičkou; další nástroj se přidá do seznamu. */
+function tools(job: Job): Tool[] {
+  return [
+    { label: t('detail.tool.ask'), icon: ICONS.chat, primary: true, run: openChat },
+    { label: t('detail.tool.translate'), icon: ICONS.translate, run: () => translateTool(job) },
+    { label: t('detail.tool.extract'), icon: ICONS.list, run: () => extractTool(job) },
+  ];
+}
+
+/** Přeložený dokument: přepne na Překlad. Jinak ho přeloží do výchozího cílového jazyka (nová úloha jako „Přeložit znovu“). */
+async function translateTool(job: Job) {
+  if (translated) return go(lastSub);
+  const target = (await window.api.getSettings()).targetLang;
+  if (target === job.sourceLang) return toast(t('detail.translateSame'), true);
+  await window.api.retryJob(job.id, job.mode, target);
+  toast(t('detail.translateQueued', { lang: languageName(target), name: docTitle(job, docCard) }));
+}
+
+/** Vytvoří chybějící kartu; faktura či smlouva bez údajů se vytvoří znovu. Pak ukáže O dokumentu. */
+async function extractTool(job: Job) {
+  const fresh = await window.api.getCard(job.id).catch(() => null);
+  const noFacts = (fresh?.type === 'invoice' || fresh?.type === 'contract') && !Object.keys(fresh.facts ?? {}).length;
+  if (!fresh || noFacts) {
+    if (fresh?.edited && !confirm(t('card.confirmRecreate'))) return;
+    docCard = await window.api.makeCard(job.id);
+    if (current?.job.id === job.id) renderHeader();
+  }
+  if (current?.job.id === job.id) await go('about');
 }
 
 /** Výchozí výběr: u nové úlohy vše, u hotové jen to, co už je přeložené (to je zamčené). */
@@ -721,7 +774,7 @@ function showCite(segment: Segment) {
   clearCite();
   cite = { segment, scrolled: false };
   const { job } = current;
-  const next: Tab = job.ext.toLowerCase() !== '.pdf' ? 'compare' : job.outputPdf ? 'side-by-side' : 'original';
+  const next: Tab = !translated ? 'original' : job.ext.toLowerCase() !== '.pdf' ? 'compare' : job.outputPdf ? 'side-by-side' : 'original';
   if (next === tab) return renderedTab === tab ? applyCite() : undefined;
   tab = next;
   void renderBody();
@@ -789,7 +842,7 @@ const stageName = (stage: string) => {
   return key ? t(key) : stage;
 };
 
-/** Sekce „O dokumentu“: karta se shrnutím, klíčovými slovy a bibliografií; načítá se zvlášť, ať Informace naskočí hned. */
+/** Sekce „O dokumentu“: karta se shrnutím, klíčovými slovy a údaji; načítá se zvlášť, ať záložka naskočí hned. */
 function cardSection(job: Job) {
   const box = h('section', { class: 'setting-group card' });
   const busyButton = (label: string, work: () => Promise<void>, confirmText?: string) => {
@@ -814,6 +867,11 @@ function cardSection(job: Job) {
   const line = (label: string, value: string | Node) => h('div', { class: 'card-row' }, h('span', { class: 'muted' }, label), value);
 
   function show(card: DocumentCard | null) {
+    // Hlavička (název, typ) se řídí kartou.
+    if (current?.job.id === job.id) {
+      docCard = card;
+      renderTitle();
+    }
     if (!card) {
       box.replaceChildren(head(), h('p', { class: 'muted' }, t('card.none')), h('div', {}, create(t('card.create'))));
       return;
@@ -822,6 +880,8 @@ function cardSection(job: Job) {
     edit.onclick = () => editForm(card);
     const recreate = create(t('card.recreate'), card.edited ? t('card.confirmRecreate') : undefined);
     const b = card.biblio;
+    // U faktury a smlouvy bibliografie nedává smysl, ukazují se jejich údaje.
+    const hasFacts = card.type === 'invoice' || card.type === 'contract';
     const facts = [
       b.title && line(t('card.biblio.title'), b.title),
       b.authors.length && line(t('card.authors'), b.authors.map((a) => (a.given ? `${a.family}, ${a.given}` : a.family)).join('; ')),
@@ -829,7 +889,7 @@ function cardSection(job: Job) {
     ].filter(Boolean) as HTMLElement[];
     const f = card.facts ?? {};
     const docFacts = [
-      ...FACT_FIELDS.filter((k) => f[k]).map((k) => line(t(`card.facts.${k}` as MessageKey), f[k]!)),
+      ...FACT_FIELDS.filter((k) => f[k]).map((k) => line(factLabel(k, card.type), DATE_FACTS.has(k) ? day(f[k]!) : f[k]!)),
       f.parties?.length && line(t('card.facts.parties'), f.parties.join(', ')),
     ].filter(Boolean) as HTMLElement[];
     box.replaceChildren(
@@ -837,7 +897,7 @@ function cardSection(job: Job) {
       h('p', { class: 'card-summary' }, card.summary),
       h('div', { class: 'chips' }, h('span', { class: 'chip accent' }, t(`docType.${card.type}` as MessageKey)), ...card.keywords.map((k) => h('span', { class: 'chip' }, k)), card.edited && h('span', { class: 'chip' }, t('card.edited'))),
       ...(card.folder ? [line(t('card.folder'), card.folder)] : []),
-      ...(facts.length ? [h('div', { class: 'card-biblio' }, h('h3', {}, t('card.biblio')), ...facts)] : []),
+      ...(facts.length && !hasFacts ? [h('div', { class: 'card-biblio' }, h('h3', {}, t('card.biblio')), ...facts)] : []),
       ...(docFacts.length ? [h('div', { class: 'card-biblio' }, h('h3', {}, t('card.facts')), ...(card.factsFrom === 'isdoc' ? [h('div', { class: 'chips' }, h('span', { class: 'chip accent' }, t('card.facts.isdoc')))] : []), ...docFacts)] : []),
     );
   }
@@ -874,7 +934,7 @@ function cardSection(job: Job) {
     const factsBox = h(
       'div',
       { class: 'card-facts-edit' },
-      ...FACT_FIELDS.map((k) => field(t(`card.facts.${k}` as MessageKey), factInputs[k])),
+      ...FACT_FIELDS.map((k) => field(factLabel(k, card.type), factInputs[k])),
       field(`${t('card.facts.parties')} (${t('card.facts.partiesHint')})`, parties),
     );
     // Ukáže se jen pole patřící k zvolenému typu.
@@ -935,6 +995,13 @@ function cardSection(job: Job) {
   return box;
 }
 
+/** Záložka O dokumentu: karta, zvýraznění a poznámky; u chyby její text. */
+function aboutView(detail: JobDetail) {
+  const box = h('div', { class: 'info-view' }, cardSection(detail.job), highlightsSection());
+  if (detail.job.error) box.prepend(h('div', { class: 'error-box' }, detail.job.error));
+  return box;
+}
+
 function infoView(detail: JobDetail) {
   const { job, segments } = detail;
   const dl = h('dl', { class: 'info' });
@@ -977,8 +1044,7 @@ function infoView(detail: JobDetail) {
       timings.map(([stage, s]) => `${stageName(stage)}: ${duration(s)}`).join(' · '),
     );
   }
-  const box = h('div', { class: 'info-view' }, cardSection(job), highlightsSection(), dl);
-  if (job.error) box.prepend(h('div', { class: 'error-box' }, job.error));
+  const box = h('div', { class: 'info-view' }, dl);
   const warned = segments.filter((s) => s.warning);
   if (warned.length) {
     const list = h('ul');
@@ -996,13 +1062,11 @@ async function renderBody() {
   const body = $('detail-body');
   editing?.cancel();
   body.classList.toggle('regions-hidden', regionsHidden);
-  for (const b of document.querySelectorAll<HTMLButtonElement>('#detail-tabs .tab')) {
-    b.classList.toggle('active', b.dataset.tab === tab);
-  }
+  syncTabs();
   const { job, segments } = current;
   $('regions-toggle').hidden = !(job.ext.toLowerCase() === '.pdf' && (tab === 'original' || tab === 'side-by-side'));
   syncHighlightsToggle();
-  if (tab === 'info') return body.replaceChildren(infoView(current));
+  if (tab === 'about') return body.replaceChildren(aboutView(current));
   if (tab === 'original' || tab === 'translated-pdf' || tab === 'side-by-side') {
     body.replaceChildren(h('p', { class: 'muted' }, t('detail.loading')));
     regionLayers = new Map();
@@ -1023,7 +1087,7 @@ async function renderBody() {
         paint();
       }
     } catch (e) {
-      const what = tab === 'original' ? 'detail.tab.original' : tab === 'side-by-side' ? 'detail.tab.sideBySide' : 'detail.translatedPdf';
+      const what = tab === 'original' ? 'detail.tab.document' : tab === 'side-by-side' ? 'detail.view.sideBySide' : 'detail.translatedPdf';
       if (token === renderToken) body.replaceChildren(h('div', { class: 'error-box' }, t('detail.cannotShow', { what: t(what), error: (e as Error).message })));
     }
     return;
@@ -1045,27 +1109,88 @@ async function renderBody() {
   paint();
 }
 
+const VIEW_LABELS: Partial<Record<Tab, MessageKey>> = {
+  translation: 'detail.view.text',
+  compare: 'detail.tab.compare',
+  'translated-pdf': 'detail.view.pdf',
+  'side-by-side': 'detail.view.sideBySide',
+};
+
+/** Horní záložky a pod nimi přepínač pohledů záložky Překlad s odkazem na místa ke kontrole. */
+function syncTabs() {
+  if (!current) return;
+  const { job } = current;
+  const top = topTab(tab);
+  for (const b of document.querySelectorAll<HTMLButtonElement>('#detail-tabs .tab')) {
+    b.classList.toggle('active', b.dataset.tab === top);
+    if (b.dataset.tab === 'translation') b.hidden = !translated;
+  }
+  const sub = $('detail-sub');
+  sub.hidden = top !== 'translation';
+  if (sub.hidden) return;
+  lastSub = tab;
+  const choices = translationViews(Boolean(job.outputPdf)).map((view) =>
+    h('button', { class: `segment${view === tab ? ' active' : ''}`, type: 'button', onclick: () => void go(view) }, t(VIEW_LABELS[view]!)),
+  );
+  sub.replaceChildren(
+    h('div', { class: 'segmented', role: 'tablist' }, ...choices),
+    ...(job.warnings ? [h('button', { class: 'link', type: 'button', onclick: () => void showWarnings() }, t('detail.toReview', { count: job.warnings }))] : []),
+  );
+}
+
+function renderTitle() {
+  if (!current) return;
+  const { job } = current;
+  $('detail-name').textContent = docTitle(job, docCard);
+  $('detail-name').title = `${job.name}${job.ext}`;
+  $('detail-type').replaceChildren(...(docCard ? [h('span', { class: 'chip accent' }, t(`docType.${docCard.type}` as MessageKey))] : []));
+}
+
+/** Nástroje jsou vidět u hotového dokumentu; tlačítko je během práce zamčené. */
+function renderTools(job: Job) {
+  const bar = $('detail-tools');
+  bar.hidden = job.status !== 'done';
+  bar.replaceChildren(
+    ...tools(job).map((tool) => {
+      const button = h('button', { class: `btn tool${tool.primary ? ' primary' : ''}`, type: 'button' }, icon(tool.icon), tool.label);
+      button.onclick = async () => {
+        button.disabled = true;
+        try {
+          await tool.run();
+        } catch (e) {
+          toast(cleanError(e), true);
+        } finally {
+          button.disabled = false;
+        }
+      };
+      return button;
+    }),
+  );
+}
+
 function renderHeader() {
   if (!current) return;
   const { job } = current;
-  $('detail-name').textContent = jobTitle(job);
-  $('detail-name').title = `${job.name}${job.ext}`;
-  $('detail-status').replaceChildren(statusChip(job));
-  $('detail-meta').replaceChildren(...meta(job));
+  translated = isTranslated(job, current.segments);
+  tab = usableView(tab, translated, Boolean(job.outputPdf));
+  renderTitle();
+  // Hotový dokument stavový štítek nepotřebuje, ukazuje se jen průběh a chyba.
+  $('detail-status').replaceChildren(...(job.status === 'done' ? [] : [statusChip(job)]));
   $('detail-actions').replaceChildren(...actions(job));
-  for (const b of pdfTabs()) b.hidden = !job.outputPdf;
-  if ((tab === 'translated-pdf' || tab === 'side-by-side') && !job.outputPdf) tab = 'compare';
+  renderTools(job);
+  syncTabs();
   renderProgress(job);
 }
 
-export async function openDetail(id: string, initialTab: Tab = 'compare') {
+export async function openDetail(id: string, initialTab?: Tab) {
   const detail = await window.api.getJob(id);
   if (!detail) return false;
   current = detail;
+  docCard = await window.api.getCard(id).catch(() => null);
   clearCite();
   await loadHighlights(id);
   showChat(detail.job);
-  tab = initialTab;
+  tab = initialTab ?? defaultView(isTranslated(detail.job, detail.segments), docCard?.type);
   picking = false;
   renderHeader();
   await renderBody();
@@ -1088,6 +1213,7 @@ export async function updateDetail(job: Job) {
     picking = false;
     const detail = await window.api.getJob(job.id);
     if (detail) current = detail;
+    docCard = (await window.api.getCard(job.id).catch(() => null)) ?? docCard;
     renderHeader();
     await renderBody();
   }
@@ -1099,7 +1225,7 @@ const textView = () =>
 
 function syncHighlightsToggle() {
   const button = $('highlights-toggle');
-  button.hidden = tab === 'info' || !highlightCount();
+  button.hidden = tab === 'about' || !highlightCount();
   const label = t(highlightsHidden() ? 'highlight.show' : 'highlight.hide');
   button.replaceChildren(icon(highlightsHidden() ? ICONS.eyeOff : ICONS.eye), label);
   button.title = label;
@@ -1119,14 +1245,10 @@ export function setupDetail(onBack: () => void, openSettings: () => void) {
     current: () => current,
     textView,
     pageWraps: () => pageWraps,
-    showCompare: () => {
-      clearCite();
-      tab = 'compare';
-      void renderBody();
-    },
+    showCompare: () => void go('compare'),
     changed: () => {
       syncHighlightsToggle();
-      if (tab === 'info' && current) $('detail-body').replaceChildren(infoView(current));
+      if (tab === 'about' && current) $('detail-body').replaceChildren(aboutView(current));
     },
   });
   $('highlights-toggle').addEventListener('click', () => setHidden(!highlightsHidden()));
@@ -1145,11 +1267,7 @@ export function setupDetail(onBack: () => void, openSettings: () => void) {
     for (const m of document.querySelectorAll<HTMLElement>('.menu')) m.hidden = true;
   });
   for (const b of document.querySelectorAll<HTMLButtonElement>('#detail-tabs .tab')) {
-    b.addEventListener('click', () => {
-      clearCite();
-      tab = b.dataset.tab as Tab;
-      void renderBody();
-    });
+    b.addEventListener('click', () => void go(b.dataset.tab === 'translation' ? lastSub : (b.dataset.tab as Tab)));
   }
 }
 

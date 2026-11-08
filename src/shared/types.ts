@@ -532,7 +532,7 @@ export interface ModelPrice {
   output: number;
 }
 
-export type OutputKind = 'docx' | 'pdf';
+export type OutputKind = 'docx' | 'pdf' | 'input';
 
 export interface JobDetail {
   job: Job;
@@ -575,7 +575,7 @@ export interface Api {
   jobFigure(id: string, file: string): Promise<string>;
   readOutputPdf(id: string): Promise<Uint8Array | null>;
   cancelJob(id: string): Promise<void>;
-  retryJob(id: string, mode: Mode): Promise<void>;
+  retryJob(id: string, mode: Mode, targetLang?: string): Promise<void>;
   relayoutJob(id: string): Promise<void>;
   /** Přeloží vybrané segmenty (id) úlohy čekající na výběr nebo hotové; ostatní nepřeložené se přeskočí. */
   translateSegments(id: string, ids: number[]): Promise<void>;

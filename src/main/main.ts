@@ -257,7 +257,7 @@ function createWindow() {
   win.loadFile(path.join(__dirname, 'index.html'));
 }
 
-const outputName = (job: Job, kind: OutputKind = 'docx') => (kind === 'pdf' ? job.outputPdf : job.output);
+const outputName = (job: Job, kind: OutputKind = 'docx') => (kind === 'pdf' ? job.outputPdf : kind === 'input' ? `input${job.ext}` : job.output);
 
 function jobFile(job: Job, kind: OutputKind = 'docx') {
   const name = outputName(job, kind);
@@ -419,7 +419,7 @@ function registerIpc() {
     return name ? new Uint8Array(await store.readJobFile(job.id, name)) : null;
   });
   ipcMain.handle('job-cancel', (_e, id: string) => queue.cancel(id));
-  ipcMain.handle('job-retry', (_e, id: string, mode: Mode) => queue.retry(id, mode));
+  ipcMain.handle('job-retry', (_e, id: string, mode: Mode, targetLang?: string) => queue.retry(id, mode, targetLang));
   ipcMain.handle('job-relayout', async (_e, id: string) => {
     if (active.has(id)) return;
     const job = await store.job(id);

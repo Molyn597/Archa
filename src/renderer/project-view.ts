@@ -262,7 +262,7 @@ function bibliographyTab(p: Project, c: ProjectCtx) {
       { class: 'proj-ref' },
       h('p', {}, ...refParts(e)),
       warn.length
-        ? h('div', { class: 'proj-gaps' }, h('span', { class: 'chip warn' }, warn.map((g) => t(`project.gap.${g}` as MessageKey)).join(', ')), h('button', { class: 'link', type: 'button', onclick: () => c.open(e.jobId, 'info') }, t('project.openCard')))
+        ? h('div', { class: 'proj-gaps' }, h('span', { class: 'chip warn' }, warn.map((g) => t(`project.gap.${g}` as MessageKey)).join(', ')), h('button', { class: 'link', type: 'button', onclick: () => c.open(e.jobId, 'about') }, t('project.openCard')))
         : null,
     );
   });
@@ -282,7 +282,7 @@ function bibliographyTab(p: Project, c: ProjectCtx) {
         make.textContent = t('project.makeCard');
       }
     });
-    return h('div', { class: 'lib-item' }, h('div', { class: 'lib-line' }, h('button', { class: 'job-row', type: 'button', onclick: () => c.open(job.id) }, h('span', {}, h('div', { class: 'job-row-name' }, `${job.name}${job.ext}`))), noCard && job.status === 'done' ? make : h('button', { class: 'btn', type: 'button', onclick: () => c.open(job.id, 'info') }, t('project.openCard'))));
+    return h('div', { class: 'lib-item' }, h('div', { class: 'lib-line' }, h('button', { class: 'job-row', type: 'button', onclick: () => c.open(job.id) }, h('span', {}, h('div', { class: 'job-row-name' }, `${job.name}${job.ext}`))), noCard && job.status === 'done' ? make : h('button', { class: 'btn', type: 'button', onclick: () => c.open(job.id, 'about') }, t('project.openCard'))));
   });
   return h(
     'div',

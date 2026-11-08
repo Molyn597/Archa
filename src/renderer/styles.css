@@ -1237,11 +1237,6 @@ input[type='checkbox'] {
   background: var(--raised);
 }
 
-.job-row > span:nth-child(2) {
-  flex: 1;
-  min-width: 0;
-}
-
 .job-row-name {
   font-weight: 500;
   overflow: hidden;
@@ -1260,6 +1255,22 @@ input[type='checkbox'] {
 
 .job-row .chip {
   flex: none;
+}
+
+.job-row-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.job-row-meta.err {
+  color: var(--danger-text);
+}
+
+.job-row-date {
+  flex: none;
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .status-icon {
@@ -1585,30 +1596,40 @@ input[type='checkbox'] {
   box-shadow: var(--seg-shadow);
 }
 
-/* Zkracuje se nejdřív popis, pak záložky; na odkaz „N ke kontrole“ zůstane místo. */
-.detail-meta {
-  flex: 0 100 auto;
-  min-width: 8rem;
-  overflow: hidden;
+.tabs-row .tabs {
+  margin-right: auto;
+}
+
+/* Nástroje dokumentu: malá tlačítka pod hlavičkou. */
+.detail-tools {
+  flex: none;
   display: flex;
-  align-items: center;
-  gap: 16px;
-  margin-left: auto;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.detail-tools .btn {
+  height: 30px;
+  padding: 0 12px;
   font-size: 13px;
 }
 
-.detail-meta-text {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
+.detail-tools .btn svg {
+  width: 15px;
+  height: 15px;
 }
 
-.detail-meta .link {
+/* Přepínač pohledů v záložce Překlad. */
+.detail-sub {
   flex: none;
-  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
 }
 
 .detail-scroll {
@@ -3416,46 +3437,8 @@ body.nav-collapsed .library-folders {
   border-bottom: 0;
 }
 
-.lib-item.open {
-  background: var(--raised);
-}
-
 .lib-item.dragging {
   opacity: 0.5;
-}
-
-.job-row-summary {
-  margin-top: 4px;
-  font-size: 12.5px;
-  line-height: 1.45;
-  color: var(--muted);
-  white-space: normal;
-}
-
-.lib-detail {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 2px 14px 14px 54px;
-}
-
-.lib-summary {
-  margin: 0;
-  line-height: 1.55;
-}
-
-.lib-folder {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.lib-folder select {
-  min-width: 180px;
-}
-
-.lib-actions {
-  flex-wrap: wrap;
 }
 
 /* Podsložky: šipka sbalení, tažená složka */
@@ -3515,6 +3498,18 @@ button.folder-toggle:hover {
   margin: 0 0 0 14px;
   accent-color: var(--accent);
   cursor: pointer;
+}
+
+/* Zaškrtávátko dokumentu se ukáže při najetí myší nebo když je něco vybráno. */
+.doc-item .lib-check {
+  opacity: 0;
+}
+
+.doc-item:hover .lib-check,
+.doc-item:focus-within .lib-check,
+.doc-item.chosen .lib-check,
+.selecting .doc-item .lib-check {
+  opacity: 1;
 }
 
 .lib-item.chosen {

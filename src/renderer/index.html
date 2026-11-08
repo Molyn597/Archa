@@ -248,23 +248,22 @@
             <span class="crumb" data-i18n="nav.history">Dokumenty</span>
             <span class="crumb" aria-hidden="true">/</span>
             <h1 id="detail-name"></h1>
+            <span id="detail-type"></span>
             <span id="detail-status"></span>
             <div class="detail-actions" id="detail-actions"></div>
           </header>
           <div class="detail-progress" id="detail-progress" hidden></div>
+          <div class="detail-tools" id="detail-tools" hidden></div>
           <div class="tabs-row">
             <div class="tabs" role="tablist" id="detail-tabs">
-              <button class="tab" data-tab="translation" data-i18n="detail.tab.translation">Překlad</button>
-              <button class="tab active" data-tab="compare" data-i18n="detail.tab.compare">Srovnání</button>
-              <button class="tab" data-tab="translated-pdf" data-pdf hidden data-i18n="detail.tab.translatedPdf">Překlad PDF</button>
-              <button class="tab" data-tab="side-by-side" data-pdf hidden data-i18n="detail.tab.sideBySide">PDF vedle sebe</button>
-              <button class="tab" data-tab="original" data-i18n="detail.tab.original">Originál</button>
-              <button class="tab" data-tab="info" data-i18n="detail.tab.info">Informace</button>
+              <button class="tab active" data-tab="about" data-i18n="detail.tab.about">O dokumentu</button>
+              <button class="tab" data-tab="original" data-i18n="detail.tab.document">Dokument</button>
+              <button class="tab" data-tab="translation" hidden data-i18n="detail.tab.translation">Překlad</button>
             </div>
-            <div class="detail-meta" id="detail-meta"></div>
             <button class="btn" id="highlights-toggle" type="button" hidden></button>
             <button class="btn" id="regions-toggle" type="button" hidden></button>
           </div>
+          <div class="detail-sub" id="detail-sub" hidden></div>
           <div class="detail-scroll" id="detail-scroll">
             <div class="tab-body" id="detail-body"></div>
           </div>

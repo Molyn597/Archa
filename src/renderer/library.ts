@@ -1,13 +1,15 @@
-import { t, type MessageKey } from '../shared/i18n';
+import { docSubtitle, docTitle as cardTitle } from '../shared/doc-title';
+import { wasTranslated } from '../shared/detail-tabs';
+import { locale, t, type MessageKey } from '../shared/i18n';
+import { languageName } from '../shared/languages';
 import { childFolders, fold, folderName, folderPath, isLocked, placementActive, resolvePath, subtree, TRASH_DAYS } from '../shared/folders';
 import { duplicateGroups, type DuplicateGroup } from '../shared/duplicates';
 import type { InvoiceStatusFilter } from '../shared/invoices';
 import { isLiterature } from '../shared/nav';
 import { OTHER_FOLDER } from '../shared/overview';
-import { isOnline } from '../shared/provider';
 import type { DocumentCard, FolderMerge, Job, LibraryState, OrganizePlan, Placement, Project, ProjectKind } from '../shared/types';
 import type { Tab } from './detail';
-import { cleanError, date, h, icon, ICONS, jobDuration, jobTitle, langPair, MODES, openModal, progressInfo, statusIcon, STATUS_TEXT, toast, toastAction } from './dom';
+import { cleanError, date, h, icon, ICONS, jobTitle, openModal, progressInfo, statusIcon, STATUS_TEXT, toast, toastAction } from './dom';
 import { showProjectChat } from './chat';
 import { planView } from './plan-view';
 import { flushProject, newProjectModal, pickProjectModal, renderProject, type ProjectCtx } from './project-view';
@@ -18,8 +20,7 @@ import { lockFolder, unlockFolder, unlockModal, vault } from './vault';
 export interface LibraryHost {
   /** Všechny úlohy od nejnovější. */
   jobs(): Job[];
-  open(id: string, tab?: Tab, withChat?: boolean): void;
-  modelName(id: string): string;
+  open(id: string, tab?: Tab): void;
   showHome(): void;
   /** Strom složek je v levém panelu i mimo Knihovnu (detail dokumentu): výběr přepne na její view. */
   showLibrary(): void;
@@ -44,7 +45,7 @@ const LITERATURE = 'literature';
 const PROJECT = 'project:';
 const DAY = 86_400_000;
 const FOLDER_KEY = 'libraryFolder';
-const SUMMARY_PREVIEW = 140;
+const ERROR_PREVIEW = 90;
 const COLLAPSED_KEY = 'libraryCollapsed';
 const DRAG_TYPE = 'application/x-translatte-job';
 const FOLDER_DRAG_TYPE = 'application/x-translatte-folder';
@@ -59,7 +60,6 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 let host: LibraryHost;
 let state: LibraryState = { library: { folders: [], assign: {} }, cards: {} };
 let selected = ALL;
-let openId: string | null = null;
 // Právě se vytváří nebo přejmenovává složka: překreslení by rozepsaný název smazalo.
 let editing: string | null = null;
 let progress: { done: number; total: number } | null = null;
@@ -111,11 +111,10 @@ export const libraryFolders = () => state.library.folders;
 // Nejvýš tolik viditelných dokumentů se v chatu bere jako „toto“; víc už je spíš celá složka.
 const FOCUS_VISIBLE = 20;
 
-/** Dokumenty, na které se uživatel dívá („toto“ v chatu): zaškrtnuté, jinak rozbalený řádek, jinak obsah otevřené složky. */
+/** Dokumenty, na které se uživatel dívá („toto“ v chatu): zaškrtnuté, jinak obsah otevřené složky. */
 export function focusDocs(): string[] {
   if (special()) return [];
   if (chosen.size) return [...chosen];
-  if (openId && visible.includes(openId)) return [openId];
   return selected !== ALL && visible.length <= FOCUS_VISIBLE ? [...visible] : [];
 }
 
@@ -246,7 +245,6 @@ function select(value: string) {
   host.showLibrary();
   flushProject();
   selected = value;
-  openId = null;
   try {
     localStorage.setItem(FOLDER_KEY, value);
   } catch {}
@@ -255,7 +253,7 @@ function select(value: string) {
 
 function searchText(job: Job, card?: DocumentCard) {
   const biblio = card?.biblio;
-  return fold([job.name, card?.summary, card?.keywords.join(' '), biblio?.title, biblio?.authors.map((a) => a.family).join(' ')].filter(Boolean).join(' '));
+  return fold([job.name, card && cardTitle(job, card), card?.summary, card?.keywords.join(' '), biblio?.title, biblio?.authors.map((a) => a.family).join(' ')].filter(Boolean).join(' '));
 }
 
 /** Přesune dokumenty (ručně) a seznam se překreslí podle události z hlavního procesu. */
@@ -1015,62 +1013,23 @@ function aiRow(p: Placement) {
 
 // ---------- Řádky dokumentů ----------
 
-function detailPanel(job: Job, card?: DocumentCard) {
-  const current = folderOf(job.id) ?? '';
-  const folderSelect = h(
-    'select',
-    { onchange: (e: Event) => void move([job.id], (e.target as HTMLSelectElement).value || null) },
-    h('option', { value: '' }, t('library.noFolder')),
-    ...folderOptions(current),
-  );
-  const open = (tab?: Tab, withChat = false) => host.open(job.id, tab, withChat);
-  const buttons = h(
-    'div',
-    { class: 'row gap lib-actions' },
-    h('button', { class: 'btn', type: 'button', onclick: () => open(job.output ? 'translation' : 'compare') }, t('library.openTranslation')),
-    h('button', { class: 'btn', type: 'button', onclick: () => open('original') }, t('library.original')),
-    h('button', { class: 'btn', type: 'button', onclick: () => open(undefined, true) }, t('library.chat')),
-  );
-  if (job.status === 'done' && !card) {
-    const create = h(
-      'button',
-      {
-        class: 'btn',
-        type: 'button',
-        onclick: async () => {
-          create.disabled = true;
-          create.textContent = t('card.creating');
-          try {
-            await window.api.makeCard(job.id);
-          } catch (e) {
-            toast(cleanError(e), true);
-            create.disabled = false;
-            create.textContent = t('card.create');
-          }
-        },
-      },
-      t('card.create'),
-    );
-    buttons.append(create);
-  }
-  return h(
-    'div',
-    { class: 'lib-detail' },
-    card ? h('p', { class: 'lib-summary' }, card.summary) : null,
-    card?.keywords.length ? h('div', { class: 'chips' }, ...card.keywords.map((k) => h('span', { class: 'chip' }, k))) : null,
-    h('label', { class: 'lib-folder' }, h('span', { class: 'muted small' }, t('library.folder')), folderSelect),
-    buttons,
-  );
-}
-
+/** Řádek dokumentu: název z karty, jeden řádek podtextu, vpravo datum a typ; ikona jen u dokumentů, které ještě nejsou hotové. */
 function docRow(job: Job) {
   const card = state.cards[job.id];
-  const parts = [t(STATUS_TEXT[job.status]), date(job.createdAt), t(MODES[job.mode].title), langPair(job), jobDuration(job)];
-  if (job.status === 'running' || job.status === 'queued') parts.splice(1, 0, progressInfo(job).label);
-  const expanded = openId === job.id;
+  const busy = job.status === 'running' || job.status === 'queued';
+  const failed = job.status === 'error';
+  const subtitle = busy
+    ? progressInfo(job).label
+    : failed
+      ? (job.error ?? t(STATUS_TEXT.error)).slice(0, ERROR_PREVIEW)
+      : job.status !== 'done'
+        ? t(STATUS_TEXT[job.status])
+        : card
+          ? docSubtitle(job, card) || (wasTranslated(job) ? t('doc.translatedFrom', { lang: languageName(job.sourceLang) }) : '')
+          : '';
   const check = h('input', { type: 'checkbox', class: 'lib-check', title: t('library.selectRow'), 'aria-label': t('library.selectRow') });
   check.checked = chosen.has(job.id);
-  // Klik na zaškrtávátko řádek nerozbaluje; Shift vybere rozsah ve viditelném seznamu.
+  // Klik na zaškrtávátko dokument neotevírá; Shift vybere rozsah ve viditelném seznamu.
   check.addEventListener('click', (e) => {
     e.stopPropagation();
     const on = check.checked;
@@ -1083,20 +1042,18 @@ function docRow(job: Job) {
   });
   const row = h(
     'button',
-    { class: 'job-row', type: 'button', 'aria-expanded': String(expanded), onclick: () => ((openId = expanded ? null : job.id), renderLibrary()) },
-    statusIcon(job),
+    { class: 'job-row', type: 'button', onclick: () => host.open(job.id) },
+    job.status === 'done' ? null : statusIcon(job),
     h(
       'span',
-      {},
-      h('div', { class: 'job-row-name' }, `${job.name}${job.ext}`),
-      h('div', { class: 'job-row-meta' }, parts.filter(Boolean).join(' · ')),
-      card ? h('div', { class: 'job-row-summary' }, card.summary.length > SUMMARY_PREVIEW ? `${card.summary.slice(0, SUMMARY_PREVIEW).trimEnd()}…` : card.summary) : null,
+      { class: 'job-row-text' },
+      h('div', { class: 'job-row-name', title: `${job.name}${job.ext}` }, card ? cardTitle(job, card) : `${job.name}${job.ext}`),
+      subtitle ? h('div', { class: `job-row-meta${failed ? ' err' : ''}` }, subtitle) : null,
     ),
-    card ? h('span', { class: 'chip accent' }, t(`docType.${card.type}` as MessageKey)) : '',
-    isOnline(job) ? h('span', { class: 'chip' }, job.models ? `${t('job.online')} · ${host.modelName(job.models.translate)}` : t('job.online')) : '',
-    job.warnings ? h('span', { class: 'chip warn' }, t('job.warnings', { count: job.warnings })) : job.status === 'error' ? h('span', { class: 'chip err' }, t('status.error')) : '',
+    h('span', { class: 'job-row-date' }, new Date(job.createdAt).toLocaleDateString(locale())),
+    card ? h('span', { class: 'chip' }, t(`docType.${card.type}` as MessageKey)) : '',
   );
-  const item = h('div', { class: `lib-item${expanded ? ' open' : ''}${chosen.has(job.id) ? ' chosen' : ''}`, draggable: 'true' }, h('div', { class: 'lib-line' }, check, row), expanded ? detailPanel(job, card) : null);
+  const item = h('div', { class: `lib-item doc-item${chosen.has(job.id) ? ' chosen' : ''}`, draggable: 'true' }, h('div', { class: 'lib-line' }, check, row));
   item.addEventListener('dragstart', (e) => {
     // Dokument ve výběru táhne celý výběr.
     const ids = chosen.has(job.id) ? [...chosen] : [job.id];
@@ -1317,6 +1274,8 @@ function draw() {
   // Výběr nesmí obsahovat dokumenty, které nejsou vidět (jiná složka, hledání, smazané).
   for (const id of chosen) if (!visible.includes(id)) chosen.delete(id);
   renderBar();
+  // Zaškrtávátka jsou jinak vidět jen při najetí myší.
+  $('history-list').classList.toggle('selecting', chosen.size > 0);
   $('history-list').replaceChildren(...list.map(docRow));
   $('history-empty').hidden = list.length > 0;
   // Prázdná knihovna nabízí první překlad, prázdná složka nebo hledání jen vysvětlení.

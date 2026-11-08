@@ -93,13 +93,14 @@ export class Queue {
     await this.enqueue(job);
   }
 
-  async retry(id: string, mode: Mode) {
+  async retry(id: string, mode: Mode, targetLang?: string) {
     const old = await this.store.job(id);
     if (!old) return;
     const job: Job = {
       ...old,
       id: randomUUID(),
       mode,
+      targetLang: targetLang ?? old.targetLang,
       status: 'queued',
       createdAt: Date.now(),
       startedAt: undefined,

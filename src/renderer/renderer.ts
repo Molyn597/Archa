@@ -6,7 +6,7 @@ import { isValidPageRange } from '../shared/pages';
 import { navFor, type NavId } from '../shared/nav';
 import { activeModels, activeRates, isOnline } from '../shared/provider';
 import type { Api, DuplicateMatch, FileInfo, Job, LmStatus, Mode, Models, Provider, Settings } from '../shared/types';
-import { askLibrary, openChat, renderFolderOpt, setupLibraryChat, showLibraryChat, syncChatSettings } from './chat';
+import { askLibrary, renderFolderOpt, setupLibraryChat, showLibraryChat, syncChatSettings } from './chat';
 import { citeSegment, closeDetail, detailJobId, openDetail, setupDetail, updateDetail, type Tab } from './detail';
 import { createProject, leaveProject, openProject, projectSelected, reloadLibrary, renderLibrary, setupLibrary, libraryView, showAll, showDeadlines, showInvoices, showLiterature, showUnsorted, type LibraryView } from './library';
 import { addToLibrary, refreshOverview, renderOverview, setupOverview } from './overview';
@@ -153,11 +153,10 @@ async function checkUpdates() {
   bar.hidden = false;
 }
 
-async function openJob(id: string, tab?: Tab, withChat = false) {
+async function openJob(id: string, tab?: Tab) {
   if (!(await openDetail(id, tab))) return;
   void window.api.jobOpened(id).catch(() => undefined);
   show('detail');
-  if (withChat) openChat();
 }
 
 // ---------- LM Studio ----------
@@ -744,8 +743,7 @@ async function init() {
   renderAll();
   setupLibrary({
     jobs: sorted,
-    open: (id, tab, withChat) => void openJob(id, tab, withChat),
-    modelName,
+    open: (id, tab) => void openJob(id, tab),
     showHome: () => show('home'),
     showLibrary: () => view !== 'history' && show('history'),
     folderChanged: renderFolderOpt,
