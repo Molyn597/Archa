@@ -25,8 +25,8 @@ export async function makeCard(store: Store, job: Job, settings: Settings, chang
   const online = isOnline(settings);
   const sample = cardSample(await store.segments(job.id), LIMITS[online ? 'online' : 'local']);
   if (!sample) throw new Error(t('card.empty'));
-  if (online && !(await readKey(store.root))) throw new Error(t('openrouter.noKey'));
-  const llm: Llm = { job, settings, signal: new AbortController().signal, endpoint: await connect(settings, store.root) };
+  if (online && !(await readKey(store.appRoot))) throw new Error(t('openrouter.noKey'));
+  const llm: Llm = { job, settings, signal: new AbortController().signal, endpoint: await connect(settings, store.appRoot) };
   await loadModel(llm, 'polish');
   const out = await ask(llm, 'polish', [{ role: 'user', content: cardPrompt(sample, job.targetLang, openPaths((await store.library()).folders)) }], CARD_TOKENS);
   const card = parseCard(out, job.targetLang);

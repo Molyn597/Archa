@@ -56,7 +56,7 @@ export async function semantic(store: Store, settings: Settings, docs: LibDoc[],
     if (index) indexes.set(d.job.id, index);
   }
   if (!indexes.size) return undefined;
-  const emb = await embedder(settings, store.root);
+  const emb = await embedder(settings, store.appRoot);
   if (!emb) return undefined;
   const [q] = await emb.embed([query], 'query');
   return {
@@ -212,10 +212,10 @@ export async function askLibrary(
   const library = await store.library();
   const docs = libraryDocs(jobs, cards, library, folder);
   if (!docs.length) throw new Error(t('libraryChat.empty'));
-  if (online && !(await readKey(store.root))) throw new Error(t('openrouter.noKey'));
+  if (online && !(await readKey(store.appRoot))) throw new Error(t('openrouter.noKey'));
   const history = await store.libraryChat();
   // Cena online dotazů se u knihovny k žádné úloze nepřičítá.
-  const llm: Llm = { job: { cost: 0 } as Job, settings, signal: new AbortController().signal, endpoint: await connect(settings, store.root) };
+  const llm: Llm = { job: { cost: 0 } as Job, settings, signal: new AbortController().signal, endpoint: await connect(settings, store.appRoot) };
   const limit = LIMITS[online ? 'online' : 'local'];
   if (!online) step(t('chat.stepLoad', { model: model?.name ?? settings.models.polish }));
   await loadModel(llm, 'polish');

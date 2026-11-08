@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="styles.css" />
     <script type="module" src="renderer.js"></script>
   </head>
-  <body data-view="home">
+  <body data-view="overview">
     <button class="bar-btn bar-left" id="nav-toggle" type="button">
       <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3" /><path d="M9 4v16" /></svg>
     </button>
@@ -23,19 +23,30 @@
           <img class="brand-mark" src="icon.png" alt="" />
           <span class="brand-name">TransLatte</span>
         </div>
+        <div class="lib-switch menu-wrap" id="lib-switch"></div>
 
         <nav class="nav-panel">
-          <button class="nav-item active" data-nav="home">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h9M8.5 3v2M6 5c1 4 3.5 6.5 7 8M11 5c-1 4-3.5 7-7 9" /><path d="M13 21l4-9 4 9M14.5 18h5" /></svg>
-            <span data-i18n="nav.translate">Přeložit</span>
+          <button class="nav-item active" data-nav="overview">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1.5" /><rect x="14" y="3" width="7" height="5" rx="1.5" /><rect x="14" y="12" width="7" height="9" rx="1.5" /><rect x="3" y="16" width="7" height="5" rx="1.5" /></svg>
+            <span data-i18n="nav.overview">Přehled</span>
           </button>
           <button class="nav-item" data-nav="history">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></svg>
-            <span data-i18n="nav.history">Knihovna</span>
+            <span data-i18n="nav.history">Soubory</span>
             <svg class="nav-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
             <span class="nav-badge" id="active-badge" hidden></span>
           </button>
           <nav class="library-folders" id="library-folders"></nav>
+          <button class="nav-item" data-nav="projects">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4a2 2 0 0 1 2-2h12v17H7a2 2 0 0 0-2 2z" /><path d="M5 21V4M9 7h6" /></svg>
+            <span data-i18n="nav.projects">Projekty</span>
+            <svg class="nav-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
+          </button>
+          <nav class="library-folders project-folders" id="project-folders"></nav>
+          <button class="nav-item" data-nav="home">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h9M8.5 3v2M6 5c1 4 3.5 6.5 7 8M11 5c-1 4-3.5 7-7 9" /><path d="M13 21l4-9 4 9M14.5 18h5" /></svg>
+            <span data-i18n="nav.translate">Překlad</span>
+          </button>
           <div class="nav-gap"></div>
           <button class="nav-item" data-nav="help">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 .9-1 1.7M12 17h.01" /></svg>
@@ -72,7 +83,38 @@
 
       <main class="main">
         <div class="update-bar" id="update-bar" hidden></div>
-        <section class="view" data-view="home">
+        <section class="view overview" data-view="overview">
+          <header class="view-head">
+            <h1 data-i18n="nav.overview">Přehled</h1>
+            <span class="muted" id="overview-lib"></span>
+          </header>
+
+          <button class="dropzone" id="overview-drop" type="button">
+            <span class="drop-icon">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5" /><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" /></svg>
+            </span>
+            <span class="drop-title" data-i18n="overview.dropTitle">Přidat soubor</span>
+            <span class="drop-sub" data-i18n="overview.dropText">Cizojazyčné dokumenty se přeloží, ostatní se jen uloží, popíšou a zařadí.</span>
+            <span class="btn drop-pick" data-i18n="home.pick">Vybrat soubory</span>
+          </button>
+
+          <div class="section-title" id="overview-active-title" data-i18n="home.active" hidden>Probíhá</div>
+          <div class="job-cards" id="overview-active"></div>
+          <div class="overview-grid" id="overview-grid"></div>
+        </section>
+
+        <section class="view projects-page" data-view="projects" hidden>
+          <header class="view-head">
+            <h1 data-i18n="nav.projects">Projekty</h1>
+            <button class="btn primary" id="projects-new" type="button" data-i18n="project.new">Nový projekt</button>
+          </header>
+          <div class="project-grid" id="project-grid"></div>
+          <div class="empty" id="projects-empty" hidden>
+            <p data-i18n="projects.empty">Zatím tu žádný projekt není.</p>
+          </div>
+        </section>
+
+        <section class="view" data-view="home" hidden>
           <header class="view-head">
             <h1 data-i18n="home.title">Přeložit dokument</h1>
           </header>
@@ -160,7 +202,7 @@
 
         <section class="view library" data-view="history" hidden>
           <header class="view-head">
-            <h1 data-i18n="nav.history">Knihovna</h1>
+            <h1 data-i18n="nav.history">Soubory</h1>
             <input class="search" id="history-search" type="search" placeholder="Hledat v knihovně…" data-i18n-placeholder="history.search" />
           </header>
           <div class="library-banner" id="library-banner" hidden></div>
@@ -180,7 +222,7 @@
             <button class="icon-btn" id="detail-back" type="button" title="Zpět" data-i18n-title="detail.back" data-i18n-aria-label="detail.back">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6" /></svg>
             </button>
-            <span class="crumb" data-i18n="nav.history">Knihovna</span>
+            <span class="crumb" data-i18n="nav.history">Soubory</span>
             <span class="crumb" aria-hidden="true">/</span>
             <h1 id="detail-name"></h1>
             <span id="detail-status"></span>

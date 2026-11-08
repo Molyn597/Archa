@@ -23,10 +23,10 @@ import { resolveLang, setLang, t, type MessageKey } from '../shared/i18n';
 import { LIBRARY_CHAT, projectChatKey, TRASH_DAYS } from '../shared/folders';
 import { languageName } from '../shared/languages';
 import { findRegion, normalizeCrop } from '../shared/regions';
-import type { ChatModel, DocumentCard, DuplicateMatch, Highlight, Project, ProjectKind, Job, Library, LibraryFolder, JobOptions, Mode, OrganizePlan, OutputKind, Placement, Provider, RegionTranslation, Settings, Stage } from '../shared/types';
+import type { ChatModel, DocumentCard, Libraries, LibraryKind, DuplicateMatch, Highlight, Project, ProjectKind, Job, Library, LibraryFolder, JobOptions, Mode, OrganizePlan, OutputKind, Placement, Provider, RegionTranslation, Settings, Stage } from '../shared/types';
 import { isOnline } from '../shared/provider';
 import { makeCard } from './make-card';
-import { answerQuestion, applyPlan, mergeFolders, moveDocs, moveFolder, removeFolder, shouldBeLocked, undoPlacement } from './library';
+import { answerQuestion, applyPlan, markOpened, mergeFolders, moveDocs, moveFolder, removeFolder, shouldBeLocked, undoPlacement } from './library';
 import { organizeFolder, suggestMerges } from './organize';
 import { askDocument } from './chat';
 import { askLibrary } from './library-chat';
@@ -41,7 +41,8 @@ import { clearKey, readKey, saveKey } from './keystore';
 import { listModels, status } from './lmstudio';
 import { fetchEmbedCatalog, openrouterStatus, refreshCatalog } from './provider';
 import { relayoutJob, translateRegion } from './pipeline';
-import { Queue, SUPPORTED } from './queue';
+import { Queue, SUPPORTED, type QueueEvents } from './queue';
+import { createLibrary, libraryRoot, loadLibraries, saveLibraries, setupLibraries } from './libraries';
 import { checkUpdate, downloadUpdate } from './updates';
 import { Store } from './store';
 
@@ -65,7 +66,12 @@ const STAGE_LABEL: Record<Stage, MessageKey> = {
 
 if (process.env.TRANSLATTE_USER_DATA) app.setPath('userData', process.env.TRANSLATTE_USER_DATA);
 
-const store = new Store(app.getPath('userData'));
+const appRoot = app.getPath('userData');
+/** Aktuální knihovna: úložiště, trezor a fronta se při přepnutí vymění (handlery IPC je čtou až při volání). */
+let libs: Libraries;
+let store: Store;
+let vault: VaultState;
+let queue: Queue;
 let win: BrowserWindow | undefined;
 let tray: Tray | undefined;
 let quitting = false;
@@ -78,18 +84,13 @@ const refreshHashes = async () => {
   for (const job of await fillHashes(store).catch(() => [] as Job[])) send('job-update', job);
 };
 /** Knihovna se změnila; když AI přitom založila složky, renderer nabídne Vrátit. */
-/** Trezor zamčených složek; změna stavu = renderer znovu načte úlohy i knihovnu. */
-const vault = new VaultState(store, () => {
-  send('vault-changed');
-  send('library-changed');
-});
 const libraryChanged = (placed?: Placement) => {
   send('library-changed');
   // Oznámení s Vrátit jen u nově založených složek; ostatní zařazení jsou v přehledu „Zařadila AI“.
   if (placed?.created.length) send('library-placed', placed);
 };
 
-const queue = new Queue(store, {
+const queueEvents: QueueEvents = {
   update(job) {
     if (job.status === 'running' || job.status === 'queued') active.set(job.id, job);
     else active.delete(job.id);
@@ -118,7 +119,39 @@ const queue = new Queue(store, {
   },
   idle: () => updateProgressUi(),
   library: libraryChanged,
-});
+};
+
+/** Otevře knihovnu: vlastní úložiště (společné nastavení AI zůstává v userData), trezor a frontu. */
+function openLibrary(id: string) {
+  store = new Store(libraryRoot(appRoot, id), appRoot);
+  // Trezor zamčených složek; změna stavu = renderer znovu načte úlohy i knihovnu.
+  vault = new VaultState(store, () => {
+    send('vault-changed');
+    send('library-changed');
+  });
+  queue = new Queue(store, queueEvents);
+}
+
+/** Úklid knihovny po otevření: přerušené šifrování a úlohy, starý koš, otisky. */
+async function startLibrary() {
+  await store.cleanupLocked().catch(() => undefined);
+  await queue.recover();
+  await queue.purgeOld(TRASH_DAYS).catch(() => undefined);
+  void refreshHashes();
+}
+
+/** Přepnutí knihovny: trezor předchozí se zamkne (dočasné kopie pryč), okno se načte znovu. */
+async function switchLibrary(id: string) {
+  if (!libs.list.some((l) => l.id === id)) throw new Error('Unknown library');
+  if (id === libs.current) return;
+  if (queue.busy) throw new Error(t('libraries.busy'));
+  await vault.dispose();
+  libs.current = id;
+  await saveLibraries(appRoot, libs);
+  openLibrary(id);
+  await startLibrary();
+  win?.webContents.reload();
+}
 
 /** Celkový průběh z uplynulého času a odhadu zbytku; průběh fáze by u každé fáze začínal od nuly. */
 function overallProgress(job: Job) {
@@ -236,6 +269,26 @@ async function openJobs() {
 }
 
 function registerIpc() {
+  ipcMain.handle('libraries', () => libs);
+  ipcMain.handle('libraries-switch', (_e, id: string) => switchLibrary(id));
+  ipcMain.handle('libraries-setup', async (_e, kinds: LibraryKind[], opts: { subjects?: string[]; keep?: LibraryKind }) => {
+    libs = await setupLibraries(appRoot, libs, kinds, opts);
+    send('library-changed');
+    return libs;
+  });
+  ipcMain.handle('libraries-create', async (_e, kind: LibraryKind, name?: string, subjects?: string[]) => {
+    const info = await createLibrary(appRoot, libs, kind, subjects, name);
+    await switchLibrary(info.id);
+    return info;
+  });
+  ipcMain.handle('libraries-rename', async (_e, id: string, name: string) => {
+    const info = libs.list.find((l) => l.id === id);
+    if (!info) return libs;
+    if (name.trim()) info.name = name.trim();
+    else delete info.name;
+    await saveLibraries(appRoot, libs);
+    return libs;
+  });
   ipcMain.handle('settings', () => store.settings());
   ipcMain.handle('settings-save', async (_e, settings: Settings) => {
     // lastUpdateCheck patří hlavnímu procesu; zastaralá kopie z okna ho nesmí přepsat.
@@ -245,13 +298,13 @@ function registerIpc() {
   });
   ipcMain.handle('lm-status', async (_e, provider?: Provider) => {
     const s = await store.settings();
-    return isOnline({ provider: provider ?? s.provider }) ? openrouterStatus(s.remoteModels, await readKey(store.root)) : status(s.apiUrl, s.models);
+    return isOnline({ provider: provider ?? s.provider }) ? openrouterStatus(s.remoteModels, await readKey(store.appRoot)) : status(s.apiUrl, s.models);
   });
   ipcMain.handle('catalog-refresh', () => refreshCatalog());
   // Klíč se do okna nikdy nevrací, jen informace, zda existuje.
-  ipcMain.handle('api-key-has', async () => Boolean(await readKey(store.root)));
-  ipcMain.handle('api-key-set', (_e, key: string) => saveKey(store.root, key));
-  ipcMain.handle('api-key-clear', () => clearKey(store.root));
+  ipcMain.handle('api-key-has', async () => Boolean(await readKey(store.appRoot)));
+  ipcMain.handle('api-key-set', (_e, key: string) => saveKey(store.appRoot, key));
+  ipcMain.handle('api-key-clear', () => clearKey(store.appRoot));
   ipcMain.handle('pick-files', async () => {
     const res = await dialog.showOpenDialog(win!, {
       properties: ['openFile', 'multiSelections'],
@@ -345,6 +398,9 @@ function registerIpc() {
     const job = active.get(id) ?? (await store.job(id));
     return job ? { job, segments: await store.segments(id) } : null;
   });
+  ipcMain.handle('job-opened', async (_e, id: string) => {
+    await store.updateLibrary((library) => markOpened(library, id));
+  });
   ipcMain.handle('job-input', async (_e, id: string) => {
     const job = await store.job(id);
     return job ? new Uint8Array(await store.readInput(job)) : null;
@@ -418,7 +474,7 @@ function registerIpc() {
   );
   ipcMain.handle('library-merge-suggest', async (_e, model?: ChatModel) => queue.exclusive(async () => suggestMerges(store, await store.settings(), model)));
   ipcMain.handle('embed-models', async (_e, provider: Provider) =>
-    provider === 'openrouter' ? fetchEmbedCatalog(await readKey(store.root)) : (await listModels('embedding')).map((m) => ({ key: m.modelKey, name: m.displayName ?? m.modelKey })),
+    provider === 'openrouter' ? fetchEmbedCatalog(await readKey(store.appRoot)) : (await listModels('embedding')).map((m) => ({ key: m.modelKey, name: m.displayName ?? m.modelKey })),
   );
   const unindexed = async () => {
     const model = embedModelFor(await store.settings());
@@ -436,7 +492,7 @@ function registerIpc() {
     for (const [i, job] of missing.entries()) {
       await queue
         .exclusive(async () => {
-          const emb = await embedder(await store.settings(), store.root);
+          const emb = await embedder(await store.settings(), store.appRoot);
           if (emb) await buildIndex(store, job.id, job.name, emb);
         })
         .catch(() => undefined);
@@ -623,27 +679,27 @@ if (!app.requestSingleInstanceLock()) {
   app.on('before-quit', () => {
     quitting = true;
     // Dočasné nešifrované kopie zamčených dokumentů nesmí přežít aplikaci.
-    void vault.lock();
+    void vault?.lock();
     void wipeTempCopies();
   });
   app.on('activate', showWindow);
   app.on('window-all-closed', () => {
-    if (!isMac && !queue.busy) app.quit();
+    if (!isMac && !queue?.busy) app.quit();
   });
   app.whenReady().then(async () => {
     app.setName('TransLatte');
     if (isMac) app.dock?.setIcon(path.join(__dirname, 'icon.png'));
+    // Starší verze měla vše přímo v userData: převezme se do první knihovny.
+    libs = await loadLibraries(appRoot);
+    openLibrary(libs.current);
     const settings = await store.settings();
     setLang(resolveLang(settings.uiLang, app.getLocale()));
     setMenu();
     registerIpc();
-    await store.cleanupLocked().catch(() => undefined);
     // Uspání nebo zamčení obrazovky zamkne i trezor.
     powerMonitor.on('suspend', () => void vault.lock());
     powerMonitor.on('lock-screen', () => void vault.lock());
-    await queue.recover();
-    await queue.purgeOld(TRASH_DAYS).catch(() => undefined);
-    void refreshHashes();
+    await startLibrary();
     applyTheme(settings.theme);
     createWindow();
     createTray();

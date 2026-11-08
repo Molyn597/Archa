@@ -115,6 +115,25 @@ export interface Library {
   questions?: FolderQuestion[];
   /** Poslední automatická zařazení AI (nejnovější první), pro přehled s Vrátit. */
   aiLog?: Placement[];
+  /** Naposledy otevřené dokumenty (nejnovější první), pro Přehled. */
+  recent?: string[];
+}
+/** Typ knihovny: určuje šablonu složek nové knihovny; `general` = převzatá data ze starší verze. */
+export type LibraryKind = 'work' | 'study' | 'personal' | 'general';
+/** Oddělená knihovna (vlastní data, trezor a část nastavení) v userData/libraries/<id>. */
+export interface LibraryInfo {
+  id: string;
+  /** Vlastní název; bez hodnoty = přeložený název typu. */
+  name?: string;
+  kind: LibraryKind;
+  createdAt: number;
+}
+/** Seznam knihoven (userData/libraries.json). */
+export interface Libraries {
+  current: string;
+  list: LibraryInfo[];
+  /** Uživatel už prošel výběrem knihoven (první spuštění nebo převzetí starších dat). */
+  setupDone?: boolean;
 }
 /** Dotaz, kam zařadit dokument; možnosti jsou cesty složek (i dosud neexistujících). */
 export interface FolderQuestion {
@@ -598,6 +617,15 @@ export interface Api {
   vaultChangePassword(oldPassword: string, newPassword: string): Promise<void>;
   /** Aktivita uživatele (posouvá automatické zamčení). */
   vaultPing(): Promise<void>;
+  /** Dokument otevřen v aplikaci (seznam naposledy otevřených na Přehledu). */
+  jobOpened(id: string): Promise<void>;
+  libraries(): Promise<Libraries>;
+  /** Přepne knihovnu; okno se pak načte znovu. Během překladu vyhodí chybu. */
+  switchLibrary(id: string): Promise<void>;
+  setupLibraries(kinds: LibraryKind[], opts: { subjects?: string[]; keep?: LibraryKind }): Promise<Libraries>;
+  /** Založí knihovnu se šablonou a přepne na ni. */
+  createLibrary(kind: LibraryKind, name?: string, subjects?: string[]): Promise<LibraryInfo>;
+  renameLibrary(id: string, name: string): Promise<Libraries>;
   /** Zamkne složku (zašifruje ji i podsložky), `false` = zámek natrvalo zruší (dešifruje); vyžaduje odemčený trezor. */
   lockFolder(id: string, locked: boolean): Promise<void>;
   onVaultChanged(handler: () => void): void;

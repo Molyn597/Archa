@@ -66,6 +66,14 @@ export function moveFolder(library: Library, id: string, parent: string | null):
   return true;
 }
 
+/** Kolik naposledy otevřených dokumentů si knihovna pamatuje. */
+export const RECENT_MAX = 8;
+
+/** Dokument otevřen: na začátek seznamu naposledy otevřených. */
+export function markOpened(library: Library, jobId: string) {
+  library.recent = [jobId, ...(library.recent ?? []).filter((id) => id !== jobId)].slice(0, RECENT_MAX);
+}
+
 /** Ruční přesun dokumentů; `null` = mezi nezařazené. */
 export function moveDocs(library: Library, jobIds: string[], folderId: string | null) {
   for (const id of jobIds) {

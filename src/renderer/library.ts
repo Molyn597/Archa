@@ -1,6 +1,7 @@
 import { t, type MessageKey } from '../shared/i18n';
 import { childFolders, fold, folderName, folderPath, isLocked, placementActive, resolvePath, subtree, TRASH_DAYS } from '../shared/folders';
 import { duplicateGroups, type DuplicateGroup } from '../shared/duplicates';
+import { OTHER_FOLDER } from '../shared/overview';
 import { isOnline } from '../shared/provider';
 import type { DocumentCard, FolderMerge, Job, LibraryState, OrganizePlan, Placement, Project, ProjectKind } from '../shared/types';
 import type { Tab } from './detail';
@@ -20,6 +21,8 @@ export interface LibraryHost {
   showLibrary(): void;
   /** Výběr nebo seznam složek se změnil (chat s knihovnou nabízí „Jen ve složce“). */
   folderChanged(): void;
+  /** Výběr se změnil (vybraný projekt zvýrazňuje v navigaci Projekty, ne Soubory). */
+  selectionChanged(): void;
 }
 
 /** Výběr v seznamu složek: všechny, nezařazené, nebo id složky. */
@@ -568,7 +571,7 @@ const projectCtx: ProjectCtx = {
 };
 
 /** Dialog nového projektu; po založení se projekt otevře, nebo se do něj přidají dokumenty. */
-function createProject(ids: string[] = []) {
+export function createProject(ids: string[] = []) {
   newProjectModal(async (name, kind: ProjectKind) => {
     try {
       let p = await window.api.createProject(name, kind);
@@ -581,6 +584,23 @@ function createProject(ids: string[] = []) {
       toast(cleanError(e), true);
     }
   });
+}
+
+/** Otevře projekt v jeho detailu (view Soubory s vybraným projektem). */
+export const openProject = (id: string) => select(PROJECT + id);
+
+/** Je vybraný projekt? */
+export const projectSelected = () => inProject();
+
+/** Opustí vybraný projekt (Soubory se otevřou na všech dokumentech). */
+export function leaveProject() {
+  if (inProject()) select(ALL);
+}
+
+/** Otevře Soubory na dokumentech k zařazení: nezařazené, jinak složka Ostatní. */
+export function showUnsorted() {
+  const { folders } = state.library;
+  select(host.jobs().some((j) => !folderOf(j.id)) ? UNSORTED : folders.some((f) => f.id === OTHER_FOLDER) ? OTHER_FOLDER : ALL);
 }
 
 /** Přidá dokumenty do projektu a oznámí, kolik jich v něm přibylo. */
@@ -657,7 +677,6 @@ function renderFolders(jobs: Job[]) {
   const projectBlock = h(
     'div',
     { class: 'folder-projects' },
-    h('div', { class: 'folder-section' }, t('project.section')),
     ...projects.map((p) => folderItem(PROJECT + p.id, p.name, p.sources.length, { iconPath: ICONS.book })),
     h('button', { class: 'folder-add', type: 'button', onclick: () => createProject() }, icon(ICONS.plus), t('project.new')),
   );
@@ -668,7 +687,8 @@ function renderFolders(jobs: Job[]) {
     folderItem(AI_LOG, t('aiLog.title'), aiActive().length, { iconPath: ICONS.fast }),
     folderItem(TRASH, t('trash.title'), trash.length, { iconPath: ICONS.trash, trash: true }),
   );
-  $('library-folders').replaceChildren(h('div', { class: 'folder-tree' }, ...items), projectBlock, pinned);
+  $('library-folders').replaceChildren(h('div', { class: 'folder-tree' }, ...items), pinned);
+  $('project-folders').replaceChildren(projectBlock);
 }
 
 // ---------- Banner s chybějícími kartami ----------
@@ -1051,6 +1071,7 @@ export function renderLibrary() {
   // Rozepsaný název složky se překreslením (např. při průběhu úlohy) nesmí ztratit.
   if (!editing) draw();
   host.folderChanged();
+  host.selectionChanged();
   // Chat projektu jen v Knihovně; jinde (detail dokumentu) rozsah panelu nesahá.
   if (document.querySelector<HTMLElement>('.view[data-view="history"]')?.hidden === false) showProjectChat(inProject() ? (projects.find((p) => p.id === projectId()) ?? null) : null);
 }

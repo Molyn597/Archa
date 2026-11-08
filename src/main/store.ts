@@ -62,9 +62,19 @@ async function listFiles(dir: string, sub = ''): Promise<string[]> {
   return out;
 }
 
-/** Úložiště pod userData: settings.json, library.json, library-chat.json, jobs/<id>/{job.json, segments.json, study.json, highlights.json, chat.json, card.json, vstup, výstup} a projects/<id>/project.json. */
+/** Nastavení, které má každá knihovna vlastní; ostatní (AI, vzhled, sazby) je společné celé aplikaci. */
+export const LIBRARY_SETTINGS = ['targetLang', 'citation', 'autoCard'] as const;
+
+/**
+ * Úložiště jedné knihovny (`root` = userData/libraries/<id>): settings.json (jen LIBRARY_SETTINGS), library.json, library-chat.json, vault.json,
+ * jobs/<id>/{job.json, segments.json, study.json, highlights.json, chat.json, card.json, vstup, výstup} a projects/<id>/project.json.
+ * Společné věci aplikace (settings.json, openrouter.key, dictionaries/) leží v `appRoot` = userData.
+ */
 export class Store {
-  constructor(readonly root: string) {}
+  constructor(
+    readonly root: string,
+    readonly appRoot = root,
+  ) {}
 
   /** Hlavní klíč odemčeného trezoru (jen v paměti). */
   private key?: Buffer;
@@ -193,8 +203,14 @@ export class Store {
     return out;
   }
 
+  private ownSettings = () => this.root !== this.appRoot;
+
   async settings(): Promise<Settings> {
-    const saved = await this.readJson<Partial<Settings>>(path.join(this.root, 'settings.json'), {});
+    const global = await this.readJson<Partial<Settings>>(path.join(this.appRoot, 'settings.json'), {});
+    const own = this.ownSettings() ? await this.readJson<Partial<Settings>>(path.join(this.root, 'settings.json'), {}) : {};
+    const saved: Partial<Settings> = { ...global };
+    // Chybějící hodnota knihovny = naposledy použitá (zůstává i ve společném souboru).
+    for (const k of LIBRARY_SETTINGS) if (own[k] !== undefined) Object.assign(saved, { [k]: own[k] });
     return {
       ...DEFAULT_SETTINGS,
       ...saved,
@@ -212,13 +228,16 @@ export class Store {
     };
   }
 
-  saveSettings = (settings: Settings) => this.writeJson(path.join(this.root, 'settings.json'), settings);
+  async saveSettings(settings: Settings) {
+    await this.writeJson(path.join(this.appRoot, 'settings.json'), settings);
+    if (this.ownSettings()) await this.writeJson(path.join(this.root, 'settings.json'), Object.fromEntries(LIBRARY_SETTINGS.map((k) => [k, settings[k]])));
+  }
 
   /** Knihovna: složky a zařazení dokumentů (jen v datech aplikace, soubory se nepřesouvají). */
   async library(): Promise<Library> {
     const saved = await this.readJson<Partial<Library> | null>(path.join(this.root, 'library.json'), null);
     return saved?.folders
-      ? { folders: saved.folders, assign: saved.assign ?? {}, ...(saved.questions?.length && { questions: saved.questions }), ...(saved.aiLog?.length && { aiLog: saved.aiLog }) }
+      ? { folders: saved.folders, assign: saved.assign ?? {}, ...(saved.questions?.length && { questions: saved.questions }), ...(saved.aiLog?.length && { aiLog: saved.aiLog }), ...(saved.recent?.length && { recent: saved.recent }) }
       : defaultLibrary();
   }
 

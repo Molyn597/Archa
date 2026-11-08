@@ -652,7 +652,7 @@ async function readContext(ctx: JobContext, segments: Segment[], eta: Eta): Prom
 /** Kontrola pravopisu ve workeru; bez slovníku (offline) se přeskočí s poznámkou u úlohy. */
 async function startSpeller(ctx: JobContext): Promise<SpellWorker | undefined> {
   try {
-    const dictionary = await ensureDictionary(path.join(ctx.store.root, 'dictionaries'), ctx.signal);
+    const dictionary = await ensureDictionary(path.join(ctx.store.appRoot, 'dictionaries'), ctx.signal);
     check(ctx.signal);
     return new SpellWorker(spellWorkerPath(__dirname), dictionary);
   } catch (err) {
@@ -766,7 +766,7 @@ export async function runJob(ctx: JobContext): Promise<Measured> {
   const eta = new Eta(activeRates(settings), { ocrPages: 0, chars: 0, context: job.mode === 'quality' && !job.context, fixes: 0 });
 
   ctx.progress({ stage: 'prepare', done: 0, total: 0 });
-  ctx.endpoint = await connect(settings, store.root);
+  ctx.endpoint = await connect(settings, store.appRoot);
 
   ctx.progress({ stage: 'extract', done: 0, total: 0 });
   let tick = Date.now();
@@ -938,7 +938,7 @@ export async function translateRegion(store: Store, job: Job, settings: Settings
   if (saved) return saved;
   const model = activeModels(settings).polish;
   if (!(await isVision(settings, 'polish'))) throw new Error(t('study.noVision', { model }));
-  const llm: Llm = { job, settings, signal: new AbortController().signal, endpoint: await connect(settings, store.root) };
+  const llm: Llm = { job, settings, signal: new AbortController().signal, endpoint: await connect(settings, store.appRoot) };
   const docId = `${job.id}-study`;
   await openPdf(docId, new Uint8Array(await store.readInput(job)));
   let image: string;

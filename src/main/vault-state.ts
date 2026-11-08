@@ -76,6 +76,13 @@ export class VaultState {
     await this.saveMeta(await rewrapVault(meta, oldPassword, newPassword));
   }
 
+  /** Konec používání (přepnutí knihovny): zamknout a zastavit hlídání nečinnosti. */
+  async dispose() {
+    await this.lock();
+    clearInterval(this.timer);
+    this.timer = undefined;
+  }
+
   /** Aktivita uživatele (posouvá automatické zamčení). */
   touch = () => (this.lastActivity = Date.now());
 }

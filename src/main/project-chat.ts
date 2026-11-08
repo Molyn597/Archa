@@ -33,9 +33,9 @@ export async function askProject(store: Store, base: Settings, project: Project,
   const cards = Object.fromEntries(await Promise.all(jobs.map(async (j) => [j.id, await store.card(j.id)] as const)));
   const docs = libraryDocs(jobs, cards, await store.library());
   if (!docs.length) throw new Error(t('projectChat.empty'));
-  if (online && !(await readKey(store.root))) throw new Error(t('openrouter.noKey'));
+  if (online && !(await readKey(store.appRoot))) throw new Error(t('openrouter.noKey'));
   const history = await store.projectChat(project.id);
-  const llm: Llm = { job: { cost: 0 } as Job, settings, signal: new AbortController().signal, endpoint: await connect(settings, store.root) };
+  const llm: Llm = { job: { cost: 0 } as Job, settings, signal: new AbortController().signal, endpoint: await connect(settings, store.appRoot) };
   const limit = LIMITS[online ? 'online' : 'local'];
   if (!online) step(t('chat.stepLoad', { model: model?.name ?? settings.models.polish }));
   await loadModel(llm, 'polish');

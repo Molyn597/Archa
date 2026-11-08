@@ -89,13 +89,13 @@ export async function planOrganize(llm: Llm, library: Library, docs: LibDoc[], s
 /** Návrh pro složku (nebo celou knihovnu) mimo chat – nabídka u přeplněné složky. */
 export async function organizeFolder(store: Store, base: Settings, folderId: string | null, model?: ChatModel): Promise<OrganizePlan> {
   const settings = chatSettings(base, model);
-  if (isOnline(settings) && !(await readKey(store.root))) throw new Error(t('openrouter.noKey'));
+  if (isOnline(settings) && !(await readKey(store.appRoot))) throw new Error(t('openrouter.noKey'));
   const jobs = await store.jobs();
   const cards = Object.fromEntries(await Promise.all(jobs.map(async (j) => [j.id, await store.card(j.id)] as const)));
   const library = await store.library();
   const docs = libraryDocs(jobs, cards, library, folderId ?? undefined);
   // Cena online dotazu se k žádné úloze nepřičítá.
-  const llm: Llm = { job: { cost: 0 } as Job, settings, signal: new AbortController().signal, endpoint: await connect(settings, store.root) };
+  const llm: Llm = { job: { cost: 0 } as Job, settings, signal: new AbortController().signal, endpoint: await connect(settings, store.appRoot) };
   await loadModel(llm, 'polish');
   return planOrganize(llm, library, docs, folderId);
 }
@@ -136,8 +136,8 @@ export async function suggestMerges(store: Store, base: Settings, model?: ChatMo
   const library = await store.library();
   const byName = similarFolders(library).map((m) => ({ ...m, reason: t('merge.reasonName') }));
   const settings = chatSettings(base, model);
-  if (isOnline(settings) && !(await readKey(store.root))) throw new Error(t('openrouter.noKey'));
-  const llm: Llm = { job: { cost: 0 } as Job, settings, signal: new AbortController().signal, endpoint: await connect(settings, store.root) };
+  if (isOnline(settings) && !(await readKey(store.appRoot))) throw new Error(t('openrouter.noKey'));
+  const llm: Llm = { job: { cost: 0 } as Job, settings, signal: new AbortController().signal, endpoint: await connect(settings, store.appRoot) };
   await loadModel(llm, 'polish');
   const byModel = parseMerges(await ask(llm, 'polish', [{ role: 'user', content: mergePrompt(treeWithCounts(library), getLang()) }], MERGE_TOKENS), library);
   const seen = new Set(byName.map((m) => m.from));

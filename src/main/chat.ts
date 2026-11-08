@@ -42,9 +42,9 @@ export async function askDocument(store: Store, job: Job, base: Settings, questi
   const settings = chatSettings(base, model);
   const items = passages(await store.segments(job.id));
   if (!items.length) throw new Error(t('chat.empty'));
-  if (isOnline(settings) && !(await readKey(store.root))) throw new Error(t('openrouter.noKey'));
+  if (isOnline(settings) && !(await readKey(store.appRoot))) throw new Error(t('openrouter.noKey'));
   const history = await store.chat(job.id);
-  const llm: Llm = { job, settings, signal: new AbortController().signal, endpoint: await connect(settings, store.root) };
+  const llm: Llm = { job, settings, signal: new AbortController().signal, endpoint: await connect(settings, store.appRoot) };
   const limit = LIMITS[isOnline(settings) ? 'online' : 'local'];
   if (!isOnline(settings)) step(t('chat.stepLoad', { model: model?.name ?? settings.models.polish }));
   await loadModel(llm, 'polish');

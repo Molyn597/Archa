@@ -266,7 +266,7 @@ export class Queue {
       // Index pro hledání podle významu; bez embedding modelu se přeskočí, chyba překlad neshodí.
       if (job.status === 'done' && embedModelFor(settings) && !abort.signal.aborted) {
         try {
-          const emb = await embedder(settings, this.store.root, (usd) => (job.cost = (job.cost ?? 0) + usd));
+          const emb = await embedder(settings, this.store.appRoot, (usd) => (job.cost = (job.cost ?? 0) + usd));
           if (emb) await buildIndex(this.store, job.id, job.name, emb, abort.signal);
         } catch (e) {
           (job.notes ??= []).push(t('index.failed', { error: (e as Error).message || String(e) }));

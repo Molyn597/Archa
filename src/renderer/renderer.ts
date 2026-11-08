@@ -7,7 +7,10 @@ import { activeModels, activeRates, isOnline } from '../shared/provider';
 import type { Api, DuplicateMatch, FileInfo, Job, LmStatus, Mode, Models, Provider, Settings } from '../shared/types';
 import { openChat, renderFolderOpt, setupLibraryChat, showLibraryChat, syncChatSettings } from './chat';
 import { citeSegment, closeDetail, detailJobId, openDetail, setupDetail, updateDetail, type Tab } from './detail';
-import { reloadLibrary, renderLibrary, setupLibrary } from './library';
+import { createProject, leaveProject, openProject, projectSelected, reloadLibrary, renderLibrary, setupLibrary, showUnsorted } from './library';
+import { addToLibrary, refreshOverview, renderOverview, setupOverview } from './overview';
+import { setupLibrarySwitch } from './library-switch';
+import { renderProjectsPage, setupProjectsPage } from './projects-page';
 import { refreshVault, setupVaultActivity } from './vault';
 import {
   applyI18n,
@@ -30,7 +33,7 @@ import {
 } from './dom';
 import { updateCard } from './update';
 import { fillHelpDots, renderHelp, scrollToTopic } from './help-view';
-import { openWelcome } from './welcome';
+import { openLibrarySetup, openWelcome } from './welcome';
 import type { HelpTopic } from '../shared/help';
 import { renderSettings, setSettingsTab } from './forms';
 
@@ -40,7 +43,7 @@ declare global {
   }
 }
 
-type View = 'home' | 'history' | 'detail' | 'help' | 'settings';
+type View = 'overview' | 'home' | 'history' | 'projects' | 'detail' | 'help' | 'settings';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const ROLE_NAMES: Record<keyof Models | 'chat', MessageKey> = { translate: 'role.translate', ocr: 'role.ocr', polish: 'role.polish', chat: 'role.chat' };
@@ -50,8 +53,8 @@ const CONTEXT_SECONDS = 10;
 
 let settings: Settings;
 let jobs = new Map<string, Job>();
-let view: View = 'home';
-let previousView: View = 'home';
+let view: View = 'overview';
+let previousView: View = 'overview';
 // Vybrané soubory čekají na tlačítko Přeložit; info se dotáhne kvůli počtu stran a odhadu ceny.
 let pending: { path: string; name: string; info?: FileInfo | null; dups?: DuplicateMatch[] }[] = [];
 const TYPICAL_PAGES = 15;
@@ -66,18 +69,28 @@ function show(next: View) {
   document.body.dataset.view = next;
   setTreePopover(false);
   for (const el of document.querySelectorAll<HTMLElement>('.view')) el.hidden = el.dataset.view !== next;
-  for (const b of document.querySelectorAll<HTMLButtonElement>('.nav-item[data-nav]')) {
-    b.classList.toggle('active', b.dataset.nav === next || (next === 'detail' && b.dataset.nav === 'history'));
-  }
+  syncNav();
   if (next !== 'detail') closeDetail();
   if (next === 'settings') void renderSettings(onSettingsSaved);
   if (next === 'history') {
     reloadLibrary();
     showLibraryChat();
   }
+  if (next === 'overview') void refreshOverview();
+  if (next === 'projects') void renderProjectsPage();
   if (next === 'help') renderHelp(showWelcome);
   document.querySelector('.main')?.scrollTo(0, 0);
   $('detail-scroll').scrollTo(0, 0);
+}
+
+/** Zvýraznění v navigaci: vybraný projekt v Souborech svítí jako Projekty; detail dokumentu patří Souborům. */
+function syncNav() {
+  const inProject = view === 'history' && projectSelected();
+  const target = inProject ? 'projects' : view === 'detail' ? 'history' : view;
+  document.body.classList.toggle('in-project', inProject);
+  const heading = document.querySelector<HTMLElement>('.view[data-view="history"] .view-head h1');
+  if (heading) heading.textContent = t(inProject ? 'nav.projects' : 'nav.history');
+  for (const b of document.querySelectorAll<HTMLButtonElement>('.nav-item[data-nav]')) b.classList.toggle('active', b.dataset.nav === target);
 }
 
 /** Přepne na nápovědu a případně rovnou na kapitolu. */
@@ -105,11 +118,17 @@ async function checkUpdates() {
 
 async function openJob(id: string, tab?: Tab, withChat = false) {
   if (!(await openDetail(id, tab))) return;
+  void window.api.jobOpened(id).catch(() => undefined);
   show('detail');
   if (withChat) openChat();
 }
 
 // ---------- LM Studio ----------
+
+function lmState(lm: LmStatus) {
+  if (lm.provider === 'openrouter') return lm.online ? t('lm.remoteOk') : lm.hasKey ? t('lm.remoteFail') : t('lm.noKey');
+  return lm.online ? t('lm.running') : lm.cli ? t('lm.stopped') : t('lm.notFound');
+}
 
 async function refreshStatus() {
   const lm = await window.api.lmStatus();
@@ -119,23 +138,14 @@ async function refreshStatus() {
   $('status-dot').className = `status-dot ${lm.online ? 'online' : 'offline'}`;
   const remote = lm.provider === 'openrouter';
   $('lm-title').textContent = remote ? t('lm.titleOnline') : 'LM Studio';
-  $('lm-state').textContent = remote
-    ? lm.online
-      ? t('lm.remoteOk')
-      : lm.hasKey
-        ? t('lm.remoteFail')
-        : t('lm.noKey')
-    : lm.online
-      ? t('lm.running')
-      : lm.cli
-        ? t('lm.stopped')
-        : t('lm.notFound');
+  $('lm-state').textContent = lmState(lm);
   catalog = lm.models;
   const models = activeModels(settings);
   // Řádek stavu dole v panelu: kde se překládá a jakým modelem; podrobnosti v rozbalovacím okně.
   $('status-title').textContent = t(remote ? 'side.online' : 'side.local');
   $('status-model').textContent = modelName(models.translate);
   $('status-row').title = `${$('lm-title').textContent}: ${$('lm-state').textContent}`;
+  renderOverview();
   renderEngine();
   renderCost();
   const chatKey = remote ? settings.chatModels?.remote : settings.chatModels?.local;
@@ -491,6 +501,7 @@ async function startPending() {
 
 function setupDrop() {
   const zone = $('dropzone');
+  const zones = [zone, $('overview-drop')];
   zone.addEventListener('click', async () => addFiles(await window.api.pickFiles()));
   let depth = 0;
   // Jen soubory z disku; přetahování dokumentů v knihovně nesmí přepnout na úvod.
@@ -499,20 +510,22 @@ function setupDrop() {
     if (!hasFiles(e)) return;
     e.preventDefault();
     depth++;
-    zone.classList.add('over');
-    if (view !== 'home') show('home');
+    for (const z of zones) z.classList.add('over');
+    // Přehled má vlastní plochu pro soubory.
+    if (view !== 'home' && view !== 'overview') show('home');
   });
   document.addEventListener('dragleave', () => {
-    if (--depth <= 0) zone.classList.remove('over');
+    if (--depth <= 0) for (const z of zones) z.classList.remove('over');
   });
   document.addEventListener('dragover', (e) => e.preventDefault());
   document.addEventListener('drop', (e) => {
     if (!hasFiles(e)) return;
     e.preventDefault();
     depth = 0;
-    zone.classList.remove('over');
+    for (const z of zones) z.classList.remove('over');
     const files = [...(e.dataTransfer?.files ?? [])];
-    void addFiles(files.map((f) => window.api.pathForFile(f)).filter(Boolean));
+    const paths = files.map((f) => window.api.pathForFile(f)).filter(Boolean);
+    void (view === 'overview' ? addToLibrary(paths) : addFiles(paths));
   });
 }
 
@@ -565,6 +578,7 @@ function renderHome() {
   const badge = $('active-badge');
   badge.hidden = !active.length;
   badge.textContent = String(active.length);
+  renderOverview();
 }
 
 const applyTheme = () => (document.documentElement.dataset.theme = settings.theme);
@@ -664,10 +678,12 @@ async function init() {
   for (const b of document.querySelectorAll<HTMLButtonElement>('.nav-item[data-nav]')) {
     b.addEventListener('click', () => {
       // V liště ikona Knihovny (už otevřené) vysune strom složek jako plovoucí panel.
-      if (b.dataset.nav === 'history' && view === 'history' && document.body.classList.contains('nav-collapsed')) {
+      if (b.dataset.nav === 'history' && view === 'history' && !projectSelected() && document.body.classList.contains('nav-collapsed')) {
         return setTreePopover(!document.body.classList.contains('tree-pop'));
       }
-      show(b.dataset.nav as View);
+      // Soubory vždy ukážou dokumenty, ne dříve vybraný projekt.
+      if (b.dataset.nav === 'history') leaveProject();
+      if (b.dataset.nav !== 'history' || view !== 'history') show(b.dataset.nav as View);
     });
   }
   setupNavToggle();
@@ -677,7 +693,6 @@ async function init() {
   setupDrop();
   fillLanguages();
   renderAll();
-  renderHome();
   setupLibrary({
     jobs: sorted,
     open: (id, tab, withChat) => void openJob(id, tab, withChat),
@@ -685,7 +700,24 @@ async function init() {
     showHome: () => show('home'),
     showLibrary: () => view !== 'history' && show('history'),
     folderChanged: renderFolderOpt,
+    selectionChanged: syncNav,
   });
+  setupOverview({
+    jobs: sorted,
+    settings: () => settings,
+    jobMode,
+    show,
+    addFiles: (paths) => void addFiles(paths),
+    jobCard,
+    recentRow,
+    openProject,
+    newProject: () => createProject(),
+    showUnsorted,
+    ai: () => (lastStatus ? { remote: lastStatus.provider === 'openrouter', online: lastStatus.online, state: lmState(lastStatus) } : undefined),
+  });
+  setupProjectsPage({ open: openProject, create: () => createProject() });
+  void setupLibrarySwitch();
+  renderHome();
   setupLibraryChat({
     title: (id) => jobs.get(id)?.name ?? '',
     cite: async (ref) => {
@@ -740,11 +772,13 @@ async function init() {
     if (view === 'detail' && open && !jobs.has(open)) show('history');
     renderHome();
     await reloadLibrary();
+    void refreshOverview();
   });
   setupVaultActivity();
   window.api.onOpenJob((id) => void openJob(id));
 
   if (!settings.onboarded) showWelcome();
+  else if (!(await window.api.libraries()).setupDone) openLibrarySetup();
   void checkUpdates();
   await refreshStatus();
   setInterval(() => void refreshStatus(), 20000);

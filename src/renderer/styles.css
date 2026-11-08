@@ -277,8 +277,10 @@ body::before {
   transition: transform 0.12s;
 }
 
-body[data-view='history'] .nav-chevron,
-body[data-view='detail'] .nav-chevron {
+body[data-view='history']:not(.in-project) .nav-item[data-nav='history'] .nav-chevron,
+body[data-view='detail'] .nav-item[data-nav='history'] .nav-chevron,
+body[data-view='projects'] .nav-item[data-nav='projects'] .nav-chevron,
+body.in-project .nav-item[data-nav='projects'] .nav-chevron {
   transform: none;
 }
 
@@ -4317,4 +4319,288 @@ mark.hl.hl-flash,
 .hl-item-note {
   font-style: italic;
   white-space: pre-wrap;
+}
+
+.welcome-libraries {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.welcome-kind {
+  flex-wrap: wrap;
+  column-gap: 8px;
+}
+
+.welcome-kind .muted {
+  flex-basis: 100%;
+  padding-left: 24px;
+}
+
+.welcome-sub {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.welcome-sub[hidden] {
+  display: none;
+}
+
+/* ---------- Přehled, Projekty a přepínač knihoven ---------- */
+
+/* Strom projektů pod položkou Projekty: ukáže se v Projektech a ve vybraném projektu; v liště ho schová stejně jako strom složek. */
+#project-folders {
+  display: none;
+}
+
+body[data-view='projects'] #project-folders,
+body.in-project #project-folders {
+  display: flex;
+}
+
+body.nav-collapsed #project-folders,
+body.in-project[data-view='history'] #library-folders {
+  display: none;
+}
+
+.nav-collapsed.tree-pop #project-folders {
+  display: none;
+}
+
+.project-folders .folder-projects {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.view-head .muted {
+  font-size: 13px;
+}
+
+.lib-switch {
+  margin: -6px 0 10px;
+}
+
+.lib-switch-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel);
+  font-size: 13px;
+  text-align: left;
+}
+
+.lib-switch-btn:hover {
+  background: var(--raised);
+}
+
+.lib-switch-btn > svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--muted);
+}
+
+.lib-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.lib-badge {
+  display: none;
+}
+
+.lib-switch .menu {
+  left: 0;
+  right: auto;
+  min-width: 220px;
+}
+
+/* V liště je z přepínače jen kulatý odznak s prvním písmenem. */
+.nav-collapsed .lib-switch-btn {
+  width: 36px;
+  height: 36px;
+  margin-inline: auto;
+  padding: 0;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.nav-collapsed .lib-name,
+.nav-collapsed .lib-switch-btn > svg {
+  display: none;
+}
+
+.nav-collapsed .lib-badge {
+  display: grid;
+  place-items: center;
+  font-weight: 600;
+}
+
+.menu-gap {
+  flex: none;
+  width: 16px;
+}
+
+.menu-sep {
+  height: 1px;
+  margin: 6px 0;
+  background: var(--line);
+}
+
+.overview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  align-items: start;
+  gap: 16px;
+}
+
+.ov-tiles {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.ov-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  text-align: left;
+}
+
+.ov-tile:hover {
+  background: var(--raised);
+}
+
+.ov-tile svg {
+  width: 20px;
+  height: 20px;
+  margin-bottom: 6px;
+  color: var(--muted);
+}
+
+.ov-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+}
+
+.ov-card h2 {
+  margin: 0 0 2px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ov-card p {
+  margin: 0;
+}
+
+.ov-card > .btn {
+  align-self: flex-start;
+}
+
+/* V úzké kartě: název nahoře, údaje pod ním (vedle sebe by název zmizel). */
+.ov-card .recent-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 10px;
+  row-gap: 2px;
+  height: auto;
+  padding: 8px 12px;
+  background: var(--main);
+}
+
+.ov-card .recent-row .dot {
+  grid-row: 1 / span 2;
+  align-self: center;
+}
+
+.ov-card .recent-name,
+.ov-card .recent-meta {
+  grid-column: 2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ov-card .recent-row:hover {
+  background: var(--raised);
+}
+
+.ov-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ov-ai {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.project-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px;
+}
+
+.project-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  text-align: left;
+}
+
+.project-card:hover {
+  background: var(--raised);
+}
+
+.project-card > svg {
+  width: 20px;
+  height: 20px;
+  margin-bottom: 6px;
+  color: var(--muted);
+}
+
+.project-card-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.projects-page #projects-new {
+  margin-left: auto;
 }
