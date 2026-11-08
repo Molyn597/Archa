@@ -23,7 +23,7 @@ import { resolveLang, setLang, t, type MessageKey } from '../shared/i18n';
 import { LIBRARY_CHAT, projectChatKey, TRASH_DAYS } from '../shared/folders';
 import { languageName } from '../shared/languages';
 import { findRegion, normalizeCrop } from '../shared/regions';
-import type { ChatModel, DocumentCard, Libraries, LibraryKind, DuplicateMatch, Highlight, Project, ProjectKind, Job, Library, LibraryFolder, JobOptions, Mode, OrganizePlan, OutputKind, Placement, Provider, RegionTranslation, Settings, Stage } from '../shared/types';
+import type { ChatModel, DocumentCard, Libraries, LibraryKind, MoveOptions, DuplicateMatch, Highlight, Project, ProjectKind, Job, Library, LibraryFolder, JobOptions, Mode, OrganizePlan, OutputKind, Placement, Provider, RegionTranslation, Settings, Stage } from '../shared/types';
 import { isOnline } from '../shared/provider';
 import { exportTable, invoiceRows, isoDay, toCsv } from '../shared/invoices';
 import { buildXlsx } from './xlsx';
@@ -286,9 +286,9 @@ function registerIpc() {
     send('library-changed');
     return libs;
   });
-  ipcMain.handle('libraries-create', async (_e, kind: LibraryKind, name?: string, subjects?: string[]) => {
+  ipcMain.handle('libraries-create', async (_e, kind: LibraryKind, name?: string, subjects?: string[], stay?: boolean) => {
     const info = await createLibrary(appRoot, libs, kind, subjects, name);
-    await switchLibrary(info.id);
+    if (!stay) await switchLibrary(info.id);
     return info;
   });
   ipcMain.handle('libraries-rename', async (_e, id: string, name: string) => {
@@ -308,8 +308,8 @@ function registerIpc() {
     send('library-changed');
     return libs;
   });
-  ipcMain.handle('libraries-move-docs', async (_e, jobIds: string[], targetId: string) => {
-    const count = await moveToLibrary(store, appRoot, libs, jobIds, targetId);
+  ipcMain.handle('libraries-move-docs', async (_e, jobIds: string[], targetId: string, opts?: MoveOptions) => {
+    const count = await moveToLibrary(store, appRoot, libs, jobIds, targetId, opts);
     // Po odchodu dokumentů zmizí prázdné výchozí složky, které k typu knihovny nepatří (Faktury ve Studiu…).
     await alignOpenLibrary(store, libs.list.find((l) => l.id === libs.current)?.kind ?? 'general');
     for (const id of jobIds) send('job-removed', id);
@@ -491,6 +491,7 @@ function registerIpc() {
   });
   ipcMain.handle('job-chat-clear', (_e, id: string) => store.saveChat(id, []));
   ipcMain.handle('library-answer', (_e, jobId: string, path: string | null) => editLibrary((library) => answerQuestion(library, jobId, path)));
+  ipcMain.handle('library-keep-literature', () => editLibrary((library) => void (library.hints = { ...library.hints, literatureKept: true })));
   ipcMain.handle('library-undo', (_e, placement: Placement) => editLibrary((library) => undoPlacement(library, placement)));
   ipcMain.handle('library-organize', async (_e, folderId: string | null, model?: ChatModel) =>
     queue.exclusive(async () => organizeFolder(store, await store.settings(), folderId, model)),

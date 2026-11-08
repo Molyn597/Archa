@@ -26,6 +26,6 @@ export function navFor(kind: LibraryKind): NavEntry[] {
 }
 
 /** Typy karet, které patří do pohledu Články a knihy. */
-export const LITERATURE_TYPES: readonly DocType[] = ['article', 'book', 'chapter', 'thesis'];
+export const LITERATURE_TYPES: readonly DocType[] = ['article', 'book', 'chapter', 'thesis', 'web'];
 
 export const isLiterature = (type: DocType | undefined) => !!type && LITERATURE_TYPES.includes(type);

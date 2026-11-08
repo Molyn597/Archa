@@ -1,5 +1,5 @@
-import { fold, folderName, isLocked, resolvePath } from './folders';
-import type { Library, Project } from './types';
+import { ancestors, childFolders, fold, folderName, isLocked, resolvePath, subtree } from './folders';
+import type { Library, LibraryKind, Project } from './types';
 
 /** Složka cílové knihovny pro přesunutý dokument: podle návrhu karty (cesta nebo název složky), jinak Ostatní, jinak nezařazený. Zamčené složky se nepoužijí. */
 export function targetFolder(target: Library, suggestion?: string): string | undefined {
@@ -15,11 +15,57 @@ export function targetFolder(target: Library, suggestion?: string): string | und
   return open.find((f) => f.id === 'other')?.id;
 }
 
-/** Zařadí dokumenty v cílové knihovně (`suggestions`: id → návrh složky z karty) a přenese zaplacení (`paid` ze zdroje). Vrací id složky nebo undefined. */
-export function placeEntries(target: Library, ids: string[], suggestions: Record<string, string | undefined> = {}, paid: Library['paid'] = {}) {
+/** Názvy složek od `from` (nebo od nejvyšší úrovně) dolů k složce; prázdné pole = dokument bez složky (nebo mimo `from`). */
+/**
+ * Cesta pro cílovou knihovnu: úvodní složka pojmenovaná jako typ cíle („Studium“ při přesunu do studijní knihovny)
+ * se vynechá, ať se její podsložky spojí s tím, co v cíli už je (Studium › Články → Články).
+ */
+export function pathForTarget(names: string[], kind: LibraryKind): string[] {
+  const own: Partial<Record<LibraryKind, string>> = { study: folderName({ id: 'study', createdAt: 0 }) };
+  return own[kind] && names.length > 1 && fold(names[0]) === fold(own[kind]!) ? names.slice(1) : names;
+}
+
+export function pathNames(folders: Library['folders'], folderId: string | undefined, from?: string): string[] {
+  const f = folders.find((x) => x.id === folderId);
+  if (!f) return [];
+  const chain = [...ancestors(folders, f.id), f];
+  const start = from ? chain.findIndex((x) => x.id === from) : 0;
+  return start < 0 ? [] : chain.slice(start).map(folderName);
+}
+
+/**
+ * Složka v cíli pro cestu názvů: existující nezamčená složka se stejným názvem (`fold`) na stejné úrovni se použije,
+ * chybějící se založí s novým id a vlastním názvem (i pro výchozí složky zdroje, takže nehrozí kolize výchozího id).
+ */
+export function ensureNamedPath(target: Library, names: string[], newId: () => string = () => crypto.randomUUID()): string | undefined {
+  let parent: string | undefined;
+  for (const name of names) {
+    const wanted = fold(name);
+    const open = childFolders(target.folders, parent).filter((f) => !isLocked(target.folders, f));
+    const found = open.find((f) => fold(folderName(f)) === wanted);
+    if (found) {
+      parent = found.id;
+      continue;
+    }
+    const folder = { id: newId(), name: name.slice(0, 60), createdAt: Date.now(), ...(parent && { parent }) };
+    target.folders.push(folder);
+    parent = folder.id;
+  }
+  return parent;
+}
+
+/** Zařadí dokument do složky podle cesty názvů (založí chybějící). Bez cesty nic nedělá a vrací undefined. */
+export function placeWithPath(target: Library, jobId: string, names: string[], newId?: () => string): string | undefined {
+  const folder = ensureNamedPath(target, names, newId);
+  if (folder) target.assign[jobId] = { folder };
+  return folder;
+}
+
+/** Zařadí dokumenty v cílové knihovně (`suggestions`: id → návrh složky z karty; `paths`: id → cesta názvů ze zdroje, má přednost) a přenese zaplacení (`paid` ze zdroje). Vrací id složky nebo undefined. */
+export function placeEntries(target: Library, ids: string[], suggestions: Record<string, string | undefined> = {}, paid: Library['paid'] = {}, paths: Record<string, string[] | undefined> = {}) {
   const placed: Record<string, string | undefined> = {};
   for (const id of ids) {
-    const folder = targetFolder(target, suggestions[id]);
+    const folder = (paths[id]?.length ? placeWithPath(target, id, paths[id]!) : undefined) ?? targetFolder(target, suggestions[id]);
     placed[id] = folder;
     if (folder) target.assign[id] = { folder };
     else delete target.assign[id];
@@ -56,4 +102,38 @@ export function dropSources(project: Project, ids: string[]): boolean {
   if (kept.length === project.sources.length) return false;
   project.sources = kept;
   return true;
+}
+
+/** Složky, kterých se přesun dotkl: cesty přesunutých dokumentů a `from` (přesouvaná složka) včetně podsložek. Počítá se před úpravou zdroje. */
+export function touchedFolders(source: Library, ids: string[], from?: string): Set<string> {
+  const out = new Set<string>();
+  const add = (id: string) => subtree(source.folders, id).forEach((x) => out.add(x));
+  if (from) add(from);
+  for (const id of ids) {
+    const folder = source.assign[id]?.folder;
+    if (!folder) continue;
+    for (const f of [...ancestors(source.folders, folder), source.folders.find((x) => x.id === folder)]) if (f) add(f.id);
+  }
+  return out;
+}
+
+/**
+ * Odstraní z `touched` složky, jejichž celý podstrom je bez dokumentů a bez zámku (volat po `releaseEntries`).
+ * Jiné složky se nedotknou. Vrací id odstraněných.
+ */
+export function pruneFolders(library: Library, touched: Set<string>): string[] {
+  const used = new Set(Object.values(library.assign).map((a) => a.folder));
+  const gone = new Set(
+    library.folders
+      .filter((f) => touched.has(f.id) && [...subtree(library.folders, f.id)].every((id) => !used.has(id) && !library.folders.some((x) => x.id === id && isLocked(library.folders, x))))
+      .map((f) => f.id),
+  );
+  library.folders = library.folders.filter((f) => !gone.has(f.id));
+  return [...gone];
+}
+
+/** Nabídka přesunu článků a knih: 'move' do existující studijní knihovny, 'create' = nejdřív ji založit, null = nenabízet. */
+export function literatureOffer(opts: { kind: LibraryKind; kept?: boolean; count: number; hasStudy: boolean }): 'move' | 'create' | null {
+  if (opts.kept || opts.count <= 0 || (opts.kind !== 'work' && opts.kind !== 'personal')) return null;
+  return opts.hasStudy ? 'move' : 'create';
 }

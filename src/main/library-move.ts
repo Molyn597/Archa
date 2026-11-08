@@ -1,9 +1,9 @@
 import { cp, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { t } from '../shared/i18n';
-import { dropSources, placeEntries, releaseEntries } from '../shared/library-transfer';
+import { dropSources, pathForTarget, pathNames, placeEntries, pruneFolders, releaseEntries, touchedFolders } from '../shared/library-transfer';
 import { templateLibrary } from '../shared/library-templates';
-import type { Libraries, Library } from '../shared/types';
+import type { Libraries, Library, MoveOptions } from '../shared/types';
 import { libraryRoot } from './libraries';
 import { shouldBeLocked } from './library';
 import type { Store } from './store';
@@ -57,9 +57,10 @@ const BUSY = new Set(['running', 'queued', 'picking']);
  * 3. zápis cílové library.json (zařazení, zaplacení);
  * 4. úprava zdrojové library.json a projektů (odebrání zdrojů);
  * 5. teprve nakonec smazání složek ve zdroji.
+ * S `keepFolders` se v cíli vytvoří stejné složky (podle názvů) a ve zdroji se odstraní jen ty dotčené, které jsou teď bez dokumentů.
  * Chat s knihovnou i vektory: vektory jsou ve složce dokumentu (přesunou se s ním), chat knihovny ve zdroji zůstává beze změny.
  */
-export async function moveToLibrary(store: Store, appRoot: string, libs: Libraries, jobIds: string[], targetId: string): Promise<number> {
+export async function moveToLibrary(store: Store, appRoot: string, libs: Libraries, jobIds: string[], targetId: string, opts: MoveOptions = {}): Promise<number> {
   const info = libs.list.find((l) => l.id === targetId);
   if (!info || targetId === libs.current) throw new Error(t('libs.moveUnknown'));
   let ids = [...new Set(jobIds)];
@@ -99,7 +100,9 @@ export async function moveToLibrary(store: Store, appRoot: string, libs: Librari
     const file = path.join(targetRoot, 'library.json');
     const raw = await readFile(file, 'utf8').then((s) => JSON.parse(s) as Library, () => null);
     const target: Library = raw?.folders ? { ...raw, assign: raw.assign ?? {} } : templateLibrary(info.kind);
-    placeEntries(target, ids, suggestions, source.paid);
+    const paths: Record<string, string[]> = {};
+    if (opts.keepFolders) for (const id of ids) paths[id] = pathForTarget(pathNames(source.folders, source.assign[id]?.folder, opts.fromFolder), info.kind);
+    placeEntries(target, ids, suggestions, source.paid, paths);
     await writeAtomic(file, target);
   } catch (e) {
     await undoCopies();
@@ -107,7 +110,11 @@ export async function moveToLibrary(store: Store, appRoot: string, libs: Librari
   }
 
   // 4. Zdroj: knihovna a projekty.
-  await store.updateLibrary((library) => releaseEntries(library, ids));
+  const touched = opts.keepFolders ? touchedFolders(source, ids, opts.fromFolder) : new Set<string>();
+  await store.updateLibrary((library) => {
+    releaseEntries(library, ids);
+    pruneFolders(library, touched);
+  });
   for (const project of await store.projects()) if (dropSources(project, ids)) await store.saveProject(project);
 
   // 5. Smazání původních složek až po všem ostatním.

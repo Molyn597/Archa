@@ -1001,6 +1001,21 @@ export const en: Record<keyof typeof cs, Message> = {
     one: 'The document moves with everything that belongs to it (card, translation, chat, notes). It is removed from projects in this library.',
     other: '{count} documents move with everything that belongs to them (cards, translations, chats, notes). They are removed from projects in this library.',
   },
+  'libs.moveFolderConfirm': {
+    one: 'Move the folder “{name}” ({count} document) to library {library}?',
+    other: 'Move the folder “{name}” ({count} documents) to library {library}?',
+  },
+  'libs.litOffer': {
+    one: 'This library has {count} article or book – it fits better in the library {library}.',
+    other: 'This library has {count} articles and books – they fit better in the library {library}.',
+  },
+  'libs.litConfirm': {
+    one: 'Move {count} article or book to library {library} with its folders?',
+    other: 'Move {count} articles and books to library {library} with their folders?',
+  },
+  'libs.litMove': 'Move to Study',
+  'libs.litCreate': 'Create a Study library and move',
+  'libs.litKeep': 'Keep here',
   'libs.moved': 'Moved to library {name} ({count})',
   'libs.moveLocked': 'The locked document “{name}” cannot be moved to another library because its encryption belongs to this library only. Move it out of the locked folder first. Nothing was moved.',
   'libs.moveBusy': 'The document “{name}” is being processed. Wait until it finishes. Nothing was moved.',

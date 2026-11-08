@@ -1,6 +1,6 @@
 import { t, type MessageKey } from '../shared/i18n';
 import { parseSubjects } from '../shared/library-templates';
-import type { Libraries, LibraryInfo, LibraryKind } from '../shared/types';
+import type { Libraries, LibraryInfo, LibraryKind, MoveOptions } from '../shared/types';
 import { cleanError, h, icon, ICONS, openModal, toast } from './dom';
 
 const KINDS: LibraryKind[] = ['work', 'study', 'personal'];
@@ -31,7 +31,7 @@ function kindModal(info: LibraryInfo, title: string, later?: () => void) {
     h(
       'button',
       {
-        class: `btn welcome-kind${info.kind === k ? ' primary' : ''}`,
+        class: `kind-option${info.kind === k ? ' selected' : ''}`,
         type: 'button',
         onclick: () => {
           close();
@@ -57,26 +57,58 @@ export async function promptLibraryKind() {
   return true;
 }
 
-/** Výběr cílové knihovny pro přesun dokumentů; po přesunu toast s počtem. */
-export function moveToLibraryModal(ids: string[], done?: () => void) {
+/** Typ otevřené knihovny a první studijní knihovna (cíl nabídky přesunu článků a knih). */
+export const currentKind = () => current()?.kind;
+export const studyLibrary = () => libs?.list.find((l) => l.kind === 'study' && l.id !== libs!.current);
+
+async function runMove(ids: string[], target: LibraryInfo, opts: MoveOptions) {
+  try {
+    const count = await window.api.moveToLibrary(ids, target.id, opts);
+    toast(t('libs.moved', { name: libraryTitle(target), count }));
+  } catch (e) {
+    toast(cleanError(e), true);
+  }
+}
+
+/**
+ * Přesun článků a knih (se strukturou složek) do studijní knihovny po potvrzení; bez ní ji nejdřív založí
+ * (bez přepnutí, ať zdrojová knihovna zůstane otevřená).
+ */
+export async function moveLiterature(ids: string[], done?: () => void) {
+  let target = studyLibrary();
+  if (!ids.length || !confirm(t('libs.litConfirm', { count: ids.length, library: target ? libraryTitle(target) : t('libraryKind.study') }))) return;
+  try {
+    if (!target) {
+      target = await window.api.createLibrary('study', undefined, undefined, true);
+      await refreshLibrarySwitch();
+    }
+  } catch (e) {
+    toast(cleanError(e), true);
+    return;
+  }
+  await runMove(ids, target, { keepFolders: true });
+  done?.();
+}
+
+/**
+ * Výběr cílové knihovny pro přesun dokumentů (se strukturou složek); po přesunu toast s počtem.
+ * S `folder` se přesouvá celá složka: po potvrzení se přesunou její dokumenty a prázdná složka ve zdroji zmizí.
+ */
+export function moveToLibraryModal(ids: string[], done?: () => void, folder?: { id: string; name: string }) {
   const targets = libs?.list.filter((l) => l.id !== libs!.current) ?? [];
   if (!targets.length || !ids.length) return;
   let close = () => {};
   const pick = async (l: LibraryInfo) => {
     close();
-    try {
-      const count = await window.api.moveToLibrary(ids, l.id);
-      toast(t('libs.moved', { name: libraryTitle(l), count }));
-    } catch (e) {
-      toast(cleanError(e), true);
-    }
+    if (folder && !confirm(t('libs.moveFolderConfirm', { name: folder.name, count: ids.length, library: libraryTitle(l) }))) return;
+    await runMove(ids, l, { keepFolders: true, fromFolder: folder?.id });
     done?.();
   };
   close = openModal(
     t('libs.moveTitle'),
     [
       h('p', {}, t('libs.moveText', { count: ids.length })),
-      h('div', { class: 'proj-field' }, ...targets.map((l) => h('button', { class: 'btn welcome-kind', type: 'button', onclick: () => void pick(l) }, h('strong', {}, libraryTitle(l)), h('span', { class: 'muted small' }, t(`libraryKind.${l.kind}`))))),
+      h('div', { class: 'proj-field' }, ...targets.map((l) => h('button', { class: 'kind-option', type: 'button', onclick: () => void pick(l) }, h('strong', {}, libraryTitle(l)), h('span', { class: 'muted small' }, t(`libraryKind.${l.kind}`))))),
     ],
     [h('button', { class: 'btn', type: 'button', onclick: () => close() }, t('libs.cancel'))],
   );

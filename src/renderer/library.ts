@@ -6,10 +6,11 @@ import { childFolders, fold, folderName, folderPath, isLocked, placementActive, 
 import { duplicateGroups, type DuplicateGroup } from '../shared/duplicates';
 import type { InvoiceStatusFilter } from '../shared/invoices';
 import { isLiterature } from '../shared/nav';
+import { literatureOffer } from '../shared/library-transfer';
 import { OTHER_FOLDER } from '../shared/overview';
 import type { DocumentCard, FolderMerge, Job, LibraryState, OrganizePlan, Placement, Project, ProjectKind } from '../shared/types';
 import type { Tab } from './detail';
-import { hasOtherLibrary, moveToLibraryModal } from './library-switch';
+import { currentKind, hasOtherLibrary, libraryTitle, moveLiterature, moveToLibraryModal, studyLibrary } from './library-switch';
 import { cleanError, date, h, icon, ICONS, jobTitle, openModal, progressInfo, statusIcon, STATUS_TEXT, toast, toastAction } from './dom';
 import { showProjectChat } from './chat';
 import { planView } from './plan-view';
@@ -237,6 +238,28 @@ function renderAsk(jobs: Job[]) {
         ),
       );
     }
+  }
+  const books = jobs.filter((j) => {
+    const folder = state.library.folders.find((f) => f.id === folderOf(j.id));
+    return isLiterature(state.cards[j.id]?.type) && !(folder && isLocked(state.library.folders, folder)) && !['running', 'queued', 'picking'].includes(j.status);
+  });
+  const study = studyLibrary();
+  const offer = literatureOffer({ kind: currentKind() ?? 'general', kept: state.library.hints?.literatureKept, count: books.length, hasStudy: !!study });
+  if (offer) {
+    const ids = books.map((j) => j.id);
+    blocks.push(
+      h(
+        'div',
+        { class: 'library-ask-item' },
+        h('span', {}, t('libs.litOffer', { count: ids.length, library: study ? libraryTitle(study) : t('libraryKind.study') })),
+        h(
+          'div',
+          { class: 'library-ask-actions' },
+          h('button', { class: 'btn primary', type: 'button', onclick: () => void moveLiterature(ids, () => void reloadLibrary()) }, t(offer === 'move' ? 'libs.litMove' : 'libs.litCreate')),
+          h('button', { class: 'btn', type: 'button', onclick: () => void window.api.keepLiterature().catch((e) => toast(cleanError(e), true)) }, t('libs.litKeep')),
+        ),
+      ),
+    );
   }
   box.hidden = !blocks.length;
   box.replaceChildren(...blocks);
@@ -477,6 +500,9 @@ function folderMenu(id: string, name: string) {
   const { folders } = state.library;
   const folder = folders.find((f) => f.id === id);
   const locked = !!folder && isLocked(folders, folder);
+  // Dokumenty celého podstromu (podle zařazení, i ty, které zrovna nejsou v seznamu).
+  const inTree = subtree(folders, id);
+  const moveIds = Object.entries(state.library.assign).filter(([, a]) => inTree.has(a.folder)).map(([jobId]) => jobId);
   const busy = (on: boolean) => {
     encrypting = on ? id : null;
     renderLibrary();
@@ -512,6 +538,7 @@ function folderMenu(id: string, name: string) {
       t('library.rename'),
     ),
     h('button', { type: 'button', role: 'menuitem', onclick: () => mergeInto(id, name) }, t('merge.menu')),
+    hasOtherLibrary() && moveIds.length > 0 && h('button', { type: 'button', role: 'menuitem', onclick: () => moveToLibraryModal(moveIds, () => renderLibrary(), { id, name }) }, t('libs.move')),
     // Zamknout jde jen nezamčenou složku; zrušit zámek jen tam, kde je nastavený přímo (zděděný se ruší u předka).
     !locked && h('button', { type: 'button', role: 'menuitem', disabled: !!encrypting, onclick: () => lockFolder(id, busy) }, t(encrypting === id ? 'vault.encrypting' : 'vault.lockMenu')),
     folder?.locked && h('button', { type: 'button', role: 'menuitem', disabled: !!encrypting, onclick: () => unlockFolder(id, name, busy) }, t(encrypting === id ? 'vault.decrypting' : 'vault.unlockMenu')),

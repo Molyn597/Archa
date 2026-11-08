@@ -140,6 +140,8 @@ export interface Library {
   paid?: Record<string, number>;
   /** Verze šablon složek, podle které byla knihovna naposledy upravena (viz `alignToTemplate`). */
   templateVersion?: number;
+  /** Trvale skryté nabídky (např. přesun článků do Studia: uživatel zvolil Nechat). */
+  hints?: { literatureKept?: boolean };
 }
 /** Typ knihovny: určuje šablonu složek nové knihovny; `general` = převzatá data ze starší verze. */
 export type LibraryKind = 'work' | 'study' | 'personal' | 'general';
@@ -157,6 +159,13 @@ export interface Libraries {
   list: LibraryInfo[];
   /** Uživatel už prošel výběrem knihoven (první spuštění nebo převzetí starších dat). */
   setupDone?: boolean;
+}
+/** Volby přesunu dokumentů do jiné knihovny. */
+export interface MoveOptions {
+  /** V cíli vytvoří (nebo použije) stejné složky jako ve zdroji; ve zdroji pak odstraní složky, které přesunem osiřely. */
+  keepFolders?: boolean;
+  /** Přesouvaná složka: cesta v cíli začíná jí (nadřazené se nezakládají) a ve zdroji se odstraní, pokud je prázdná. */
+  fromFolder?: string;
 }
 /** Dotaz, kam zařadit dokument; možnosti jsou cesty složek (i dosud neexistujících). */
 export interface FolderQuestion {
@@ -647,12 +656,14 @@ export interface Api {
   switchLibrary(id: string): Promise<void>;
   setupLibraries(kinds: LibraryKind[], opts: { subjects?: string[]; keep?: LibraryKind }): Promise<Libraries>;
   /** Založí knihovnu se šablonou a přepne na ni. */
-  createLibrary(kind: LibraryKind, name?: string, subjects?: string[]): Promise<LibraryInfo>;
+  createLibrary(kind: LibraryKind, name?: string, subjects?: string[], stay?: boolean): Promise<LibraryInfo>;
   renameLibrary(id: string, name: string): Promise<Libraries>;
   /** Změní typ knihovny a upraví její složky podle šablony (prázdné nepoužité výchozí pryč, chybějící doplní); dokumenty se nemění. */
   setLibraryKind(id: string, kind: LibraryKind): Promise<Libraries>;
   /** Přesune dokumenty do jiné knihovny (celé složky, ověřená kopie, pak smazání zdroje); vrací počet. Zamčené a zpracovávané odmítne. */
-  moveToLibrary(jobIds: string[], targetId: string): Promise<number>;
+  moveToLibrary(jobIds: string[], targetId: string, opts?: MoveOptions): Promise<number>;
+  /** Trvale skryje nabídku přesunu článků a knih do Studia v této knihovně. */
+  keepLiterature(): Promise<void>;
   /** Zamkne složku (zašifruje ji i podsložky), `false` = zámek natrvalo zruší (dešifruje); vyžaduje odemčený trezor. */
   lockFolder(id: string, locked: boolean): Promise<void>;
   onVaultChanged(handler: () => void): void;

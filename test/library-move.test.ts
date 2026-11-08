@@ -95,6 +95,44 @@ describe('moveToLibrary', () => {
   });
 });
 
+describe('moveToLibrary se strukturou složek', () => {
+  it('vytvoří cestu v cíli a ve zdroji uklidí jen dotčené prázdné složky', async () => {
+    const library = templateLibrary('work');
+    library.folders.push({ id: 'study', createdAt: 0 }, { id: 'f1', name: 'Články', createdAt: 0, parent: 'study' }, { id: 'f2', name: 'Management', createdAt: 0, parent: 'f1' }, { id: 'keep', name: 'Jiná prázdná', createdAt: 0 });
+    library.assign = { a: { folder: 'f2' }, b: { folder: 'contracts' } };
+    await src.saveLibrary(library);
+    await moveToLibrary(src, app, libs, ['a'], DST, { keepFolders: true });
+    const to = await dstLibrary();
+    const f = to.folders.find((x) => x.id === to.assign.a.folder)!;
+    expect(f.name).toBe('Management');
+    // Do studijní knihovny bez úvodní složky „Studium“: Management padne pod výchozí Články.
+    const parent = to.folders.find((x) => x.id === f.parent)!;
+    expect([parent.id, parent.parent]).toEqual(['articles', undefined]);
+    const from = await src.library();
+    expect(from.folders.map((x) => x.id)).not.toContain('f2');
+    expect(from.folders.map((x) => x.id)).not.toContain('f1');
+    expect(from.folders.map((x) => x.id)).not.toContain('study');
+    expect(from.folders.map((x) => x.id)).toContain('keep');
+    expect(from.assign).toEqual({ b: { folder: 'contracts' } });
+  });
+
+  it('fromFolder: cesta začíná přesouvanou složkou', async () => {
+    const library = templateLibrary('work');
+    library.folders.push({ id: 'study', createdAt: 0 }, { id: 'f1', name: 'Články', createdAt: 0, parent: 'study' }, { id: 'f2', name: 'Management', createdAt: 0, parent: 'f1' });
+    library.assign = { a: { folder: 'f2' } };
+    await src.saveLibrary(library);
+    await moveToLibrary(src, app, libs, ['a'], DST, { keepFolders: true, fromFolder: 'f1' });
+    const to = await dstLibrary();
+    const f = to.folders.find((x) => x.id === to.assign.a.folder)!;
+    const parent = to.folders.find((x) => x.id === f.parent)!;
+    // „Články“ ve studijní šabloně už je (výchozí složka), použije se znovu.
+    expect([f.name, parent.id, parent.parent]).toEqual(['Management', 'articles', undefined]);
+    // Osiřelé nadřazené složky bez dokumentů zmizí také.
+    expect((await src.library()).folders.map((x) => x.id)).not.toContain('study');
+    expect((await src.library()).folders.map((x) => x.id)).not.toContain('f1');
+  });
+});
+
 describe('copyDirVerified', () => {
   it('zkopíruje a existující cíl nikdy nepřepíše', async () => {
     const from = path.join(app, 'x');
