@@ -2846,6 +2846,47 @@ input[type='checkbox'] {
   height: 16px;
 }
 
+.advanced > summary {
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.advanced[open] > summary {
+  margin-bottom: 14px;
+}
+
+.advanced-body {
+  gap: 16px;
+}
+
+.form-card > .advanced > summary {
+  padding: 14px 18px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.form-card > .advanced {
+  border-bottom: 1px solid var(--line);
+}
+
+.form-card > .advanced[open] > summary {
+  margin-bottom: 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.source-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.source-pick select {
+  height: 30px;
+  font-size: 13px;
+}
+
 .role-models {
   display: flex;
   flex-direction: column;

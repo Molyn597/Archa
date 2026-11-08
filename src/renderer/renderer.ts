@@ -28,6 +28,7 @@ import {
   MODES,
   progressBar,
   progressInfo,
+  rememberOpen,
   statusIcon,
   STATUS_TEXT,
   toast,
@@ -355,19 +356,19 @@ function renderCost() {
   el.textContent = est.unknownDocx ? `${text} · ${t('home.costDocx')}` : text;
 }
 
-function setupPagesToggle() {
-  const row = $('pages-row');
-  const toggle = $('pages-toggle');
+const MORE_KEY = 'moreOptionsOpen';
+
+function setupMoreOptions() {
+  const details = $<HTMLDetailsElement>('more-options');
   const input = $<HTMLInputElement>('page-range');
-  toggle.addEventListener('click', () => {
-    row.hidden = !row.hidden;
-    toggle.setAttribute('aria-expanded', String(!row.hidden));
-    if (row.hidden) {
-      // Skrytý rozsah nesmí potichu platit dál.
-      input.value = '';
-      input.classList.remove('invalid');
-      renderCost();
-    } else input.focus();
+  // Výchozí zavřené; pamatuje se, jestli ho uživatel naposledy nechal otevřené.
+  rememberOpen(details, MORE_KEY);
+  details.addEventListener('toggle', () => {
+    if (details.open) return;
+    // Skrytý rozsah nesmí potichu platit dál.
+    input.value = '';
+    input.classList.remove('invalid');
+    renderCost();
   });
 }
 
@@ -736,7 +737,7 @@ async function init() {
   for (const b of document.querySelectorAll<HTMLButtonElement>('.nav-item[data-nav]')) b.addEventListener('click', () => onNavClick(b.dataset.nav as View | NavId));
   setupNavToggle();
   setupStatus();
-  setupPagesToggle();
+  setupMoreOptions();
   setupDetail(() => show(previousView), () => show('settings'));
   setupDrop();
   fillLanguages();

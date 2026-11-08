@@ -215,3 +215,19 @@ export async function writeClipboard(plain: string, html: string) {
     await navigator.clipboard.writeText(plain);
   }
 }
+
+/** Sbalitelná část (`<details>`), jejíž otevření se pamatuje v localStorage; `forceOpen` ji otevře navíc. */
+export function rememberOpen(details: HTMLDetailsElement, key: string, forceOpen = false) {
+  try {
+    details.open = forceOpen || localStorage.getItem(key) === '1';
+  } catch {
+    details.open = forceOpen;
+  }
+  details.addEventListener('toggle', () => {
+    try {
+      localStorage.setItem(key, details.open ? '1' : '0');
+    } catch {
+      /* bez úložiště se stav jen nepamatuje */
+    }
+  });
+}

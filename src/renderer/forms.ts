@@ -4,7 +4,8 @@ import { locale, t, type MessageKey, type UiLangSetting } from '../shared/i18n';
 import { activeRates, FAST_REMOTE_MODEL, isFreeModel, RECOMMENDED_REMOTE_MODEL } from '../shared/provider';
 import { catalogRows, chatModelWarning, formatContext, isFree, sharedModel, visionWarnings } from '../shared/catalog-view';
 import type { CitationStyle, Currency, LmStatus, ModelPrice, Models, Provider, Settings, Theme } from '../shared/types';
-import { chatWarningText, duration, h, icon, ICONS, toast } from './dom';
+import { chatWarningText, duration, h, icon, ICONS, rememberOpen, toast } from './dom';
+import { languageName, LANGUAGES } from '../shared/languages';
 import { changePasswordModal, refreshVault, vault } from './vault';
 
 const $ = (id: string) => document.getElementById(id)!;
@@ -33,7 +34,11 @@ let editedTab: Provider | null = null;
 /** Předvolí záložku poskytovatele v sekci Modely (např. odkaz „Změnit modely“ ze stavu v panelu). */
 export function setSettingsTab(provider: Provider) {
   editedTab = provider;
+  openAdvanced = true;
 }
+
+// Příští vykreslení Nastavení otevře Pokročilé (odkaz „Změnit modely“).
+let openAdvanced = false;
 
 const gb = (bytes: number) => (bytes ? ` · ${(bytes / 1e9).toFixed(1)} GB` : '');
 
@@ -87,20 +92,24 @@ export async function renderSettings(onSaved: (s: Settings) => void) {
   });
 
   const r = activeRates(settings);
-  // Pevné pořadí sekcí: Vzhled, Modely, Aplikace, Zamčené složky.
-  $('settings').replaceChildren(
+
+  // Výchozí cílový jazyk překladu (stejná hodnota jako „Do jazyka“ na stránce Přeložit).
+  const targetLang = h('select');
+  for (const l of LANGUAGES) targetLang.append(h('option', { value: l.code, selected: settings.targetLang === l.code }, languageName(l.code)));
+  targetLang.addEventListener('change', () => {
+    settings.targetLang = targetLang.value;
+    void save();
+  });
+
+  const advanced = h(
+    'details',
+    { class: 'advanced' },
+    h('summary', {}, t('settings.app')),
     h(
-      'section',
-      { class: 'setting-group' },
-      h('h2', {}, t('settings.section.look')),
-      h('label', { class: 'field' }, h('span', {}, 'Jazyk aplikace / App language'), uiLang),
-      h('label', { class: 'field' }, h('span', {}, t('settings.theme')), theme),
-    ),
-    modelGroup,
-    h(
-      'section',
-      { class: 'setting-group' },
-      h('h2', {}, t('settings.app')),
+      'div',
+      { class: 'advanced-body stack' },
+      modelGroup,
+      currencySelect(settings, save, rerender),
       toggle(t('settings.notify'), t('settings.notifyHint'), settings.notify, (v) => {
         settings.notify = v;
         void save();
@@ -109,7 +118,6 @@ export async function renderSettings(onSaved: (s: Settings) => void) {
         settings.autoCard = v;
         void save();
       }),
-      citationRow(settings, save),
       toggle(t('settings.layoutPdf'), t('settings.layoutPdfHint'), settings.layoutPdf, (v) => {
         settings.layoutPdf = v;
         void save();
@@ -118,14 +126,80 @@ export async function renderSettings(onSaved: (s: Settings) => void) {
         settings.unloadWhenIdle = v;
         void save();
       }),
+      citationRow(settings, save),
       h(
         'div',
         { class: 'toggle' },
         h('span', {}, h('div', {}, t('settings.rates')), h('div', { class: 'muted small' }, t('settings.ratesText', { ocr: duration(r.ocrPerPage), translate: duration(r.translatePerKChar), fix: duration(r.fixPerSegment) }))),
       ),
     ),
-    vaultGroup(),
   );
+  rememberOpen(advanced, 'settingsAdvancedOpen', openAdvanced);
+  openAdvanced = false;
+
+  // Pořadí: AI, Jazyk překladu, Vzhled, Zamčené složky, Pokročilé (sbalené).
+  $('settings').replaceChildren(
+    aiGroup(settings, lm, remote, save, rerender),
+    h('section', { class: 'setting-group' }, h('h2', {}, t('settings.targetLang')), h('label', { class: 'field' }, targetLang, h('span', { class: 'muted small' }, t('settings.targetLangHint')))),
+    h(
+      'section',
+      { class: 'setting-group' },
+      h('h2', {}, t('settings.section.look')),
+      h('label', { class: 'field' }, h('span', {}, 'Jazyk aplikace / App language'), uiLang),
+      h('label', { class: 'field' }, h('span', {}, t('settings.theme')), theme),
+    ),
+    vaultGroup(),
+    h('section', { class: 'setting-group' }, advanced),
+  );
+}
+
+/** Karta AI: kde AI běží, jestli je připravená, API klíč online a souhrn vybraných modelů. Výběr modelů je v Pokročilém. */
+function aiGroup(settings: Settings, lm: LmStatus, remote: LmStatus, save: () => Promise<void>, rerender: () => Promise<void>) {
+  const online = settings.provider === 'openrouter';
+  const status = online ? remote : lm;
+  const missing = status.missing.map((role) => status.models.find((m) => m.key === (online ? settings.remoteModels : settings.models)[role])?.name ?? (online ? settings.remoteModels : settings.models)[role]);
+  const ready = online ? Boolean(remote.hasKey) && !missing.length : lm.cli && !missing.length;
+  const stateText = online
+    ? remote.hasKey
+      ? t('settings.remote.keyOk')
+      : t('settings.remote.keyMissing')
+    : !lm.cli
+      ? t('lm.notFound')
+      : missing.length
+        ? t('lm.missing', { name: [...new Set(missing)].join(', ') })
+        : t('lm.ready');
+
+  const segments = (['local', 'openrouter'] as Provider[]).map((p) =>
+    h(
+      'button',
+      {
+        class: settings.provider === p ? 'segment active' : 'segment',
+        type: 'button',
+        role: 'radio',
+        'aria-checked': String(settings.provider === p),
+        onclick: async () => {
+          if (settings.provider === p) return;
+          settings.provider = p;
+          await save();
+          await rerender();
+        },
+      },
+      t(`home.provider.${p}`),
+    ),
+  );
+
+  const card = h(
+    'section',
+    { class: 'setting-group' },
+    h('h2', {}, t('settings.ai')),
+    h('div', { class: 'segmented', role: 'radiogroup', 'aria-label': t('home.provider') }, ...segments),
+    h('p', { class: 'muted small' }, t(`home.provider.${settings.provider}Desc`)),
+    h('p', { class: ready ? 'ok-box' : 'warn-box' }, stateText),
+    online ? keyBlock(remote, rerender) : '',
+    online ? remoteSummary(settings, remote) : localSummary(settings, lm),
+    h('p', { class: 'muted small' }, t('settings.ai.advancedHint')),
+  );
+  return card;
 }
 
 /** Zamčené složky: stav hesla trezoru a jeho změna. */
@@ -170,7 +244,11 @@ function localSummary(settings: Settings, lm: LmStatus) {
   const name = (key: string) => lm.models.find((m) => m.key === key)?.name ?? key;
   return selectedCard(
     t('settings.local.selected'),
-    ROLES.map((role) => h('div', { class: 'selected-role' }, h('span', { class: 'selected-role-name' }, t(role.title)), h('span', { class: 'selected-model-name' }, name(settings.models[role.key])))),
+    [
+      // Chat jako první: s ním uživatel pracuje nejčastěji; bez volby se použije model oprav.
+      h('div', { class: 'selected-role' }, h('span', { class: 'selected-role-name' }, t('settings.role.chat')), h('span', { class: 'selected-model-name' }, name(settings.chatModels?.local || settings.models.polish))),
+      ...ROLES.map((role) => h('div', { class: 'selected-role' }, h('span', { class: 'selected-role-name' }, t(role.title)), h('span', { class: 'selected-model-name' }, name(settings.models[role.key])))),
+    ],
   );
 }
 
@@ -341,7 +419,7 @@ function providerTitle(text: string, active: boolean) {
 
 /** Jedna sekce Modely: přepínač poskytovatele (jen volba, co se upravuje) a pod ním model pro každou úlohu. */
 function modelsGroup(settings: Settings, lm: LmStatus, remote: LmStatus, url: HTMLInputElement, save: () => Promise<void>, rerender: () => Promise<void>) {
-  const local = h('div', { class: 'models-panel stack' }, providerTitle(t('settings.local.title'), settings.provider === 'local'), localSummary(settings, lm));
+  const local = h('div', { class: 'models-panel stack' }, providerTitle(t('settings.local.title'), settings.provider === 'local'));
   const fills: (() => void)[] = [];
   for (const task of TASKS) {
     const { row, fill } = localTask(task, settings, lm, save);
@@ -354,12 +432,12 @@ function modelsGroup(settings: Settings, lm: LmStatus, remote: LmStatus, url: HT
   local.append(h('label', { class: 'field' }, h('span', {}, t('settings.serverUrl')), url));
   if (!lm.cli) local.append(h('p', { class: 'error-box' }, t('settings.noCli')));
 
-  const online = h('div', { class: 'models-panel stack' }, providerTitle(t('settings.remote.title'), settings.provider === 'openrouter'), remoteSummary(settings, remote));
+  const online = h('div', { class: 'models-panel stack' }, providerTitle(t('settings.remote.title'), settings.provider === 'openrouter'));
   if (!remote.models.length) online.append(h('p', { class: 'error-box' }, t('settings.remote.noCatalog')));
   for (const task of TASKS) online.append(remoteTask(task, settings, remote, save, rerender));
   if (Object.values(settings.remoteModels).some(isFreeModel)) online.append(h('p', { class: 'muted small' }, t('settings.remote.freeHint')));
   online.append(embedRow('openrouter', settings, save));
-  online.append(...remoteExtras(settings, remote, save, rerender));
+  online.append(...remoteExtras(remote, rerender));
 
   const panels: Record<Provider, HTMLElement> = { local, openrouter: online };
   const tabs = new Map<Provider, HTMLElement>();
@@ -376,9 +454,9 @@ function modelsGroup(settings: Settings, lm: LmStatus, remote: LmStatus, url: HT
   }
   select(editedTab ?? settings.provider);
   return h(
-    'section',
-    { class: 'setting-group' },
-    h('h2', {}, t('settings.models.title')),
+    'div',
+    { class: 'stack' },
+    h('h3', { class: 'models-subtitle' }, t('settings.models.title')),
     h('p', { class: 'muted small' }, t('settings.models.hint')),
     h('div', { class: 'segmented models-switch', role: 'radiogroup', 'aria-label': t('settings.models.title') }, ...tabs.values()),
     local,
@@ -386,8 +464,8 @@ function modelsGroup(settings: Settings, lm: LmStatus, remote: LmStatus, url: HT
   );
 }
 
-/** Online přípojení: soukromí, API klíč, měna a obnovení katalogu. */
-function remoteExtras(settings: Settings, lm: LmStatus, save: () => Promise<void>, rerender: () => Promise<void>) {
+/** API klíč OpenRouteru: soukromí, pole a uložení/smazání. */
+function keyBlock(lm: LmStatus, rerender: () => Promise<void>) {
   const key = h('input', { type: 'password', autocomplete: 'off', spellcheck: 'false', placeholder: lm.hasKey ? t('settings.remote.keyPlaceholderSaved') : t('settings.remote.keyPlaceholder') });
   const run = (action: () => Promise<void>) => async () => {
     try {
@@ -399,27 +477,35 @@ function remoteExtras(settings: Settings, lm: LmStatus, save: () => Promise<void
   };
   const saveKey = h('button', { class: 'btn', onclick: run(() => window.api.setApiKey(key.value)) }, t('settings.remote.keySave'));
   const removeKey = h('button', { class: 'btn danger', onclick: run(() => window.api.clearApiKey()) }, t('settings.remote.keyRemove'));
+  return h(
+    'div',
+    { class: 'stack' },
+    h('p', { class: 'warn-box' }, t('settings.remote.privacy')),
+    h('label', { class: 'field' }, h('span', {}, t('settings.remote.key')), key),
+    h('div', { class: 'row gap' }, saveKey, lm.hasKey ? removeKey : ''),
+  );
+}
+
+/** Online katalog: informace o výběru modelu a obnovení katalogu. */
+function remoteExtras(lm: LmStatus, rerender: () => Promise<void>) {
   const refresh = h(
     'button',
     {
       class: 'btn',
-      onclick: run(async () => {
-        refresh.disabled = true;
-        await window.api.refreshCatalog();
-      }),
+      onclick: async () => {
+        try {
+          refresh.disabled = true;
+          await window.api.refreshCatalog();
+          await rerender();
+        } catch (e) {
+          toast((e as Error).message, true);
+        }
+      },
     },
     t('settings.remote.refresh'),
   );
   const stamp = lm.catalogAt ? t('settings.remote.catalogAt', { date: new Date(lm.catalogAt).toLocaleString(locale()) }) : '';
-  return [
-    h('p', { class: 'warn-box' }, t('settings.remote.privacy')),
-    h('label', { class: 'field' }, h('span', {}, t('settings.remote.key')), key),
-    h('div', { class: 'row gap' }, saveKey, lm.hasKey ? removeKey : ''),
-    h('p', { class: lm.hasKey ? 'ok-box' : 'warn-box' }, lm.hasKey ? t('settings.remote.keySaved') : t('settings.remote.keyNone')),
-    currencySelect(settings, save, rerender),
-    h('p', { class: 'muted small' }, t('settings.remote.info')),
-    h('div', { class: 'row gap' }, refresh, h('span', { class: 'muted small' }, stamp)),
-  ];
+  return [h('p', { class: 'muted small' }, t('settings.remote.info')), h('div', { class: 'row gap' }, refresh, h('span', { class: 'muted small' }, stamp))];
 }
 
 const usd = (n?: number) => (n === undefined ? '—' : price(n));
