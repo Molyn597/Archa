@@ -12,19 +12,19 @@ const $ = (id: string) => document.getElementById(id)!;
 // ---------- Nastavení ----------
 
 const ROLES: { key: keyof Models; title: MessageKey; hint: MessageKey; vision?: boolean }[] = [
+  { key: 'polish', title: 'settings.role.polish', hint: 'settings.role.polishHint' },
   { key: 'ocr', title: 'settings.role.ocr', hint: 'settings.role.ocrHint', vision: true },
   { key: 'translate', title: 'settings.role.translate', hint: 'settings.role.translateHint' },
-  { key: 'polish', title: 'settings.role.polish', hint: 'settings.role.polishHint' },
 ];
 
 type Task = keyof Models | 'chat';
 
 // Úlohy v pořadí, jak se ukazují v Nastavení; chat nemá vlastní roli v `Models`, jeho model je v `chatModels`.
 const TASKS: { key: Task; title: MessageKey; hint: MessageKey; vision?: boolean }[] = [
-  { key: 'translate', title: 'settings.role.translate', hint: 'settings.role.translateHint' },
-  { key: 'ocr', title: 'settings.role.ocr', hint: 'settings.role.ocrHint', vision: true },
-  { key: 'polish', title: 'settings.role.polish', hint: 'settings.role.polishHint', vision: true },
   { key: 'chat', title: 'settings.role.chat', hint: 'settings.role.chatHint' },
+  { key: 'polish', title: 'settings.role.polish', hint: 'settings.role.polishHint', vision: true },
+  { key: 'ocr', title: 'settings.role.ocr', hint: 'settings.role.ocrHint', vision: true },
+  { key: 'translate', title: 'settings.role.translate', hint: 'settings.role.translateHint' },
 ];
 
 // Poskytovatel, jehož modely se v Nastavení právě upravují (nemění aktivního poskytovatele).

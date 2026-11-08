@@ -3205,7 +3205,7 @@ input[type='checkbox'] {
   gap: 20px;
 }
 
-/* Strom složek v levém panelu pod Knihovnou jako podpoložky; posouvá se celý sám, Projekty, Duplicity, Zařadila AI a Koš jsou na jeho konci. */
+/* Strom složek v levém panelu pod Knihovnou jako podpoložky; posouvá se celý sám. */
 .library-folders {
   flex: 0 1 auto;
   min-height: 0;
@@ -3255,21 +3255,6 @@ body.nav-collapsed .library-folders {
   display: flex;
   flex-direction: column;
   gap: 2px;
-}
-
-.folder-pinned {
-  flex: none;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid var(--line);
-  font-size: 13px;
-}
-
-.folder-pinned .folder-item:not(.active) {
-  opacity: 0.8;
 }
 
 .library-main {
@@ -3766,16 +3751,6 @@ button.folder-toggle:hover {
 .merge-reason {
   color: var(--muted);
   font-size: 12px;
-}
-
-.folder-find {
-  margin-top: 0;
-  height: 28px;
-  font-size: 12px;
-}
-
-.folder-find:disabled {
-  opacity: 0.6;
 }
 
 /* ---------- Zamčené složky ---------- */
@@ -5079,4 +5054,77 @@ body.in-project[data-view='history'] #library-folders {
 
 .dl-group.overdue h3 {
   color: var(--danger-text);
+}
+
+/* ---------- Nástroje v menu, sbalení stromu, údržba knihovny ---------- */
+
+.nav-section {
+  margin: 14px 0 4px;
+  padding: 0 10px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.nav-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* V liště je oddělovač jen čára. */
+.nav-collapsed .nav-section {
+  height: 1px;
+  margin: 8px 12px;
+  padding: 0;
+  overflow: hidden;
+  background: var(--line);
+  font-size: 0;
+}
+
+/* Druhý klik na Dokumenty / Projekty sbalí strom (mimo lištu, kde se strom vysouvá). */
+body.tree-closed:not(.nav-collapsed) .library-folders,
+body.tree-closed:not(.nav-collapsed) #project-folders {
+  display: none;
+}
+
+body[data-view].tree-closed:not(.nav-collapsed) .nav-item[data-nav='history'] .nav-chevron,
+body[data-view].tree-closed:not(.nav-collapsed) .nav-item[data-nav='projects'] .nav-chevron {
+  transform: rotate(-90deg);
+}
+
+.library-more {
+  position: relative;
+}
+
+.more-count {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 16px;
+  height: 16px;
+  display: grid;
+  place-items: center;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.menu-grow {
+  flex: 1;
+}
+
+.menu-count {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.menu button:disabled {
+  opacity: 0.5;
 }

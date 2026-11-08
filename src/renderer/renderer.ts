@@ -3,11 +3,12 @@ import { languageName, LANGUAGES } from '../shared/languages';
 import { CHARS_PER_PAGE } from '../shared/cost';
 import { estimateFiles, formatUsd, setCurrency, setCzkRate } from '../shared/estimate';
 import { isValidPageRange } from '../shared/pages';
+import { navFor, type NavId } from '../shared/nav';
 import { activeModels, activeRates, isOnline } from '../shared/provider';
 import type { Api, DuplicateMatch, FileInfo, Job, LmStatus, Mode, Models, Provider, Settings } from '../shared/types';
 import { askLibrary, openChat, renderFolderOpt, setupLibraryChat, showLibraryChat, syncChatSettings } from './chat';
 import { citeSegment, closeDetail, detailJobId, openDetail, setupDetail, updateDetail, type Tab } from './detail';
-import { createProject, leaveProject, openProject, projectSelected, reloadLibrary, renderLibrary, setupLibrary, showDeadlines, showInvoices, showUnsorted } from './library';
+import { createProject, leaveProject, openProject, projectSelected, reloadLibrary, renderLibrary, setupLibrary, libraryView, showAll, showDeadlines, showInvoices, showLiterature, showUnsorted, type LibraryView } from './library';
 import { addToLibrary, refreshOverview, renderOverview, setupOverview } from './overview';
 import { setupLibrarySwitch } from './library-switch';
 import { renderProjectsPage, setupProjectsPage } from './projects-page';
@@ -83,14 +84,50 @@ function show(next: View) {
   $('detail-scroll').scrollTo(0, 0);
 }
 
-/** Zvýraznění v navigaci: vybraný projekt v Souborech svítí jako Projekty; detail dokumentu patří Souborům. */
+// Nástroje pod hlavním menu; další se přidají jedním řádkem (nav = view, který otevřou).
+const TOOLS: { nav: View; label: MessageKey; icon: string }[] = [{ nav: 'home', label: 'nav.translate', icon: ICONS.translate }];
+
+// Pohledy Dokumentů, které mají vlastní položku v menu (zvýrazní se místo Dokumentů), a nadpis stránky pro ostatní.
+const VIEW_NAV: Partial<Record<LibraryView, NavId>> = { invoices: 'invoices', deadlines: 'deadlines', literature: 'literature' };
+const VIEW_TITLE: Partial<Record<LibraryView, MessageKey>> = { duplicates: 'dup.title', aiLog: 'aiLog.title', trash: 'trash.title' };
+const LIBRARY_NAV: Partial<Record<NavId, () => void>> = { invoices: () => showInvoices('all'), deadlines: showDeadlines, literature: showLiterature };
+
+let projectsLabel: MessageKey = 'nav.projects';
+
+/** Zvýraznění v navigaci: vybraný projekt v Dokumentech svítí jako Projekty, Faktury a spol. jako vlastní položky; detail dokumentu patří Dokumentům. */
 function syncNav() {
-  const inProject = view === 'history' && projectSelected();
-  const target = inProject ? 'projects' : view === 'detail' ? 'history' : view;
+  const sub = view === 'history' ? libraryView() : null;
+  const inProject = sub === 'project';
+  const target = inProject ? 'projects' : sub && VIEW_NAV[sub] ? VIEW_NAV[sub] : view === 'detail' ? 'history' : view;
   document.body.classList.toggle('in-project', inProject);
   const heading = document.querySelector<HTMLElement>('.view[data-view="history"] .view-head h1');
-  if (heading) heading.textContent = t(inProject ? 'nav.projects' : 'nav.history');
+  const title = sub && VIEW_TITLE[sub];
+  if (heading) heading.textContent = t(inProject ? projectsLabel : (title ?? (sub && VIEW_NAV[sub] ? NAV_LABELS.get(VIEW_NAV[sub]!) : undefined) ?? 'nav.history'));
   for (const b of document.querySelectorAll<HTMLButtonElement>('.nav-item[data-nav]')) b.classList.toggle('active', b.dataset.nav === target);
+}
+
+const NAV_LABELS = new Map<NavId, MessageKey>();
+const MENU_IDS: NavId[] = ['overview', 'history', 'invoices', 'deadlines', 'literature', 'projects'];
+
+/** Menu podle typu aktuální knihovny: skryje nepatřící položky a nastaví popisky. */
+async function applyNavKind() {
+  const libs = await window.api.libraries().catch(() => null);
+  const kind = libs?.list.find((l) => l.id === libs.current)?.kind ?? 'general';
+  NAV_LABELS.clear();
+  for (const e of navFor(kind)) NAV_LABELS.set(e.id, e.label);
+  for (const id of MENU_IDS) {
+    const b = document.querySelector<HTMLButtonElement>(`.nav-item[data-nav="${id}"]`)!;
+    const label = NAV_LABELS.get(id);
+    b.hidden = !label;
+    if (label) b.querySelector('span')!.textContent = t(label);
+  }
+  projectsLabel = NAV_LABELS.get('projects') ?? 'nav.projects';
+  document.querySelector('.view[data-view="projects"] .view-head h1')!.textContent = t(projectsLabel);
+  // Otevřený pohled, který tato knihovna nemá (např. Faktury ve Studiu), se vrací na Dokumenty.
+  const sub = view === 'history' ? libraryView() : null;
+  if (sub && VIEW_NAV[sub] && !NAV_LABELS.has(VIEW_NAV[sub]!)) showAll();
+  setNavTitles();
+  syncNav();
 }
 
 /** Přepne na nápovědu a případně rovnou na kapitolu. */
@@ -143,7 +180,7 @@ async function refreshStatus() {
   const models = activeModels(settings);
   // Řádek stavu dole v panelu: kde se překládá a jakým modelem; podrobnosti v rozbalovacím okně.
   $('status-title').textContent = t(remote ? 'side.online' : 'side.local');
-  $('status-model').textContent = modelName(models.translate);
+  $('status-model').textContent = modelName(settings.chatModels?.[remote ? 'remote' : 'local'] ?? models.polish);
   $('status-row').title = `${$('lm-title').textContent}: ${$('lm-state').textContent}`;
   renderOverview();
   renderEngine();
@@ -151,10 +188,10 @@ async function refreshStatus() {
   const chatKey = remote ? settings.chatModels?.remote : settings.chatModels?.local;
   const chatModel = chatKey ?? models.polish;
   const rows: { role: keyof typeof ROLE_NAMES; key: string; missing: boolean; auto?: boolean }[] = [
-    { role: 'translate', key: models.translate, missing: lm.missing.includes('translate') },
-    { role: 'ocr', key: models.ocr, missing: lm.missing.includes('ocr') },
-    { role: 'polish', key: models.polish, missing: lm.missing.includes('polish') },
     { role: 'chat', key: chatModel, auto: !chatKey, missing: chatKey ? lm.models.length > 0 && !lm.models.some((m) => m.key === chatKey) : lm.missing.includes('polish') },
+    { role: 'polish', key: models.polish, missing: lm.missing.includes('polish') },
+    { role: 'ocr', key: models.ocr, missing: lm.missing.includes('ocr') },
+    { role: 'translate', key: models.translate, missing: lm.missing.includes('translate') },
   ];
   $('lm-models').replaceChildren(
     ...rows.map(({ role, key, missing, auto }) => {
@@ -616,7 +653,12 @@ function setNavCollapsed(collapsed: boolean) {
   toggle.title = label;
   toggle.setAttribute('aria-label', label);
   toggle.classList.toggle('active', !collapsed);
-  // V liště jsou jen ikony; popisek ukáže tooltip.
+  setNavTitles();
+}
+
+/** V liště jsou jen ikony; popisek ukáže tooltip. */
+function setNavTitles() {
+  const collapsed = document.body.classList.contains('nav-collapsed');
   for (const b of document.querySelectorAll<HTMLElement>('.nav-item[data-nav]')) b.title = collapsed ? (b.querySelector('span')?.textContent ?? '') : '';
 }
 
@@ -660,6 +702,21 @@ function setupNavToggle() {
   document.addEventListener('keydown', (e) => e.key === 'Escape' && setTreePopover(false));
 }
 
+/** Klik na položku menu. Dokumenty a Projekty při druhém kliknutí sbalí svůj strom (v liště vysouvací strom). */
+function onNavClick(nav: View | NavId) {
+  const body = document.body;
+  const sub = libraryView();
+  if (nav === 'history' && view === 'history' && !sub) {
+    return body.classList.contains('nav-collapsed') ? setTreePopover(!body.classList.contains('tree-pop')) : body.classList.toggle('tree-closed');
+  }
+  if (nav === 'projects' && view === 'projects') return body.classList.toggle('tree-closed');
+  body.classList.remove('tree-closed');
+  // Dokumenty ukážou vždy všechny dokumenty, ne dříve vybraný projekt nebo pohled.
+  if (nav === 'history' && sub) return showAll();
+  const open = LIBRARY_NAV[nav as NavId];
+  (open ?? (() => show(nav as View)))();
+}
+
 // ---------- Start ----------
 
 async function init() {
@@ -674,17 +731,10 @@ async function init() {
   jobs = new Map((await window.api.listJobs()).map((j) => [j.id, j]));
   await refreshVault();
 
-  for (const b of document.querySelectorAll<HTMLButtonElement>('.nav-item[data-nav]')) {
-    b.addEventListener('click', () => {
-      // V liště ikona Knihovny (už otevřené) vysune strom složek jako plovoucí panel.
-      if (b.dataset.nav === 'history' && view === 'history' && !projectSelected() && document.body.classList.contains('nav-collapsed')) {
-        return setTreePopover(!document.body.classList.contains('tree-pop'));
-      }
-      // Soubory vždy ukážou dokumenty, ne dříve vybraný projekt.
-      if (b.dataset.nav === 'history') leaveProject();
-      if (b.dataset.nav !== 'history' || view !== 'history') show(b.dataset.nav as View);
-    });
-  }
+  $('nav-tools').replaceChildren(
+    ...TOOLS.map((tool) => h('button', { class: 'nav-item', 'data-nav': tool.nav }, icon(tool.icon), h('span', {}, t(tool.label)))),
+  );
+  for (const b of document.querySelectorAll<HTMLButtonElement>('.nav-item[data-nav]')) b.addEventListener('click', () => onNavClick(b.dataset.nav as View | NavId));
   setupNavToggle();
   setupStatus();
   setupPagesToggle();
@@ -717,6 +767,8 @@ async function init() {
   });
   setupProjectsPage({ open: openProject, create: () => createProject() });
   void setupLibrarySwitch();
+  void applyNavKind();
+  document.addEventListener('libraries-changed', () => void applyNavKind());
   renderHome();
   setupLibraryChat({
     title: (id) => jobs.get(id)?.name ?? '',
