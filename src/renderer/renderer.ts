@@ -10,7 +10,7 @@ import { askLibrary, renderFolderOpt, setupLibraryChat, showLibraryChat, syncCha
 import { citeSegment, closeDetail, detailJobId, openDetail, setupDetail, updateDetail, type Tab } from './detail';
 import { createProject, leaveProject, openProject, projectSelected, reloadLibrary, renderLibrary, setupLibrary, libraryView, showAll, showDeadlines, showInvoices, showUnsorted, type LibraryView } from './library';
 import { addToLibrary, refreshOverview, renderOverview, setupOverview } from './overview';
-import { setupLibrarySwitch } from './library-switch';
+import { promptLibraryKind, setupLibrarySwitch } from './library-switch';
 import { renderProjectsPage, setupProjectsPage } from './projects-page';
 import { refreshVault, setupVaultActivity } from './vault';
 import {
@@ -795,10 +795,12 @@ async function init() {
   document.addEventListener('libraries-changed', () => void applyNavKind());
   renderHome();
   setupLibraryChat({
-    title: (id) => jobs.get(id)?.name ?? '',
+    title: (id) => jobs.get(id)?.name ?? t('libraryChat.goneTitle'),
     cite: async (ref) => {
       if (detailJobId() !== ref.jobId) await openJob(ref.jobId);
+      // Odpověď mohla citovat dokument, který se mezitím přesunul do jiné knihovny.
       if (detailJobId() === ref.jobId) citeSegment(ref.segment);
+      else toast(t('libraryChat.gone'), true);
     },
   });
   fillHelpDots(showHelp);
@@ -859,6 +861,7 @@ async function init() {
 
   if (!settings.onboarded) showWelcome();
   else if (!(await window.api.libraries()).setupDone) openLibrarySetup();
+  else if (!sessionStorage.getItem('kind-prompted') && (await promptLibraryKind())) sessionStorage.setItem('kind-prompted', '1');
   void checkUpdates();
   await refreshStatus();
   setInterval(() => void refreshStatus(), 20000);

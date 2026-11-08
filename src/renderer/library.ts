@@ -9,6 +9,7 @@ import { isLiterature } from '../shared/nav';
 import { OTHER_FOLDER } from '../shared/overview';
 import type { DocumentCard, FolderMerge, Job, LibraryState, OrganizePlan, Placement, Project, ProjectKind } from '../shared/types';
 import type { Tab } from './detail';
+import { hasOtherLibrary, moveToLibraryModal } from './library-switch';
 import { cleanError, date, h, icon, ICONS, jobTitle, openModal, progressInfo, statusIcon, STATUS_TEXT, toast, toastAction } from './dom';
 import { showProjectChat } from './chat';
 import { planView } from './plan-view';
@@ -1132,6 +1133,23 @@ function renderBar() {
     icon(ICONS.book),
     t('project.addTo'),
   );
+  const toLibrary = h(
+    'button',
+    {
+      class: 'btn',
+      type: 'button',
+      onclick: () => {
+        const ids = [...chosen];
+        moveToLibraryModal(ids, () => {
+          chosen.clear();
+          renderLibrary();
+        });
+      },
+    },
+    icon(ICONS.arrow),
+    t('libs.move'),
+  );
+  toLibrary.hidden = !hasOtherLibrary();
   const del = h(
     'button',
     {
@@ -1164,9 +1182,10 @@ function renderBar() {
   const none = !chosen.size;
   moveTo.disabled = none;
   toProject.disabled = none;
+  toLibrary.disabled = none;
   del.disabled = none;
   clear.hidden = none;
-  bar.replaceChildren(allLabel, moveTo, toProject, del, clear);
+  bar.replaceChildren(allLabel, moveTo, toProject, toLibrary, del, clear);
 }
 
 const deadlineCtx = (jobs: Job[]) => ({ jobs, cards: state.cards, paid: state.library.paid, projects });

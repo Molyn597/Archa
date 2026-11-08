@@ -237,7 +237,7 @@ export class Store {
   async library(): Promise<Library> {
     const saved = await this.readJson<Partial<Library> | null>(path.join(this.root, 'library.json'), null);
     return saved?.folders
-      ? { folders: saved.folders, assign: saved.assign ?? {}, ...(saved.questions?.length && { questions: saved.questions }), ...(saved.aiLog?.length && { aiLog: saved.aiLog }), ...(saved.recent?.length && { recent: saved.recent }), ...(saved.paid && Object.keys(saved.paid).length && { paid: saved.paid }) }
+      ? { folders: saved.folders, assign: saved.assign ?? {}, ...(saved.questions?.length && { questions: saved.questions }), ...(saved.aiLog?.length && { aiLog: saved.aiLog }), ...(saved.recent?.length && { recent: saved.recent }), ...(saved.paid && Object.keys(saved.paid).length && { paid: saved.paid }), ...(saved.templateVersion && { templateVersion: saved.templateVersion }) }
       : defaultLibrary();
   }
 

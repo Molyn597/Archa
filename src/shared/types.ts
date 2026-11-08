@@ -138,6 +138,8 @@ export interface Library {
   recent?: string[];
   /** Zaplacené faktury: id dokumentu → čas označení. */
   paid?: Record<string, number>;
+  /** Verze šablon složek, podle které byla knihovna naposledy upravena (viz `alignToTemplate`). */
+  templateVersion?: number;
 }
 /** Typ knihovny: určuje šablonu složek nové knihovny; `general` = převzatá data ze starší verze. */
 export type LibraryKind = 'work' | 'study' | 'personal' | 'general';
@@ -647,6 +649,10 @@ export interface Api {
   /** Založí knihovnu se šablonou a přepne na ni. */
   createLibrary(kind: LibraryKind, name?: string, subjects?: string[]): Promise<LibraryInfo>;
   renameLibrary(id: string, name: string): Promise<Libraries>;
+  /** Změní typ knihovny a upraví její složky podle šablony (prázdné nepoužité výchozí pryč, chybějící doplní); dokumenty se nemění. */
+  setLibraryKind(id: string, kind: LibraryKind): Promise<Libraries>;
+  /** Přesune dokumenty do jiné knihovny (celé složky, ověřená kopie, pak smazání zdroje); vrací počet. Zamčené a zpracovávané odmítne. */
+  moveToLibrary(jobIds: string[], targetId: string): Promise<number>;
   /** Zamkne složku (zašifruje ji i podsložky), `false` = zámek natrvalo zruší (dešifruje); vyžaduje odemčený trezor. */
   lockFolder(id: string, locked: boolean): Promise<void>;
   onVaultChanged(handler: () => void): void;

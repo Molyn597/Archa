@@ -8,9 +8,9 @@ describe('navFor', () => {
     for (const kind of ['work', 'study', 'personal', 'general'] as const) expect(ids(kind).slice(0, 2)).toEqual(['overview', 'history']);
   });
 
-  it('práce má faktury, termíny a zakázky', () => {
+  it('práce má faktury, termíny a projekty', () => {
     expect(ids('work')).toEqual(['overview', 'history', 'invoices', 'deadlines', 'projects']);
-    expect(navFor('work').at(-1)?.label).toBe('nav.orders');
+    expect(navFor('work').at(-1)?.label).toBe('nav.projects');
   });
 
   it('osobní a obecná mají faktury, termíny a projekty', () => {

@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { access, copyFile, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { templateLibrary } from '../shared/library-templates';
-import type { Libraries, LibraryInfo, LibraryKind } from '../shared/types';
-import { LIBRARY_SETTINGS } from './store';
+import { alignToTemplate, TEMPLATE_VERSION, templateLibrary } from '../shared/library-templates';
+import type { Libraries, Library, LibraryInfo, LibraryKind } from '../shared/types';
+import { LIBRARY_SETTINGS, type Store } from './store';
 
 /**
  * Oddělené knihovny: každá má vlastní složku userData/libraries/<id> (dokumenty, projekty, složky, chat, trezor, část nastavení).
@@ -130,4 +130,33 @@ export async function setupLibraries(appRoot: string, libs: Libraries, kinds: Li
   await saveLibraries(appRoot, libs);
   for (const kind of todo) await createLibrary(appRoot, libs, kind, kind === 'study' ? opts.subjects : undefined);
   return libs;
+}
+
+/** Změní typ knihovny (jen libraries.json); složky se upraví zvlášť (`alignOpenLibrary` / `alignLibraryFile`). */
+export async function setLibraryKind(appRoot: string, libs: Libraries, id: string, kind: LibraryKind) {
+  const info = libs.list.find((l) => l.id === id);
+  if (!info) throw new Error('Unknown library');
+  info.kind = kind;
+  await saveLibraries(appRoot, libs);
+}
+
+/**
+ * Upraví složky otevřené knihovny podle šablony typu. S `onlyOutdated` jen jednou (knihovna bez aktuální `templateVersion`);
+ * odstraňuje pouze prázdné výchozí složky, dokumenty ani vlastní složky se nedotkne.
+ */
+export async function alignOpenLibrary(store: Store, kind: LibraryKind, onlyOutdated = false) {
+  if (kind === 'general') return;
+  if (onlyOutdated && (await store.library()).templateVersion === TEMPLATE_VERSION) return;
+  await store.updateLibrary((library) => {
+    Object.assign(library, alignToTemplate(library, kind).library);
+  });
+}
+
+/** Totéž pro knihovnu, která právě není otevřená (přímo její library.json). */
+export async function alignLibraryFile(appRoot: string, id: string, kind: LibraryKind) {
+  if (kind === 'general') return;
+  const file = path.join(libraryRoot(appRoot, id), 'library.json');
+  const library = await readJson<Library>(file);
+  if (!library?.folders) return;
+  await writeAtomic(file, { ...library, ...alignToTemplate({ ...library, assign: library.assign ?? {} }, kind).library });
 }

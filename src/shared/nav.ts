@@ -19,7 +19,7 @@ export function navFor(kind: LibraryKind): NavEntry[] {
     { id: 'invoices', label: 'inv.title' },
     { id: 'deadlines', label: 'dl.title' },
   ];
-  if (kind === 'work') return [...base, ...invoices, { id: 'projects', label: 'nav.orders' }];
+  if (kind === 'work') return [...base, ...invoices, { id: 'projects', label: 'nav.projects' }];
   // Články a knihy jsou jen filtr dokumentů: jsou ve stromu pod Dokumenty, ne v hlavním menu.
   if (kind === 'study') return [...base, { id: 'projects', label: 'nav.works' }];
   return [...base, ...invoices, { id: 'projects', label: 'nav.projects' }];

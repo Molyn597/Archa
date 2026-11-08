@@ -47,7 +47,8 @@ import { listModels, status } from './lmstudio';
 import { fetchEmbedCatalog, openrouterStatus, refreshCatalog } from './provider';
 import { relayoutJob, translateRegion } from './pipeline';
 import { Queue, SUPPORTED, type QueueEvents } from './queue';
-import { createLibrary, libraryRoot, loadLibraries, saveLibraries, setupLibraries } from './libraries';
+import { alignLibraryFile, alignOpenLibrary, createLibrary, libraryRoot, loadLibraries, saveLibraries, setLibraryKind, setupLibraries } from './libraries';
+import { moveToLibrary } from './library-move';
 import { checkUpdate, downloadUpdate } from './updates';
 import { Store } from './store';
 
@@ -140,6 +141,8 @@ function openLibrary(id: string) {
 /** Úklid knihovny po otevření: přerušené šifrování a úlohy, starý koš, otisky. */
 async function startLibrary() {
   await store.cleanupLocked().catch(() => undefined);
+  // Jednorázový úklid složek podle šablony typu knihovny (po aktualizaci); chyba nesmí bránit otevření.
+  await alignOpenLibrary(store, libs.list.find((l) => l.id === libs.current)?.kind ?? 'general', true).catch(() => undefined);
   await queue.recover();
   await queue.purgeOld(TRASH_DAYS).catch(() => undefined);
   void refreshHashes();
@@ -278,6 +281,8 @@ function registerIpc() {
   ipcMain.handle('libraries-switch', (_e, id: string) => switchLibrary(id));
   ipcMain.handle('libraries-setup', async (_e, kinds: LibraryKind[], opts: { subjects?: string[]; keep?: LibraryKind }) => {
     libs = await setupLibraries(appRoot, libs, kinds, opts);
+    // Převzatá knihovna právě dostala typ: složky podle jeho šablony (prázdné cizí pryč, chybějící doplnit).
+    await alignOpenLibrary(store, libs.list.find((l) => l.id === libs.current)?.kind ?? 'general');
     send('library-changed');
     return libs;
   });
@@ -293,6 +298,23 @@ function registerIpc() {
     else delete info.name;
     await saveLibraries(appRoot, libs);
     return libs;
+  });
+  ipcMain.handle('libraries-set-kind', async (_e, id: string, kind: LibraryKind) => {
+    if (!['work', 'study', 'personal'].includes(kind) || !libs.list.some((l) => l.id === id)) throw new Error('Invalid library type');
+    // Nejdřív složky (idempotentní), pak typ; dokumenty se nemění.
+    if (id === libs.current) await alignOpenLibrary(store, kind);
+    else await alignLibraryFile(appRoot, id, kind);
+    await setLibraryKind(appRoot, libs, id, kind);
+    send('library-changed');
+    return libs;
+  });
+  ipcMain.handle('libraries-move-docs', async (_e, jobIds: string[], targetId: string) => {
+    const count = await moveToLibrary(store, appRoot, libs, jobIds, targetId);
+    // Po odchodu dokumentů zmizí prázdné výchozí složky, které k typu knihovny nepatří (Faktury ve Studiu…).
+    await alignOpenLibrary(store, libs.list.find((l) => l.id === libs.current)?.kind ?? 'general');
+    for (const id of jobIds) send('job-removed', id);
+    send('library-changed');
+    return count;
   });
   ipcMain.handle('settings', () => store.settings());
   ipcMain.handle('settings-save', async (_e, settings: Settings) => {

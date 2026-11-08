@@ -72,6 +72,8 @@ const api: Api = {
   setupLibraries: (kinds, opts) => ipcRenderer.invoke('libraries-setup', kinds, opts),
   createLibrary: (kind, name, subjects) => ipcRenderer.invoke('libraries-create', kind, name, subjects),
   renameLibrary: (id, name) => ipcRenderer.invoke('libraries-rename', id, name),
+  setLibraryKind: (id, kind) => ipcRenderer.invoke('libraries-set-kind', id, kind),
+  moveToLibrary: (jobIds, targetId) => ipcRenderer.invoke('libraries-move-docs', jobIds, targetId),
   lockFolder: (id, locked) => ipcRenderer.invoke('library-folder-lock', id, locked),
   onVaultChanged: (handler) => ipcRenderer.on('vault-changed', () => handler()),
   libraryState: () => ipcRenderer.invoke('library-state'),

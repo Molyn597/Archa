@@ -11,6 +11,7 @@ import { isOnline } from '../shared/provider';
 import { findRegion, moveCrop, normalizeCrop, resizeCrop, type Handle } from '../shared/regions';
 import { authorsText, BIBLIO_FIELDS, CONTRACT_FACTS, DOC_TYPES, FACT_FIELDS, INVOICE_FACTS, parseAuthors } from '../shared/card';
 import type { Biblio, DocFacts, DocType, DocumentCard, DocumentContext, Job, JobDetail, Mode, RegionTranslation, Segment, Stage } from '../shared/types';
+import { hasOtherLibrary, moveToLibraryModal } from './library-switch';
 import { openChat, resetChat, setupChat, showChat } from './chat';
 import { highlightCount, highlightsHidden, highlightsSection, loadHighlights, paint, resetHighlights, setHidden, setupHighlights } from './highlights';
 import { createPages, releasePages, setupPdfZoom } from './pdf-zoom';
@@ -220,6 +221,7 @@ function actions(job: Job) {
       });
     }
   }
+  if (hasOtherLibrary() && job.status !== 'picking') items.push({ label: t('libs.move'), icon: ICONS.arrow, run: () => moveToLibraryModal([job.id]) });
   items.push({ label: t('detail.technical'), icon: ICONS.list, run: technicalInfo }, ...retryItems(job), deleteItem(job));
   list.push(actionMenu(items));
   return list;
