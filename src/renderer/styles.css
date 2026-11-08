@@ -4459,41 +4459,149 @@ body.in-project[data-view='history'] #library-folders {
   background: var(--line);
 }
 
-.overview-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  align-items: start;
-  gap: 16px;
+/* ---------- Přehled ---------- */
+
+.view.overview {
+  position: relative;
 }
 
-.ov-tiles {
-  grid-column: 1 / -1;
+.overview #overview-add {
+  margin-left: auto;
+}
+
+.ov-ask {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ov-ask-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 6px 6px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+}
+
+.ov-ask-box:focus-within {
+  border-color: var(--accent);
+}
+
+.ov-ask-box input {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font-size: 15px;
+}
+
+.ov-ask-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.ov-ask-note svg {
+  width: 12px;
+  height: 12px;
+}
+
+.ov-samples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ov-sample {
+  padding: 5px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--main);
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.ov-sample:hover {
+  background: var(--raised);
+  color: var(--text);
+}
+
+.ov-body {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.ov-stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 12px;
 }
 
-.ov-tile {
+.ov-stat {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 2px;
-  padding: 14px;
+  min-width: 0;
+  padding: 14px 16px;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--panel);
   text-align: left;
 }
 
-.ov-tile:hover {
+.ov-stat:hover {
   background: var(--raised);
 }
 
-.ov-tile svg {
-  width: 20px;
-  height: 20px;
-  margin-bottom: 6px;
+.ov-stat-label {
   color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ov-stat-value {
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+
+.ov-stat-sub {
+  color: var(--muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ov-stat.warn {
+  border-color: var(--danger);
+}
+
+.ov-stat.warn .ov-stat-value,
+.ov-stat.warn .ov-stat-label {
+  color: var(--danger-text);
+}
+
+.ov-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  align-items: start;
+  gap: 16px;
+}
+
+@media (max-width: 760px) {
+  .ov-cols {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .ov-card {
@@ -4519,49 +4627,169 @@ body.in-project[data-view='history'] #library-folders {
   margin: 0;
 }
 
-.ov-card > .btn {
+.ov-link {
   align-self: flex-start;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  color: var(--link);
+  font-size: 13px;
+  font-weight: 500;
 }
 
-/* V úzké kartě: název nahoře, údaje pod ním (vedle sebe by název zmizel). */
-.ov-card .recent-row {
+.ov-link:hover {
+  text-decoration: underline;
+}
+
+/* Řádek termínu nebo dokumentu: název a podtext vlevo, štítek vpravo. */
+.ov-row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  column-gap: 10px;
-  row-gap: 2px;
-  height: auto;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 2px 12px;
+  min-width: 0;
   padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
   background: var(--main);
+  text-align: left;
 }
 
-.ov-card .recent-row .dot {
-  grid-row: 1 / span 2;
-  align-self: center;
-}
-
-.ov-card .recent-name,
-.ov-card .recent-meta {
-  grid-column: 2;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.ov-card .recent-row:hover {
+.ov-row:hover {
   background: var(--raised);
 }
 
-.ov-line {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+.ov-row-title,
+.ov-row-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.ov-ai {
+.ov-row-title {
+  font-weight: 500;
+}
+
+.ov-row-sub {
+  grid-column: 1;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.ov-row .chip {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+
+.ov-row .chat-spin {
+  flex: none;
+}
+
+.ov-drop {
+  display: none;
+}
+
+/* Překryv při přetahování souborů nad Přehled. */
+.view > .ov-drop.over {
+  position: absolute;
+  inset: 60px 28px 40px;
   display: flex;
   align-items: center;
+  justify-content: center;
+  width: auto;
+  padding: 24px;
+  border: 1.5px dashed var(--accent);
+  border-radius: 12px;
+  background: var(--accent-soft);
+  backdrop-filter: blur(2px);
+  font-size: 16px;
+  font-weight: 600;
+  text-align: center;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.ov-welcome {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+}
+
+.ov-welcome h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.ov-welcome p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.ov-steps {
+  display: flex;
+  flex-direction: column;
   gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ov-step {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--main);
+}
+
+.ov-step.focus {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.ov-step-mark {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 1.5px solid var(--dash);
+  border-radius: 50%;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.ov-step.done .ov-step-mark {
+  border-color: var(--ok);
+  background: var(--ok-soft);
+  color: var(--ok-text);
+}
+
+.ov-step-mark svg {
+  width: 14px;
+  height: 14px;
+}
+
+.ov-step-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
   min-width: 0;
+  font-weight: 500;
+}
+
+.ov-step-text small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
 }
 
 .project-grid {
@@ -4789,6 +5017,16 @@ body.in-project[data-view='history'] #library-folders {
 .dl-row.overdue {
   border-color: var(--danger);
   background: var(--danger-soft);
+}
+
+.dl-row.soon {
+  border-color: var(--accent);
+  background: var(--warning-soft);
+}
+
+.dl-row.soon .dl-date {
+  color: var(--warning-text);
+  font-weight: 600;
 }
 
 .dl-title {

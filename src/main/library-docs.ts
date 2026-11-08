@@ -1,4 +1,6 @@
 import { folderPath, isLocked, subtree } from '../shared/folders';
+import { deadlines } from '../shared/deadlines';
+import { isoDay } from '../shared/invoices';
 import type { DocFacts, DocumentCard, Job, Library } from '../shared/types';
 
 /** Dokument knihovny pro chat: úloha, karta a zobrazený název složky. */
@@ -6,6 +8,8 @@ export interface LibDoc {
   job: Job;
   card?: DocumentCard;
   folder?: string;
+  /** Faktura označená jako zaplacená (čas označení). */
+  paidAt?: number;
 }
 
 /**
@@ -20,7 +24,8 @@ export function libraryDocs(jobs: Job[], cards: Record<string, DocumentCard | nu
     if (job.status !== 'done') return [];
     const f = folders.get(library.assign[job.id]?.folder ?? '');
     if ((f && isLocked(all, f)) || (scope && !(f && scope.has(f.id)))) return [];
-    return [{ job, card: cards[job.id] ?? undefined, folder: f ? folderPath(all, f) : undefined }];
+    const paidAt = library.paid?.[job.id];
+    return [{ job, card: cards[job.id] ?? undefined, folder: f ? folderPath(all, f) : undefined, ...(paidAt !== undefined && { paidAt }) }];
   });
 }
 
@@ -31,6 +36,21 @@ export function factsText(facts?: DocFacts) {
     .filter(([, v]) => v)
     .map(([k, v]) => `${k}: ${v}`)
     .join('; ');
+}
+
+/** Fakta dokumentu pro model; u faktury i stav úhrady, aby šlo odpovědět „co je po splatnosti“. */
+export function docFactsText(doc: LibDoc) {
+  const facts = factsText(doc.card?.facts);
+  if (doc.card?.type === 'contract') {
+    // Spočítané termíny (i po automatickém prodloužení), ať model nepočítá data sám.
+    const dates = deadlines({ jobs: [doc.job], cards: { [doc.job.id]: doc.card }, paid: undefined, projects: [], today: isoDay() })
+      .map((d) => `${d.kind === 'contractNotice' ? 'last day to give notice' : 'current end'}: ${d.date}`)
+      .join('; ');
+    return [facts, dates].filter(Boolean).join('; ');
+  }
+  if (doc.card?.type !== 'invoice') return facts;
+  const paid = doc.paidAt !== undefined ? `paid: yes (${isoDay(new Date(doc.paidAt))})` : 'paid: no';
+  return facts ? `${facts}; ${paid}` : paid;
 }
 
 const clip = (s: string, max: number) => (s.length > max ? `${s.slice(0, max).trimEnd()}…` : s);
@@ -46,6 +66,6 @@ export function cardText(doc: LibDoc, summaryMax = Infinity) {
     c?.biblio.title ?? '',
     c ? clip(c.summary.replace(/\s+/g, ' '), summaryMax) : '',
     c?.keywords.join(', ') ?? '',
-    factsText(c?.facts),
+    docFactsText(doc),
   ].join(' | ');
 }

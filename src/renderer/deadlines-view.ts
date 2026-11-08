@@ -1,9 +1,8 @@
 import { deadlines, groupDeadlines, type Deadline, type DeadlineGroup } from '../shared/deadlines';
 import { t, type MessageKey } from '../shared/i18n';
-import { isoDay } from '../shared/invoices';
+import { day, isoDay } from '../shared/invoices';
 import type { DocumentCard, Job, Project } from '../shared/types';
 import { cleanError, h, icon, ICONS, toast } from './dom';
-import { day } from './invoices-view';
 
 export interface DeadlinesCtx {
   jobs: Job[];
@@ -24,19 +23,22 @@ export function dueSoon(ctx: Pick<DeadlinesCtx, 'jobs' | 'cards' | 'paid' | 'pro
   return { all, soon: [...groups.overdue, ...groups.week, ...groups.month], groups };
 }
 
-/** Řádek termínu: název a datum, pod nimi druh a podrobnosti. Po termínu je varovně barevný. */
-export function deadlineRow(d: Deadline, ctx: Pick<DeadlinesCtx, 'open' | 'openProject'>) {
+/**
+ * Řádek termínu: název a datum, pod nimi druh a podrobnosti. Po termínu je varovně barevný.
+ * Přehled místo data ukáže relativní čas (`dateText`) a blížící se termín zvýrazní (`soon`).
+ */
+export function deadlineRow(d: Deadline, ctx: Pick<DeadlinesCtx, 'open' | 'openProject'>, look: { dateText?: string; soon?: boolean } = {}) {
   const sub = [t(`dl.kind.${d.kind}` as MessageKey), d.detail].filter(Boolean).join(' · ');
   return h(
     'button',
     {
-      class: `dl-row${d.overdue ? ' overdue' : ''}`,
+      class: `dl-row${d.overdue ? ' overdue' : look.soon ? ' soon' : ''}`,
       type: 'button',
       title: sub,
       onclick: () => (d.jobId ? ctx.open(d.jobId) : d.projectId && ctx.openProject(d.projectId)),
     },
     h('span', { class: 'dl-title' }, d.title),
-    h('span', { class: 'dl-date' }, day(d.date)),
+    h('span', { class: 'dl-date' }, look.dateText ?? day(d.date)),
     h('span', { class: 'dl-sub' }, sub),
   );
 }

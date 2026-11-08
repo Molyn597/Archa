@@ -1,6 +1,7 @@
 import { addDuration, findDurations, type Duration, type FoundDuration } from './duration';
-import { t } from './i18n';
+import { locale, t } from './i18n';
 import { invoiceRows } from './invoices';
+import { formatMoney } from './money';
 import type { DocumentCard, Job, Project } from './types';
 
 export type DeadlineKind = 'invoiceDue' | 'contractEnd' | 'contractNotice' | 'projectDeadline';
@@ -101,13 +102,14 @@ export function deadlines(input: {
 
   for (const r of invoiceRows(jobs, cards, paid, today)) {
     if (r.status === 'paid' || !r.due) continue;
-    const amount = cards[r.jobId]?.facts?.amount;
+    // Parsovaná částka ve formátu aplikace, jinak surový text z karty.
+    const amount = r.total !== undefined ? formatMoney(r.total, r.currency, locale()) : clean(cards[r.jobId]?.facts?.amount);
     out.push({
       kind: 'invoiceDue',
       date: r.due,
       jobId: r.jobId,
       title: r.supplier || r.number || r.file,
-      ...(clean(amount) || r.number ? { detail: [clean(amount), r.number].filter(Boolean).join(' · ') } : {}),
+      ...(amount || r.number ? { detail: [amount, r.number].filter(Boolean).join(' · ') } : {}),
       overdue: r.due < today,
     });
   }

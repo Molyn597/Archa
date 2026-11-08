@@ -1,6 +1,7 @@
 import { t, type MessageKey } from '../shared/i18n';
 import { childFolders, fold, folderName, folderPath, isLocked, placementActive, resolvePath, subtree, TRASH_DAYS } from '../shared/folders';
 import { duplicateGroups, type DuplicateGroup } from '../shared/duplicates';
+import type { InvoiceStatusFilter } from '../shared/invoices';
 import { OTHER_FOLDER } from '../shared/overview';
 import { isOnline } from '../shared/provider';
 import type { DocumentCard, FolderMerge, Job, LibraryState, OrganizePlan, Placement, Project, ProjectKind } from '../shared/types';
@@ -10,7 +11,7 @@ import { showProjectChat } from './chat';
 import { planView } from './plan-view';
 import { flushProject, newProjectModal, pickProjectModal, renderProject, type ProjectCtx } from './project-view';
 import { dueSoon, renderDeadlines } from './deadlines-view';
-import { invoiceCount, renderInvoices } from './invoices-view';
+import { invoiceCount, renderInvoices, setInvoiceStatus } from './invoices-view';
 import { lockFolder, unlockFolder, unlockModal, vault } from './vault';
 
 export interface LibraryHost {
@@ -603,6 +604,15 @@ export function leaveProject() {
 
 /** Otevře Soubory na pohledu Termíny. */
 export const showDeadlines = () => select(DEADLINES);
+
+/** Otevře Soubory na všech dokumentech. */
+export const showAll = () => select(ALL);
+
+/** Otevře Soubory na pohledu Faktury s filtrem stavu. */
+export function showInvoices(status: InvoiceStatusFilter) {
+  setInvoiceStatus(status);
+  select(INVOICES);
+}
 
 /** Otevře Soubory na dokumentech k zařazení: nezařazené, jinak složka Ostatní. */
 export function showUnsorted() {

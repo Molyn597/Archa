@@ -1,5 +1,6 @@
 import { locale, t, type MessageKey } from '../shared/i18n';
-import { filterInvoices, invoiceRows, invoiceSums, isoDay, periodRange, sortInvoices, type InvoicePeriod, type InvoiceRow, type InvoiceSortKey, type InvoiceStatusFilter } from '../shared/invoices';
+import { formatMoney } from '../shared/money';
+import { day, filterInvoices, invoiceRows, invoiceSums, isoDay, periodRange, sortInvoices, type InvoicePeriod, type InvoiceRow, type InvoiceSortKey, type InvoiceStatusFilter } from '../shared/invoices';
 import type { DocumentCard, Job } from '../shared/types';
 import { cleanError, h, icon, ICONS, toast } from './dom';
 
@@ -19,23 +20,16 @@ let status: InvoiceStatusFilter = 'all';
 let sort: { key: InvoiceSortKey; dir: 'asc' | 'desc' } = { key: 'issued', dir: 'desc' };
 const chosen = new Set<string>();
 
+/** Nastaví filtr stavu (a zruší omezení období), aby se počty shodovaly s Přehledem. */
+export function setInvoiceStatus(next: InvoiceStatusFilter) {
+  status = next;
+  period = 'all';
+}
+
 /** Počet faktur v knihovně (položka ve stromu je jen když nějaká je). */
 export const invoiceCount = (jobs: Job[], cards: Record<string, DocumentCard>) => jobs.filter((j) => cards[j.id]?.type === 'invoice').length;
 
-export const day = (iso: string) => {
-  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  return m ? new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString(locale(), { day: 'numeric', month: 'numeric', year: 'numeric' }) : iso;
-};
-
-function money(value: number | undefined, currency: string) {
-  if (value === undefined) return '–';
-  try {
-    return new Intl.NumberFormat(locale(), currency ? { style: 'currency', currency } : { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
-  } catch {
-    // Neznámý kód měny.
-    return `${new Intl.NumberFormat(locale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value)} ${currency}`;
-  }
-}
+const fmt = (value: number | undefined, currency: string) => formatMoney(value, currency, locale());
 
 const STATUS_CHIP = { paid: 'chip ok', overdue: 'chip err', open: 'chip', unknown: 'chip' } as const;
 
@@ -148,7 +142,7 @@ export function renderInvoices(root: HTMLElement, ctx: InvoicesCtx) {
       h('td', { class: 'inv-subject' }, h('span', { title: r.subject }, r.subject || '–')),
       h('td', { class: 'inv-date' }, r.issued ? day(r.issued) : '–'),
       h('td', { class: 'inv-date' }, r.due ? day(r.due) : '–'),
-      h('td', { class: 'inv-num', title: r.isdoc ? t('inv.isdoc') : '' }, money(r.total, r.currency)),
+      h('td', { class: 'inv-num', title: r.isdoc ? t('inv.isdoc') : '' }, fmt(r.total, r.currency)),
       // Zaškrtnutí ve sloupci Stav = zaplaceno (samostatný sloupec se do běžné šířky okna nevešel).
       h('td', { class: 'inv-nowrap' }, h('span', { class: 'inv-state' }, paid, h('span', { class: STATUS_CHIP[r.status] }, t(`inv.status.${r.status}` as MessageKey)))),
     );
@@ -164,9 +158,9 @@ export function renderInvoices(root: HTMLElement, ctx: InvoicesCtx) {
         'div',
         { class: 'inv-sum' },
         h('strong', {}, `${t('inv.sumLabel')}${s.currency ? ` ${s.currency}` : ''}`),
-        h('span', {}, `${t('inv.col.total')}: ${money(s.total, s.currency)}`),
-        h('span', {}, `${t('inv.col.net')}: ${money(s.net, s.currency)}`),
-        h('span', {}, `${t('inv.col.vat')}: ${money(s.vat, s.currency)}`),
+        h('span', {}, `${t('inv.col.total')}: ${fmt(s.total, s.currency)}`),
+        h('span', {}, `${t('inv.col.net')}: ${fmt(s.net, s.currency)}`),
+        h('span', {}, `${t('inv.col.vat')}: ${fmt(s.vat, s.currency)}`),
       ),
     ),
   );

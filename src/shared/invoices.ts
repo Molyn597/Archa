@@ -1,4 +1,5 @@
 import { fold } from './folders';
+import { locale } from './i18n';
 import { parseMoney } from './money';
 import type { DocumentCard, Job } from './types';
 
@@ -50,6 +51,12 @@ export function isoDay(d = new Date()) {
   const p = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
+
+/** Datum RRRR-MM-DD v místním formátu; jiný text vrátí beze změny. */
+export const day = (iso: string) => {
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString(locale(), { day: 'numeric', month: 'numeric', year: 'numeric' }) : iso;
+};
 
 /** Řádky tabulky faktur z viditelných úloh; pořadí podle úloh. */
 export function invoiceRows(jobs: Job[], cards: Record<string, DocumentCard | null | undefined>, paid: Record<string, number> | undefined, today: string): InvoiceRow[] {

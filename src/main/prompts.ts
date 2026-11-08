@@ -189,6 +189,7 @@ export const LIBRARY_CHAT_SYSTEM =
   'and suggest how to make the question more specific (time period, name, type of document). If you are not sure, say what is uncertain.\n' +
   '- After each sentence based on a passage, cite it by its number in square brackets, e.g. [12]; several as [12][15]. Cite only numbers that appear below.\n' +
   '- Name the document(s) the answer comes from.\n' +
+  '- Invoice facts say whether it is paid. An unpaid invoice is overdue when its due date is before today; compare dates exactly.\n' +
   '- Answer in the language of the question, concisely and in your own words; quote only short phrases.\n\nPassages:\n';
 
 /**

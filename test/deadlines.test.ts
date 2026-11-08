@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { deadlines, groupDeadlines } from '../src/shared/deadlines';
+import { formatMoney } from '../src/shared/money';
 import type { DocFacts, DocumentCard, Job, Project } from '../src/shared/types';
 
 const job = (id: string) => ({ id, name: id, ext: '.pdf' }) as Job;
@@ -23,7 +24,12 @@ describe('faktury', () => {
     );
     expect(r.map((x) => x.jobId)).toEqual(['b', 'a']);
     expect(r[0]).toMatchObject({ kind: 'invoiceDue', overdue: true, title: 'Bar' });
-    expect(r[1]).toMatchObject({ overdue: false, title: 'Foo', detail: '100 Kč · 1' });
+    expect(r[1]).toMatchObject({ overdue: false, title: 'Foo', detail: `${formatMoney(100, 'CZK', 'cs-CZ')} · 1` });
+  });
+
+  it('částku, kterou nejde přečíst, ukáže jako text z karty', () => {
+    const r = run({ a: card('invoice', { supplier: 'Foo', amount: 'dle dohody', due: '2026-11-20' }) });
+    expect(r[0].detail).toBe('dle dohody');
   });
 
   it('nezaplacená po termínu zůstává i po 60 dnech', () => {

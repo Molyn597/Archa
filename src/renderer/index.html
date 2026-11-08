@@ -87,20 +87,32 @@
           <header class="view-head">
             <h1 data-i18n="nav.overview">Přehled</h1>
             <span class="muted" id="overview-lib"></span>
+            <button class="btn" id="overview-add" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+              <span data-i18n="overview.add">Přidat soubory</span>
+            </button>
           </header>
 
-          <button class="dropzone" id="overview-drop" type="button">
-            <span class="drop-icon">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5" /><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" /></svg>
-            </span>
-            <span class="drop-title" data-i18n="overview.dropTitle">Přidat soubor</span>
-            <span class="drop-sub" data-i18n="overview.dropText">Cizojazyčné dokumenty se přeloží, ostatní se jen uloží, popíšou a zařadí.</span>
-            <span class="btn drop-pick" data-i18n="home.pick">Vybrat soubory</span>
-          </button>
+          <form class="ov-ask" id="overview-ask">
+            <div class="ov-ask-box">
+              <input id="overview-q" type="text" autocomplete="off" data-i18n-placeholder="overview.ask.placeholder" data-i18n-aria-label="overview.ask.placeholder" />
+              <span class="ov-ask-note" id="overview-note"></span>
+              <button class="btn primary icon-only" type="submit" data-i18n-title="overview.ask.send" data-i18n-aria-label="overview.ask.send">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+              </button>
+            </div>
+            <div class="ov-samples">
+              <button class="ov-sample" type="button" data-i18n="overview.sample.1">Které faktury jsou po splatnosti?</button>
+              <button class="ov-sample" type="button" data-i18n="overview.sample.2">Kdy můžu vypovědět smlouvu?</button>
+              <button class="ov-sample" type="button" data-i18n="overview.sample.3">Kolik jsme letos zaplatili za služby?</button>
+            </div>
+          </form>
 
-          <div class="section-title" id="overview-active-title" data-i18n="home.active" hidden>Probíhá</div>
-          <div class="job-cards" id="overview-active"></div>
-          <div class="overview-grid" id="overview-grid"></div>
+          <div class="ov-body" id="overview-body"></div>
+
+          <div class="ov-drop" id="overview-drop">
+            <span data-i18n="overview.dropHint">Pusť soubory sem – přeložím, popíšu a zařadím je</span>
+          </div>
         </section>
 
         <section class="view projects-page" data-view="projects" hidden>

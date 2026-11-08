@@ -1,10 +1,13 @@
 import type { Deadline } from '../shared/deadlines';
-import { t } from '../shared/i18n';
-import { latestProjects, recentJobs, toSort } from '../shared/overview';
+import { docSubtitle, docTitle } from '../shared/doc-title';
+import { locale, t, type MessageKey } from '../shared/i18n';
+import { day, invoiceRows, isoDay, type CurrencySum, type InvoiceStatusFilter } from '../shared/invoices';
+import { formatMoney } from '../shared/money';
+import { dueTone, invoiceStats, latestProjects, newestJobs, relativeDue, toSort } from '../shared/overview';
 import { kindName } from '../shared/projects';
-import type { Job, LibraryState, Mode, Project, Settings } from '../shared/types';
+import type { DocumentCard, Job, LibraryState, Mode, Project, Settings } from '../shared/types';
 import { deadlineRow, dueSoon } from './deadlines-view';
-import { cleanError, h, icon, ICONS, toast } from './dom';
+import { cleanError, h, icon, ICONS, progressInfo, STATUS_TEXT, toast } from './dom';
 import { libraryTitle } from './library-switch';
 
 type OverviewView = 'overview' | 'history' | 'projects' | 'home' | 'settings';
@@ -16,20 +19,21 @@ interface OverviewHost {
   show(view: OverviewView): void;
   /** Soubory s duplicitou projdou dnešním tokem Překladu, který ji ukáže. */
   addFiles(paths: string[]): void;
-  jobCard(job: Job): HTMLElement;
-  recentRow(job: Job): HTMLElement;
   openProject(id: string): void;
   openJob(id: string): void;
   showDeadlines(): void;
-  newProject(): void;
   showUnsorted(): void;
+  /** Soubory, pohled Faktury s filtrem stavu. */
+  showInvoices(status: InvoiceStatusFilter): void;
+  /** Otevře chat s knihovnou a odešle otázku. */
+  ask(question: string): void;
   /** Stav AI pro řádek v Přehledu: kde běží, jestli je dostupná a popis stavu. */
   ai(): { remote: boolean; online: boolean; state: string } | undefined;
 }
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 // Nejvýš tolik termínů na kartě Blíží se.
-const DUE_LIMIT = 6;
+const DUE_LIMIT = 5;
 const isActive = (j: Job) => j.status === 'running' || j.status === 'queued';
 
 let host: OverviewHost;
@@ -55,72 +59,130 @@ export async function addToLibrary(paths: string[]) {
   }
 }
 
-const tile = (path: string, label: string, text: string, to: OverviewView) =>
-  h('button', { class: 'ov-tile', type: 'button', onclick: () => host.show(to) }, icon(path), h('strong', {}, label), h('span', { class: 'muted small' }, text));
+const sumsText = (sums: CurrencySum[]) => sums.map((s) => formatMoney(s.total, s.currency, locale())).join(' · ');
 
-const card = (title: string, ...body: (Node | string | false)[]) => h('section', { class: 'ov-card' }, h('h2', {}, title), ...body);
+const stat = (label: string, value: number, lines: string[], onclick: () => void, warn = false) =>
+  h(
+    'button',
+    { class: `ov-stat${warn ? ' warn' : ''}`, type: 'button', onclick },
+    h('span', { class: 'ov-stat-label' }, label),
+    h('span', { class: 'ov-stat-value' }, String(value)),
+    ...lines.filter(Boolean).map((line) => h('span', { class: 'ov-stat-sub' }, line)),
+  );
 
-const row = (name: string, meta: string, onclick: () => void) =>
-  h('button', { class: 'recent-row', type: 'button', onclick, title: name }, h('span', { class: 'recent-name' }, name), h('span', { class: 'recent-meta' }, meta));
+const card = (title: string, ...body: (Node | false)[]) => h('section', { class: 'ov-card' }, h('h2', {}, title), ...body);
+const link = (text: string, onclick: () => void) => h('button', { class: 'ov-link', type: 'button', onclick }, text);
+
+/** Řádek: název a podtext vlevo, štítek vpravo. */
+const row = (title: string, sub: string, onclick: () => void, chip?: Node | false) =>
+  h('button', { class: 'ov-row', type: 'button', onclick, title }, h('span', { class: 'ov-row-title' }, title), sub && h('span', { class: 'ov-row-sub' }, sub), chip);
+
+function docRow(job: Job, card: DocumentCard | undefined) {
+  const info = progressInfo(job);
+  let sub = docSubtitle(job, card);
+  let chip: HTMLElement | false = card ? h('span', { class: 'chip' }, t(`docType.${card.type}` as MessageKey)) : false;
+  if (isActive(job)) {
+    sub = info.label;
+    chip = h('span', { class: 'chip accent' }, job.status === 'running' ? h('span', { class: 'chat-spin' }) : icon(ICONS.clock), t(STATUS_TEXT[job.status]));
+  } else if (job.status === 'error') {
+    sub = job.error ?? sub;
+    chip = h('span', { class: 'chip err' }, t(STATUS_TEXT.error));
+  } else if (job.status !== 'done') {
+    chip = h('span', { class: 'chip' }, t(STATUS_TEXT[job.status]));
+  }
+  return row(docTitle(job, card), sub, () => host.openJob(job.id), chip);
+}
+
+function projectRow(p: Project) {
+  const sub = `${kindName(p.kind)} · ${t('project.sourceCount', { count: p.sources.length })}`;
+  return row(p.name, sub, () => host.openProject(p.id), p.deadline ? h('span', { class: 'chip' }, t('overview.projectDue', { date: day(p.deadline) })) : false);
+}
+
+/** Nový uživatel: tři kroky k prvnímu dotazu. */
+function welcome(aiReady: boolean) {
+  const step = (n: number, done: boolean, text: string, hint?: string, action?: Node, focus = false) =>
+    h(
+      'li',
+      { class: `ov-step${done ? ' done' : ''}${focus ? ' focus' : ''}` },
+      h('span', { class: 'ov-step-mark', title: done ? t('overview.welcome.done') : '' }, done ? icon(ICONS.check) : String(n)),
+      h('span', { class: 'ov-step-text' }, text, hint && h('small', {}, hint)),
+      action,
+    );
+  const pick = async () => addToLibrary(await window.api.pickFiles());
+  return h(
+    'section',
+    { class: 'ov-welcome' },
+    h('h2', {}, t('overview.welcome.title')),
+    h('p', {}, t('overview.welcome.text')),
+    h(
+      'ol',
+      { class: 'ov-steps' },
+      step(1, aiReady, t('overview.welcome.ai'), undefined, aiReady ? undefined : h('button', { class: 'btn', type: 'button', onclick: () => host.show('settings') }, t('overview.welcome.aiButton'))),
+      step(2, false, t('overview.welcome.first'), undefined, h('button', { class: 'btn primary', type: 'button', onclick: () => void pick() }, t('home.pick')), true),
+      step(3, false, t('overview.welcome.ask'), t('overview.welcome.askHint')),
+    ),
+  );
+}
 
 /** Překreslí Přehled z poslední načtené knihovny a aktuálních úloh. */
 export function renderOverview() {
   const jobs = host.jobs();
-  const active = jobs.filter(isActive).sort((a, b) => (a.status === 'running' ? -1 : b.status === 'running' ? 1 : a.createdAt - b.createdAt));
+  const { library, cards } = libraryState;
+  const ai = host.ai();
   $('overview-lib').textContent = libraryName;
-  $('overview-active-title').hidden = !active.length;
-  $('overview-active').replaceChildren(...active.map(host.jobCard));
+  $('overview-note').replaceChildren(...(ai ? [...(ai.remote ? [] : [icon(ICONS.lock)]), t(ai.remote ? 'overview.ask.online' : 'overview.ask.local')] : []));
+  $('overview-ask').hidden = !jobs.length;
 
-  const { library } = libraryState;
-  const idle = jobs.filter((j) => !isActive(j));
-  const recent = recentJobs(library.recent, idle);
+  if (!jobs.length) {
+    $('overview-body').replaceChildren(welcome(Boolean(ai?.online)));
+    return;
+  }
+
+  const today = isoDay();
+  const rows = invoiceRows(jobs, cards, library.paid, today);
+  const stats = invoiceStats(rows, today);
   const sort = toSort(
-    idle.map((j) => j.id),
+    jobs.filter((j) => !isActive(j)).map((j) => j.id),
     library,
   );
-  const ai = host.ai();
-  const due = dueSoon({ jobs, cards: libraryState.cards, paid: library.paid, projects });
-  const dueRow = (d: Deadline) => deadlineRow(d, { open: host.openJob, openProject: host.openProject });
 
-  $('overview-grid').replaceChildren(
+  const sortStat = stat(
+    t('overview.stat.sort'),
+    sort.total,
+    [sort.questions.length ? t('overview.aiAsks', { count: sort.questions.length }) : sort.total ? '' : t('overview.allSorted')],
+    host.showUnsorted,
+  );
+  const stats3 = rows.length
+    ? [
+        stat(t('overview.stat.open'), stats.open.count, [sumsText(stats.open.sums)], () => host.showInvoices('open')),
+        stat(
+          t('overview.stat.overdue'),
+          stats.overdue.count,
+          stats.overdue.count ? [sumsText(stats.overdue.sums), t('overview.oldest', { count: stats.overdue.oldestDays })] : [t('overview.noOverdue')],
+          () => host.showInvoices('overdue'),
+          stats.overdue.count > 0,
+        ),
+        sortStat,
+      ]
+    : [stat(t('overview.stat.docs'), jobs.length, [], () => host.show('history')), sortStat];
+
+  const due = dueSoon({ jobs, cards, paid: library.paid, projects });
+  const dueRow = (d: Deadline) => deadlineRow(d, { open: host.openJob, openProject: host.openProject }, { dateText: relativeDue(d.date, today), soon: dueTone(d.date, today) === 'soon' });
+  const newest = newestJobs(jobs);
+
+  $('overview-body').replaceChildren(
+    h('div', { class: 'ov-stats' }, ...stats3),
     h(
       'div',
-      { class: 'ov-tiles' },
-      tile(ICONS.folder, t('nav.history'), t('overview.docs', { count: jobs.length }), 'history'),
-      tile(ICONS.book, t('nav.projects'), t('overview.projects', { count: projects.length }), 'projects'),
-      tile(ICONS.globe, t('nav.translate'), t('overview.translateText'), 'home'),
-    ),
-    card(
-      t('dl.soon'),
-      ...(due.soon.length
-        ? [
-            h('div', { class: 'dl-list' }, ...due.soon.slice(0, DUE_LIMIT).map(dueRow)),
-            h('button', { class: 'btn', type: 'button', onclick: host.showDeadlines }, t('dl.showAll', { count: due.all.length })),
-          ]
-        : [h('p', { class: 'muted small' }, t('dl.empty')), ...(due.all.length ? [h('button', { class: 'btn', type: 'button', onclick: host.showDeadlines }, t('dl.showAll', { count: due.all.length }))] : [])]),
-    ),
-    card(t('overview.recent'), ...(recent.length ? recent.map(host.recentRow) : [h('p', { class: 'muted small' }, t('overview.recentEmpty'))])),
-    card(
-      t('overview.projectsActive'),
-      ...(projects.length
-        ? latestProjects(projects).map((p) => row(p.name, `${kindName(p.kind)} · ${t('project.sourceCount', { count: p.sources.length })}`, () => host.openProject(p.id)))
-        : [h('p', { class: 'muted small' }, t('overview.projectsEmpty')), h('button', { class: 'btn', type: 'button', onclick: host.newProject }, icon(ICONS.plus), t('project.new'))]),
-    ),
-    card(
-      t('overview.toSort'),
-      sort.total
-        ? h('div', { class: 'ov-line' }, h('span', {}, t('overview.toSortCount', { count: sort.total })), h('button', { class: 'btn', type: 'button', onclick: host.showUnsorted }, t('overview.toSortOpen')))
-        : h('p', { class: 'muted small' }, t('overview.allSorted')),
-    ),
-    card(
-      t('overview.ai'),
-      h(
-        'div',
-        { class: 'ov-line' },
-        h('span', { class: 'ov-ai' }, h('span', { class: `status-dot ${ai ? (ai.online ? 'online' : 'offline') : ''}` }), h('span', {}, ai ? `${t(ai.remote ? 'side.online' : 'side.local')} · ${ai.state}` : t('lm.checking'))),
-        h('button', { class: 'btn', type: 'button', onclick: () => host.show('settings') }, t('overview.aiSettings')),
+      { class: 'ov-cols' },
+      card(
+        t('dl.soon'),
+        due.soon.length ? h('div', { class: 'dl-list' }, ...due.soon.slice(0, DUE_LIMIT).map(dueRow)) : h('p', { class: 'muted small' }, t('dl.empty')),
+        due.all.length > 0 && link(t('dl.showAll', { count: due.all.length }), host.showDeadlines),
       ),
+      card(t('overview.newest'), h('div', { class: 'dl-list' }, ...newest.map((j) => docRow(j, cards[j.id]))), link(t('overview.allFiles'), () => host.show('history'))),
     ),
+    ...(projects.length ? [card(t('nav.projects'), h('div', { class: 'dl-list' }, ...latestProjects(projects).map(projectRow)))] : []),
   );
 }
 
@@ -139,7 +201,19 @@ export async function refreshOverview() {
 
 export function setupOverview(overviewHost: OverviewHost) {
   host = overviewHost;
-  $('overview-drop').addEventListener('click', async () => addToLibrary(await window.api.pickFiles()));
+  $('overview-add').addEventListener('click', async () => addToLibrary(await window.api.pickFiles()));
+  const input = $<HTMLInputElement>('overview-q');
+  const ask = (question: string) => {
+    question = question.trim();
+    if (!question) return;
+    input.value = '';
+    host.ask(question);
+  };
+  $('overview-ask').addEventListener('submit', (e) => {
+    e.preventDefault();
+    ask(input.value);
+  });
+  for (const b of document.querySelectorAll<HTMLElement>('.ov-sample')) b.addEventListener('click', () => ask(b.textContent ?? ''));
   window.api.onLibraryChanged(() => void refreshOverview());
   document.addEventListener('libraries-changed', () => void refreshOverview());
   void refreshOverview();

@@ -5,9 +5,9 @@ import { estimateFiles, formatUsd, setCurrency, setCzkRate } from '../shared/est
 import { isValidPageRange } from '../shared/pages';
 import { activeModels, activeRates, isOnline } from '../shared/provider';
 import type { Api, DuplicateMatch, FileInfo, Job, LmStatus, Mode, Models, Provider, Settings } from '../shared/types';
-import { openChat, renderFolderOpt, setupLibraryChat, showLibraryChat, syncChatSettings } from './chat';
+import { askLibrary, openChat, renderFolderOpt, setupLibraryChat, showLibraryChat, syncChatSettings } from './chat';
 import { citeSegment, closeDetail, detailJobId, openDetail, setupDetail, updateDetail, type Tab } from './detail';
-import { createProject, leaveProject, openProject, projectSelected, reloadLibrary, renderLibrary, setupLibrary, showDeadlines, showUnsorted } from './library';
+import { createProject, leaveProject, openProject, projectSelected, reloadLibrary, renderLibrary, setupLibrary, showDeadlines, showInvoices, showUnsorted } from './library';
 import { addToLibrary, refreshOverview, renderOverview, setupOverview } from './overview';
 import { setupLibrarySwitch } from './library-switch';
 import { renderProjectsPage, setupProjectsPage } from './projects-page';
@@ -511,7 +511,6 @@ function setupDrop() {
     e.preventDefault();
     depth++;
     for (const z of zones) z.classList.add('over');
-    // Přehled má vlastní plochu pro soubory.
     if (view !== 'home' && view !== 'overview') show('home');
   });
   document.addEventListener('dragleave', () => {
@@ -708,13 +707,12 @@ async function init() {
     jobMode,
     show,
     addFiles: (paths) => void addFiles(paths),
-    jobCard,
-    recentRow,
     openProject,
     openJob: (id) => void openJob(id),
     showDeadlines,
-    newProject: () => createProject(),
     showUnsorted,
+    showInvoices,
+    ask: (question) => void askLibrary(question),
     ai: () => (lastStatus ? { remote: lastStatus.provider === 'openrouter', online: lastStatus.online, state: lmState(lastStatus) } : undefined),
   });
   setupProjectsPage({ open: openProject, create: () => createProject() });

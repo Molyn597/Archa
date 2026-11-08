@@ -5,10 +5,11 @@ import type { ChatMessage, ChatModel, Job, Library, LibraryRef, Settings } from 
 import { answer, type ChatHooks } from './chat';
 import { dot, embedder, embedModelFor, loadIndex, rrf, type VectorIndex } from './embed';
 import { ensurePath, matchFolder } from './library';
-import { cardText, factsText, libraryDocs, type LibDoc } from './library-docs';
+import { cardText, docFactsText, factsText, libraryDocs, type LibDoc } from './library-docs';
 import { planOrganize, planSize } from './organize';
 import { readKey } from './keystore';
 import { ask, connect, loadModel, type Llm } from './pipeline';
+import { isoDay } from '../shared/invoices';
 import { LIBRARY_CHAT_SYSTEM, libraryRoutePrompt } from './prompts';
 import { cleanCitations, formatPassages, passages, search, selectPassages, type Passage } from './rag';
 import { extractJsonObject } from './review';
@@ -141,6 +142,9 @@ export interface Corpus {
   titles: Map<string, number>;
 }
 
+/** Dnešní datum pro otázky typu „po splatnosti“, „letos“, „kdy končí“. */
+const todayLine = () => `Today is ${isoDay()}.\n`;
+
 export function buildCorpus(parts: { doc: LibDoc; items: Passage[] }[]): Corpus {
   const items: Passage[] = [];
   const refs = new Map<number, LibraryRef>();
@@ -148,7 +152,7 @@ export function buildCorpus(parts: { doc: LibDoc; items: Passage[] }[]): Corpus 
   let n = 1;
   for (const { doc, items: own } of parts) {
     const { job, card } = doc;
-    const facts = factsText(card?.facts);
+    const facts = docFactsText(doc);
     const label = [`Document: ${job.name}${job.ext}`, doc.folder && `folder: ${doc.folder}`, card && `type: ${card.type}`, facts && `facts: ${facts}`].filter(Boolean).join(' — ');
     // Nadpis zastaví hledání nejbližšího nadpisu (selectPassages) na hranici dokumentu.
     items.push({ id: n, heading: true, text: label, search: cardText(doc) });
@@ -227,7 +231,7 @@ export async function askLibrary(
   const shown = [...new Set([...focused, ...catalogDocs(docs, `${question} ${previous}`, limit)])];
   const langs = [...new Set(docs.flatMap((d) => [d.job.sourceLang, d.job.targetLang]).filter((l) => l && l !== 'auto'))];
   const routed = parseRoute(
-    await ask(llm, 'polish', [{ role: 'user', content: libraryRoutePrompt(question, formatCatalog(docs, shown, limit), langs, previous, tree(library), focused.map((_, k) => k + 1)) }], ROUTE_TOKENS),
+    await ask(llm, 'polish', [{ role: 'user', content: todayLine() + libraryRoutePrompt(question, formatCatalog(docs, shown, limit), langs, previous, tree(library), focused.map((_, k) => k + 1)) }], ROUTE_TOKENS),
     shown.length,
   );
   const save = async (reply: ChatMessage) => {
@@ -293,7 +297,7 @@ export async function askLibrary(
   step(t('libraryChat.stepFound', { n: chosen.length, docs: docCount }));
 
   const recent = history.slice(-HISTORY).map((m) => ({ role: m.role, content: m.text.slice(0, HISTORY_CHARS) }));
-  const messages = [{ role: 'system' as const, content: LIBRARY_CHAT_SYSTEM + formatPassages(chosen) }, ...recent, { role: 'user' as const, content: question }];
+  const messages = [{ role: 'system' as const, content: todayLine() + LIBRARY_CHAT_SYSTEM + formatPassages(chosen) }, ...recent, { role: 'user' as const, content: question }];
   step(t('chat.stepWrite'));
   const raw = await answer(llm, messages, hooks);
   const { text, sources } = cleanCitations(raw, new Set(chosen.map((p) => p.id)));

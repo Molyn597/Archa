@@ -3,7 +3,7 @@ import { isOnline } from '../shared/provider';
 import { LIBRARY_CHAT, projectChatKey } from '../shared/folders';
 import type { ChatMessage, ChatModel, Job, LibraryRef, LmStatus, Project, Provider, Segment, Settings } from '../shared/types';
 import { chatWarningText, cleanError, h, icon, ICONS } from './dom';
-import { focusDocs, libraryFolders, selectedFolder } from './library';
+import { focusDocs, libraryFolders, selectedFolder, showAll } from './library';
 import { planView } from './plan-view';
 
 export interface ChatHost {
@@ -361,7 +361,11 @@ function buildPanel() {
   );
 }
 
-async function load() {
+// Poslední načtení historie; askLibrary na něj počká, aby odeslaná otázka nezmizela s `history = []`.
+let loading: Promise<void> = Promise.resolve();
+const load = () => (loading = loadHistory());
+
+async function loadHistory() {
   const id = jobId;
   if (!id || !open) return;
   history = [];
@@ -430,6 +434,18 @@ export function showLibraryChat() {
   // Po návratu do Knihovny s vybraným projektem zůstává chat projektu.
   if (scope === 'project' && proj) return enter('project', projectChatKey(proj.id));
   enter('library', LIBRARY_CHAT);
+}
+
+/** Otevře chat s knihovnou (Soubory, pohled Vše) a rovnou odešle otázku. */
+export async function askLibrary(question: string) {
+  showAll();
+  // Z chatu projektu zpět na celou knihovnu.
+  proj = null;
+  enter('library', LIBRARY_CHAT);
+  // Otevřený panel načetl historii už v enter(); zavřený ji načte až setOpen.
+  if (!open) setOpen(true);
+  await loading;
+  await ask(question);
 }
 
 /** Chat projektu ve view Knihovna; null = výběr už není projekt, panel se vrátí k chatu s knihovnou. Volá se při každém překreslení. */

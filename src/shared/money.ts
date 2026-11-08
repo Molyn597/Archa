@@ -27,3 +27,15 @@ export function parseMoney(text: string): { value: number; currency?: string } |
   if (!Number.isFinite(value)) return undefined;
   return { value, ...(currency && { currency }) };
 }
+
+/** Částka pro zobrazení v dané lokalizaci; bez měny jen číslo na dvě desetinná místa, bez hodnoty pomlčka. */
+export function formatMoney(value: number | undefined, currency: string, locale: string): string {
+  if (value === undefined) return '–';
+  const plain = { minimumFractionDigits: 2, maximumFractionDigits: 2 };
+  try {
+    return new Intl.NumberFormat(locale, currency ? { style: 'currency', currency } : plain).format(value);
+  } catch {
+    // Neznámý kód měny.
+    return `${new Intl.NumberFormat(locale, plain).format(value)} ${currency}`;
+  }
+}
