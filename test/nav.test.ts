@@ -21,7 +21,7 @@ describe('navFor', () => {
   });
 
   it('studium má literaturu a práce, bez faktur a termínů', () => {
-    expect(ids('study')).toEqual(['overview', 'history', 'literature', 'projects']);
+    expect(ids('study')).toEqual(['overview', 'history', 'projects']);
     expect(navFor('study').at(-1)?.label).toBe('nav.works');
   });
 });

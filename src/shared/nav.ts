@@ -2,7 +2,7 @@ import type { MessageKey } from './i18n';
 import type { DocType, LibraryKind } from './types';
 
 /** Položky hlavního menu, které se podle typu knihovny zobrazují (Přehled a Dokumenty jsou vždy). */
-export type NavId = 'overview' | 'history' | 'invoices' | 'deadlines' | 'literature' | 'projects';
+export type NavId = 'overview' | 'history' | 'invoices' | 'deadlines' | 'projects';
 
 export interface NavEntry {
   id: NavId;
@@ -20,7 +20,8 @@ export function navFor(kind: LibraryKind): NavEntry[] {
     { id: 'deadlines', label: 'dl.title' },
   ];
   if (kind === 'work') return [...base, ...invoices, { id: 'projects', label: 'nav.orders' }];
-  if (kind === 'study') return [...base, { id: 'literature', label: 'nav.literature' }, { id: 'projects', label: 'nav.works' }];
+  // Články a knihy jsou jen filtr dokumentů: jsou ve stromu pod Dokumenty, ne v hlavním menu.
+  if (kind === 'study') return [...base, { id: 'projects', label: 'nav.works' }];
   return [...base, ...invoices, { id: 'projects', label: 'nav.projects' }];
 }
 

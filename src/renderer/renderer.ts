@@ -8,7 +8,7 @@ import { activeModels, activeRates, isOnline } from '../shared/provider';
 import type { Api, DuplicateMatch, FileInfo, Job, LmStatus, Mode, Models, Provider, Settings } from '../shared/types';
 import { askLibrary, renderFolderOpt, setupLibraryChat, showLibraryChat, syncChatSettings } from './chat';
 import { citeSegment, closeDetail, detailJobId, openDetail, setupDetail, updateDetail, type Tab } from './detail';
-import { createProject, leaveProject, openProject, projectSelected, reloadLibrary, renderLibrary, setupLibrary, libraryView, showAll, showDeadlines, showInvoices, showLiterature, showUnsorted, type LibraryView } from './library';
+import { createProject, leaveProject, openProject, projectSelected, reloadLibrary, renderLibrary, setupLibrary, libraryView, showAll, showDeadlines, showInvoices, showUnsorted, type LibraryView } from './library';
 import { addToLibrary, refreshOverview, renderOverview, setupOverview } from './overview';
 import { setupLibrarySwitch } from './library-switch';
 import { renderProjectsPage, setupProjectsPage } from './projects-page';
@@ -112,9 +112,9 @@ function offerWord(job: Job) {
 }
 
 // Pohledy Dokumentů, které mají vlastní položku v menu (zvýrazní se místo Dokumentů), a nadpis stránky pro ostatní.
-const VIEW_NAV: Partial<Record<LibraryView, NavId>> = { invoices: 'invoices', deadlines: 'deadlines', literature: 'literature' };
+const VIEW_NAV: Partial<Record<LibraryView, NavId>> = { invoices: 'invoices', deadlines: 'deadlines' };
 const VIEW_TITLE: Partial<Record<LibraryView, MessageKey>> = { duplicates: 'dup.title', aiLog: 'aiLog.title', trash: 'trash.title' };
-const LIBRARY_NAV: Partial<Record<NavId, () => void>> = { invoices: () => showInvoices('all'), deadlines: showDeadlines, literature: showLiterature };
+const LIBRARY_NAV: Partial<Record<NavId, () => void>> = { invoices: () => showInvoices('all'), deadlines: showDeadlines };
 
 let projectsLabel: MessageKey = 'nav.projects';
 
@@ -131,7 +131,7 @@ function syncNav() {
 }
 
 const NAV_LABELS = new Map<NavId, MessageKey>();
-const MENU_IDS: NavId[] = ['overview', 'history', 'invoices', 'deadlines', 'literature', 'projects'];
+const MENU_IDS: NavId[] = ['overview', 'history', 'invoices', 'deadlines', 'projects'];
 
 /** Menu podle typu aktuální knihovny: skryje nepatřící položky a nastaví popisky. */
 async function applyNavKind() {

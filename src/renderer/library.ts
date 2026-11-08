@@ -609,7 +609,6 @@ export function leaveProject() {
 export const showDeadlines = () => select(DEADLINES);
 
 /** Otevře Dokumenty na článcích a knihách. */
-export const showLiterature = () => select(LITERATURE);
 
 /** Otevře Soubory na všech dokumentech. */
 export const showAll = () => select(ALL);
@@ -655,6 +654,9 @@ function renderFolders(jobs: Job[]) {
   const total = (id: string) => [...subtree(folders, id)].reduce((sum, x) => sum + (counts.get(x) ?? 0), 0);
 
   const items: HTMLElement[] = [folderItem(ALL, t('library.all'), jobs.length, { folderTarget: null })];
+  // Filtr přes všechny složky; jen když v knihovně nějaký článek nebo kniha je.
+  const literature = jobs.filter((j) => isLiterature(state.cards[j.id]?.type)).length;
+  if (literature || selected === LITERATURE) items.push(folderItem(LITERATURE, t('nav.literature'), literature, { iconPath: ICONS.book }));
   const branch = (parent: string | undefined, depth: number) => {
     for (const f of childFolders(folders, parent)) {
       const name = folderName(f);
