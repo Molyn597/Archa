@@ -136,6 +136,8 @@ export interface Library {
   aiLog?: Placement[];
   /** Naposledy otevřené dokumenty (nejnovější první), pro Přehled. */
   recent?: string[];
+  /** Zaplacené faktury: id dokumentu → čas označení. */
+  paid?: Record<string, number>;
 }
 /** Typ knihovny: určuje šablonu složek nové knihovny; `general` = převzatá data ze starší verze. */
 export type LibraryKind = 'work' | 'study' | 'personal' | 'general';
@@ -683,6 +685,10 @@ export interface Api {
   makeMissingCards(): Promise<void>;
   /** Znovu vytvoří karty faktur a smluv, které nejsou upravené ručně a nemají fakta. */
   fillFacts(): Promise<void>;
+  /** Označí faktury jako zaplacené / nezaplacené. */
+  setInvoicesPaid(ids: string[], paid: boolean): Promise<void>;
+  /** Uloží faktury (aktuálně filtrované) do .xlsx nebo .csv; vrátí cestu, nebo null při zrušení dialogu. */
+  exportInvoices(ids: string[], format: 'xlsx' | 'csv'): Promise<string | null>;
   onLibraryChanged(handler: () => void): void;
   onLibraryProgress(handler: (p: { done: number; total: number }) => void): void;
   openOutput(id: string, kind?: OutputKind): Promise<void>;

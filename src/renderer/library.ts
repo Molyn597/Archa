@@ -9,6 +9,7 @@ import { cleanError, date, h, icon, ICONS, jobDuration, jobTitle, langPair, MODE
 import { showProjectChat } from './chat';
 import { planView } from './plan-view';
 import { flushProject, newProjectModal, pickProjectModal, renderProject, type ProjectCtx } from './project-view';
+import { invoiceCount, renderInvoices } from './invoices-view';
 import { lockFolder, unlockFolder, unlockModal, vault } from './vault';
 
 export interface LibraryHost {
@@ -32,6 +33,7 @@ const UNSORTED = 'unsorted';
 const TRASH = 'trash';
 const AI_LOG = 'aiLog';
 const DUPLICATES = 'duplicates';
+const INVOICES = 'invoices';
 // Výběr projektu: PROJECT + id (v hlavní oblasti je pak detail projektu, ne seznam dokumentů).
 const PROJECT = 'project:';
 const DAY = 86_400_000;
@@ -81,7 +83,7 @@ function saveCollapsed() {
 }
 
 /** Složka dokumentu; zařazení do smazané složky se bere jako nezařazeno. */
-const special = () => selected === TRASH || selected === AI_LOG || selected === DUPLICATES || inProject();
+const special = () => selected === TRASH || selected === AI_LOG || selected === DUPLICATES || selected === INVOICES || inProject();
 const inProject = () => selected.startsWith(PROJECT);
 const projectId = () => selected.slice(PROJECT.length);
 
@@ -683,6 +685,7 @@ function renderFolders(jobs: Job[]) {
   const pinned = h(
     'div',
     { class: 'folder-pinned' },
+    invoiceCount(jobs, state.cards) ? folderItem(INVOICES, t('inv.title'), invoiceCount(jobs, state.cards), { iconPath: ICONS.invoice }) : null,
     dups.length ? folderItem(DUPLICATES, t('dup.title'), dups.length, { iconPath: ICONS.copy }) : null,
     folderItem(AI_LOG, t('aiLog.title'), aiActive().length, { iconPath: ICONS.fast }),
     folderItem(TRASH, t('trash.title'), trash.length, { iconPath: ICONS.trash, trash: true }),
@@ -1171,6 +1174,15 @@ function drawSpecial(query: string) {
     renderProject($('history-list'), projectId(), projectCtx);
     return;
   }
+  if (selected === INVOICES) {
+    visible = [];
+    chosen.clear();
+    $('library-bar').hidden = true;
+    $('history-empty').hidden = true;
+    $('history-empty-action').hidden = true;
+    renderInvoices($('history-list'), { jobs: host.jobs(), cards: state.cards, paid: state.library.paid, query: $<HTMLInputElement>('history-search').value, open: (id) => host.open(id), redraw: renderLibrary });
+    return;
+  }
   if (selected === DUPLICATES) {
     const groups = duplicateGroups(host.jobs(), state.cards, state.library);
     visible = [];
@@ -1219,6 +1231,7 @@ function draw() {
   if (selected !== ALL && selected !== UNSORTED && !special() && !folders.some((f) => f.id === selected)) selected = ALL;
   if (selected === UNSORTED && !jobs.some((j) => !folderOf(j.id))) selected = ALL;
   if (inProject() && projectsLoaded && !projects.some((p) => p.id === projectId())) selected = ALL;
+  if (selected === INVOICES && !invoiceCount(jobs, state.cards)) selected = ALL;
   if (selected === DUPLICATES && !duplicateGroups(jobs, state.cards, state.library).length) selected = ALL;
 
   renderFolders(jobs);

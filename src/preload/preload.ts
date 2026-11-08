@@ -100,6 +100,8 @@ const api: Api = {
   onChatDelta: (handler) => ipcRenderer.on('chat-delta', (_e, d) => handler(d)),
   onJobUpdate: (handler) => ipcRenderer.on('job-update', (_e, job) => handler(job)),
   onJobRemoved: (handler) => ipcRenderer.on('job-removed', (_e, id) => handler(id)),
+  setInvoicesPaid: (ids, paid) => ipcRenderer.invoke('invoices-paid', ids, paid),
+  exportInvoices: (ids, format) => ipcRenderer.invoke('invoices-export', ids, format),
   onLibraryChanged: (handler) => ipcRenderer.on('library-changed', () => handler()),
   onLibraryProgress: (handler) => ipcRenderer.on('library-progress', (_e, p) => handler(p)),
   onOpenJob: (handler) => ipcRenderer.on('open-job', (_e, id) => handler(id)),

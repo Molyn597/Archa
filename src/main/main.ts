@@ -25,6 +25,8 @@ import { languageName } from '../shared/languages';
 import { findRegion, normalizeCrop } from '../shared/regions';
 import type { ChatModel, DocumentCard, Libraries, LibraryKind, DuplicateMatch, Highlight, Project, ProjectKind, Job, Library, LibraryFolder, JobOptions, Mode, OrganizePlan, OutputKind, Placement, Provider, RegionTranslation, Settings, Stage } from '../shared/types';
 import { isOnline } from '../shared/provider';
+import { exportTable, invoiceRows, isoDay, toCsv } from '../shared/invoices';
+import { buildXlsx } from './xlsx';
 import { makeCard } from './make-card';
 import { answerQuestion, applyPlan, markOpened, mergeFolders, moveDocs, moveFolder, removeFolder, shouldBeLocked, undoPlacement } from './library';
 import { organizeFolder, suggestMerges } from './organize';
@@ -595,6 +597,37 @@ function registerIpc() {
   );
   ipcMain.handle('library-folder-delete', (_e, id: string) => editLibrary((library) => removeFolder(library, id)));
   ipcMain.handle('library-move', (_e, jobIds: string[], folderId: string | null) => editLibrary((library) => moveDocs(library, jobIds, folderId)));
+  ipcMain.handle('invoices-paid', (_e, ids: string[], paid: boolean) =>
+    editLibrary((library) => {
+      const map = (library.paid ??= {});
+      for (const id of ids) {
+        if (paid) map[id] ??= Date.now();
+        else delete map[id];
+      }
+      if (!Object.keys(map).length) delete library.paid;
+    }),
+  );
+  ipcMain.handle('invoices-export', async (_e, ids: string[], format: 'xlsx' | 'csv') => {
+    const library = await store.library();
+    const jobs = (store.unlocked ? await store.jobs() : await openJobs()).filter((j) => ids.includes(j.id));
+    const cards = Object.fromEntries(await Promise.all(jobs.map(async (j) => [j.id, await store.card(j.id)] as const)));
+    const today = isoDay();
+    const rows = invoiceRows(jobs, cards, library.paid, today);
+    const order = new Map(ids.map((id, i) => [id, i]));
+    rows.sort((a, b) => order.get(a.jobId)! - order.get(b.jobId)!);
+    const table = exportTable(
+      rows,
+      (key) => t(`inv.col.${key}` as MessageKey),
+      (s) => t(`inv.status.${s}` as MessageKey),
+    );
+    const res = await dialog.showSaveDialog(win!, {
+      defaultPath: path.join(app.getPath('documents'), `${t('inv.fileName')}-${today}.${format}`),
+      filters: format === 'xlsx' ? [{ name: 'Excel', extensions: ['xlsx'] }] : [{ name: 'CSV', extensions: ['csv'] }],
+    });
+    if (res.canceled || !res.filePath) return null;
+    await writeFile(res.filePath, format === 'xlsx' ? buildXlsx(t('inv.title'), table.headers, table.rows) : toCsv(table.headers, table.rows));
+    return res.filePath;
+  });
   ipcMain.handle('library-make-cards', async () => {
     const todo: Job[] = [];
     for (const job of await openJobs()) if (job.status === 'done' && !(await store.card(job.id))) todo.push(job);
