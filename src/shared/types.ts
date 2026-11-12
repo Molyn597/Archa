@@ -1,3 +1,6 @@
+import type { Gap, OpenAlexWork } from './openalex';
+import type { DiffSection } from './contract-diff';
+import type { Deadline } from './deadlines';
 import type { UiLangSetting } from './i18n';
 
 export type Mode = 'fast' | 'balanced' | 'quality';
@@ -77,6 +80,18 @@ export interface DocumentCard {
   facts?: DocFacts;
   /** Údaje faktury byly přečtené přesně z přílohy ISDOC (ne odhadem modelu). */
   factsFrom?: 'isdoc';
+  /** Rizika smlouvy z kontroly modelem; undefined = ještě nekontrolováno, [] = nic neobvyklého nenalezeno. */
+  risks?: ContractRisk[];
+}
+export type RiskSeverity = 'high' | 'medium' | 'low';
+
+/** Neobvyklé nebo nevýhodné ujednání ve smlouvě; `quote` je doslovná citace z dokumentu. */
+export interface ContractRisk {
+  severity: RiskSeverity;
+  title: string;
+  quote: string;
+  why: string;
+  tip?: string;
 }
 /** Strukturované údaje faktury / smlouvy; jen to, co v dokumentu doslova stojí. Data jako RRRR-MM-DD. */
 export interface DocFacts {
@@ -141,7 +156,92 @@ export interface Library {
   /** Verze šablon složek, podle které byla knihovna naposledy upravena (viz `alignToTemplate`). */
   templateVersion?: number;
   /** Trvale skryté nabídky (např. přesun článků do Studia: uživatel zvolil Nechat). */
-  hints?: { literatureKept?: boolean };
+  hints?: { studyKept?: boolean };
+  /** Pravidla naučená z ručních oprav zařazení (nejnovější první, nejvýš ~50); jdou jako příklady do promptu zařazování. */
+  rules?: FolderRule[];
+  /** Uložená hledání ve filtru Dokumentů (nejnovější první). */
+  saved?: SavedSearch[];
+  /** Potvrzené vazby mezi dokumenty (obousměrně): id → související id. */
+  links?: Record<string, string[]>;
+  /** Odmítnuté návrhy souvisejících dokumentů (obousměrně), znovu se nenabízejí. */
+  rejectedLinks?: Record<string, string[]>;
+  /** Ověření v ARES podle IČO (poslední výsledek s datem). */
+  ares?: Record<string, AresEntry>;
+  /** Shrnutí změn mezi verzemi smlouvy od AI; klíč = seřazená dvojice id „a|b“. */
+  compares?: Record<string, CompareCache>;
+}
+/** Změna mezi verzemi smlouvy ve shrnutí od AI. */
+export interface ChangeItem {
+  title: string;
+  before: string;
+  after: string;
+  impact: string;
+}
+export interface ChangeSummary {
+  summary: string;
+  changes: ChangeItem[];
+}
+/** Uložené shrnutí; platí jen pro stejný směr (`from` = starší verze) a stejné verze dokumentů (`stamp`). */
+export interface CompareCache {
+  from: string;
+  stamp: string;
+  summary: ChangeSummary;
+}
+/** Porovnání dvou verzí smlouvy: A vlevo (starší), B vpravo; `summary` = uložené shrnutí AI, je-li. */
+export interface CompareResult {
+  a: { job: Job; card: DocumentCard | null };
+  b: { job: Job; card: DocumentCard | null };
+  sections: DiffSection[];
+  summary?: ChangeSummary;
+}
+/** Údaje o subjektu z ARES. */
+export interface AresRecord {
+  ico: string;
+  name: string;
+  /** Celá textová adresa sídla. */
+  address: string;
+  city: string;
+  zip: string;
+  vat?: string;
+}
+/** Výsledek dotazu do ARES; `record: null` = IČO v ARES není. */
+export interface AresEntry {
+  /** RRRR-MM-DD. */
+  date: string;
+  record: AresRecord | null;
+}
+/** Dokument související s otevřeným: potvrzený, nebo návrh k potvrzení. */
+export interface RelatedDoc {
+  id: string;
+  title: string;
+  type?: DocType;
+  /** Návrh: stejná protistrana (jméno) nebo podobný obsah. */
+  reason?: { kind: 'party'; party: string } | { kind: 'similar' };
+}
+/** Souvislosti dokumentu pro informační sloupec detailu. */
+export interface DocLinks {
+  suggestions: RelatedDoc[];
+  linked: RelatedDoc[];
+  /** Termíny jen tohoto dokumentu (splatnost, konec smlouvy, výpovědní lhůta). */
+  deadlines: Deadline[];
+  /** Projekty (zakázky, práce), kde je dokument zdrojem. */
+  projects: { id: string; name: string }[];
+  /** Složka knihovny, ve které dokument leží (bez zařazení = Odkladiště). */
+  folder?: { id: string; path: string };
+}
+/** Uložené hledání: dotaz a případně složka, ve které se hledalo. */
+export interface SavedSearch {
+  name: string;
+  query: string;
+  /** Výběr ve stromu Dokumentů (id složky nebo zvláštní položky), bez hodnoty = všude. */
+  folder?: string;
+}
+/** „Dokumenty tohoto dodavatele (nebo s tímto slovem) patří do této cesty.“ */
+export interface FolderRule {
+  by: 'party' | 'keyword';
+  match: string;
+  path: string;
+  at: number;
 }
 /** Typ knihovny: určuje šablonu složek nové knihovny; `general` = převzatá data ze starší verze. */
 export type LibraryKind = 'work' | 'study' | 'personal' | 'general';
@@ -166,6 +266,8 @@ export interface MoveOptions {
   keepFolders?: boolean;
   /** Přesouvaná složka: cesta v cíli začíná jí (nadřazené se nezakládají) a ve zdroji se odstraní, pokud je prázdná. */
   fromFolder?: string;
+  /** Projekty, které se přesunou do cíle (celé, i s chatem); jejich zdroje musí být mezi přesouvanými dokumenty. */
+  projectIds?: string[];
 }
 /** Dotaz, kam zařadit dokument; možnosti jsou cesty složek (i dosud neexistujících). */
 export interface FolderQuestion {
@@ -193,6 +295,56 @@ export interface FolderMerge {
   into: string;
   reason?: string;
 }
+/** Stav opakování (Leitner): přihrádka 0–5 a den, kdy se má položka znovu ukázat (RRRR-MM-DD). */
+export interface Review {
+  box: number;
+  due: string;
+}
+/** Kartička k procvičení; `source` = id dokumentu, `page` = strana ve zdroji. */
+export interface PracticeCard {
+  id: string;
+  front: string;
+  back: string;
+  source: string;
+  page?: number;
+  review?: Review;
+}
+/** Kvízová otázka s jednou správnou možností (`answer` = index); `explain` = uložené vysvětlení od AI k odpovědi `explainFor`. */
+export interface PracticeQuestion {
+  id: string;
+  question: string;
+  options: string[];
+  answer: number;
+  source: string;
+  page?: number;
+  explain?: string;
+  explainFor?: number;
+  review?: Review;
+}
+/** Kartičky a kvíz pro složku nebo projekt (`scope` = 'folder:<id>' | 'project:<id>'); `sources` = dokumenty, ze kterých vznikly. */
+export interface PracticeSet {
+  scope: string;
+  sources: string[];
+  createdAt: number;
+  cards: PracticeCard[];
+  questions: PracticeQuestion[];
+}
+/** Procvičování pro okno: uložená sada (nebo null), název rozsahu, dostupné zdroje a jejich názvy. */
+export interface PracticeState {
+  set: PracticeSet | null;
+  title: string;
+  /** Zdroje, ze kterých by se sada vytvořila teď (nejvýš 10). */
+  sources: string[];
+  /** Kolik zdrojů je v rozsahu celkem (víc než 10 = použije se 10 nejnovějších). */
+  total: number;
+  /** Názvy dokumentů sady i aktuálních zdrojů (id → název). */
+  titles: Record<string, string>;
+}
+/** Kolik kartiček je dnes k zopakování, celkem a po rozsazích. */
+export interface PracticeDue {
+  total: number;
+  scopes: { scope: string; title: string; count: number }[];
+}
 /** Návrh roztřídění: cesty složek s dokumenty a dotazy u nejistých dokumentů. */
 export interface OrganizePlan {
   folders: { path: string; jobIds: string[] }[];
@@ -213,6 +365,8 @@ export interface Project {
   /** Dokumenty (id úloh) v pořadí přidání; soubory se nekopírují. */
   sources: string[];
   style: CitationStyle;
+  /** Jazyk citací seznamu literatury (české „a kol.“, „s.“ × anglické „et al.“, „p.“); bez hodnoty podle jazyka aplikace. */
+  citeLang?: 'cs' | 'en';
   /** Termín odevzdání RRRR-MM-DD. */
   deadline?: string;
   createdAt: number;
@@ -375,6 +529,10 @@ export interface Job {
   resume?: boolean;
   /** Poskytovatel modelů, který úlohu zpracoval (bez hodnoty = lokální). */
   provider?: Provider;
+  /** Z `JobOptions.translate`: `false` = bez překladu. */
+  translate?: boolean;
+  /** Údaje z OpenAlex (`JobOptions.biblioHint`) pro kartu. */
+  biblioHint?: Biblio;
   /** Modely, které úlohu zpracovaly (pro zobrazení). */
   models?: Models;
   /** Cena za online modely v USD (součet za úlohu i překlady oblastí). */
@@ -403,6 +561,10 @@ export interface JobOptions {
   keepFigures?: boolean;
   /** Bez hodnoty = podle nastavení v okamžiku spuštění. */
   provider?: Provider;
+  /** `false` = soubor se jen přečte, popíše a zařadí; text se přenese bez překladu (cílový jazyk = rozpoznaný zdrojový). */
+  translate?: boolean;
+  /** Údaje z OpenAlex: doplní prázdná pole karty, až vznikne. */
+  biblioHint?: Biblio;
 }
 
 export type HighlightColor = 'yellow' | 'green' | 'blue' | 'pink';
@@ -457,6 +619,13 @@ export interface Rates {
 /** Styl citací při kopírování úryvků. */
 export type CitationStyle = 'iso690' | 'apa7';
 
+/** Moje firma (název, IČO, DIČ); stačí vyplnit jedno. */
+export interface OwnCompany {
+  name: string;
+  id: string;
+  vat: string;
+}
+
 export interface Settings {
   /** Jazyk rozhraní aplikace (ne překladu). */
   uiLang: UiLangSetting;
@@ -472,6 +641,14 @@ export interface Settings {
   notify: boolean;
   /** Po dokončení překladu vytvořit kartu dokumentu (shrnutí, klíčová slova, bibliografie). */
   autoCard: boolean;
+  /** Sledovaná složka na disku: nové soubory se samy přečtou a padnou do Odkladiště. */
+  watchFolder?: string;
+  watchOn?: boolean;
+  /** Šablona názvu dokumentu z karty (`{datum} {dodavatel} {typ} {cislo}`) a zda se používá. */
+  nameTemplate: string;
+  renameByTemplate?: boolean;
+  /** Moje firma: podle ní se u faktur pozná příjem (jsem dodavatel) a výdaj. */
+  ownCompany?: OwnCompany;
   /** Kopírování úryvků a odpovědí chatu s citací. */
   citation: { enabled: boolean; style: CitationStyle };
   unloadWhenIdle: boolean;
@@ -492,6 +669,8 @@ export interface Settings {
   currency: Currency;
   /** Poslední kurz USD → CZK z ČNB (pro ceny i v korunách). */
   usdCzk?: { rate: number; date: string };
+  /** Kurzy ČNB k datu: „RRRR-MM-DD|EUR“ → kurz za 1 jednotku. */
+  fxRates?: Record<string, number>;
   /** Uvítací průvodce už proběhl (chybějící hodnota = ještě ne). */
   onboarded?: boolean;
   /** Kdy naposledy proběhla kontrola aktualizací (ms). */
@@ -567,6 +746,24 @@ export interface Api {
   /** Ke každému souboru dokumenty se stejným originálem (i v koši). */
   checkDuplicates(paths: string[]): Promise<DuplicateMatch[][]>;
   usdCzk(): Promise<number | undefined>;
+  /** Kurz ČNB k datu (RRRR-MM-DD) pro měnu (např. EUR) v Kč za 1 jednotku; bez internetu nebo bez měny undefined. */
+  fxRate(code: string, date: string): Promise<number | undefined>;
+  /** Ověření IČO v ARES; `refresh` = zeptat se online (odejde jen IČO), jinak jen uložený výsledek. */
+  aresLookup(ico: string, refresh: boolean): Promise<AresEntry | undefined>;
+  /** Související dokumenty (potvrzené a návrhy podle vektorů a protistrany), termíny a projekty dokumentu. */
+  /** Hledání v OpenAlex; odchází jen hledaný text. */
+  openalexSearch(q: string): Promise<OpenAlexWork[]>;
+  /** Stáhne volně dostupné PDF do Odkladiště (bez zpracování modelem); s `projectId` i do zdrojů projektu. Vrací id úlohy. */
+  openalexAdd(work: OpenAlexWork, projectId?: string): Promise<string>;
+  /** Dohledá dokument v OpenAlex (DOI, jinak název) a vrátí, co v kartě chybí; nenalezeno = undefined. */
+  openalexLookup(id: string): Promise<{ work: OpenAlexWork; gaps: Gap[] } | undefined>;
+  /** Otevře v prohlížeči https odkaz z výsledků OpenAlex. */
+  openWeb(url: string): Promise<void>;
+  docLinks(id: string): Promise<DocLinks>;
+  /** Potvrdí (`true`), nebo odmítne či zruší (`false`) vazbu mezi dokumenty. */
+  linkDocs(id: string, other: string, linked: boolean): Promise<void>;
+  /** Velikost původního souboru dokumentu v bajtech. */
+  jobFileSize(id: string): Promise<number | undefined>;
   appVersion(): Promise<string>;
   /** `auto`: automatická kontrola, nejvýš jednou denně. */
   checkUpdate(auto?: boolean): Promise<UpdateCheck>;
@@ -577,6 +774,10 @@ export interface Api {
   /** Otevře v prohlížeči jen adresy na github.com. */
   openUrl(url: string): Promise<void>;
   pickFiles(): Promise<string[]>;
+  /** Výběr složky; vrací všechny podporované soubory v ní i v podsložkách (prázdné při zrušení). */
+  pickFolder(): Promise<string[]>;
+  /** Výběr jedné složky na disku (null = zrušeno). */
+  pickDirectory(): Promise<string | null>;
   pathForFile(file: File): string;
   addJobs(paths: string[], options: JobOptions): Promise<string[]>;
   listJobs(): Promise<Job[]>;
@@ -587,6 +788,8 @@ export interface Api {
   readOutputPdf(id: string): Promise<Uint8Array | null>;
   cancelJob(id: string): Promise<void>;
   retryJob(id: string, mode: Mode, targetLang?: string): Promise<void>;
+  /** Přeloží existující dokument na místě (stejná úloha, složka a karta). */
+  translateJob(id: string, mode: Mode, targetLang: string): Promise<void>;
   relayoutJob(id: string): Promise<void>;
   /** Přeloží vybrané segmenty (id) úlohy čekající na výběr nebo hotové; ostatní nepřeložené se přeskočí. */
   translateSegments(id: string, ids: number[]): Promise<void>;
@@ -611,6 +814,22 @@ export interface Api {
   getCard(id: string): Promise<DocumentCard | null>;
   /** Vytvoří (nebo znovu vytvoří) kartu dokumentu pomocí modelu. */
   makeCard(id: string): Promise<DocumentCard>;
+  /** Znovu zkontroluje rizika smlouvy modelem a uloží je do karty. */
+  checkRisks(id: string): Promise<DocumentCard>;
+  /** Uložená sada kartiček a kvízu pro rozsah (bez AI). */
+  practiceSet(scope: string): Promise<PracticeState>;
+  /** Vytvoří (nebo znovu vytvoří) sadu modelem ze zdrojů rozsahu. */
+  buildPractice(scope: string): Promise<PracticeState>;
+  /** Zapíše odpověď na kartičku nebo otázku (umím / neumím) a vrátí sadu. */
+  gradePractice(scope: string, itemId: string, known: boolean): Promise<PracticeSet>;
+  /** Vysvětlení odpovědi kvízu od AI; uložené se vrací bez modelu. */
+  explainQuestion(scope: string, id: string, chosen: number): Promise<string>;
+  /** Kartičky k zopakování dnes v aktuální knihovně. */
+  practiceDue(): Promise<PracticeDue>;
+  /** Porovná text dvou verzí smlouvy; starší jde vlevo, `keepOrder` = nechat pořadí (Prohodit). */
+  compareDocs(aId: string, bId: string, keepOrder?: boolean): Promise<CompareResult>;
+  /** Shrnutí změn od AI (jen na klik); uložené se vrací bez modelu, `force` = vytvořit znovu. */
+  summarizeChanges(aId: string, bId: string, force?: boolean): Promise<ChangeSummary>;
   /** Uloží ručně upravenou kartu (označí ji jako `edited`). */
   saveCard(id: string, card: DocumentCard): Promise<void>;
   /** Přesune dokument do koše (zařazení do složky zůstane pro obnovení). */
@@ -662,8 +881,8 @@ export interface Api {
   setLibraryKind(id: string, kind: LibraryKind): Promise<Libraries>;
   /** Přesune dokumenty do jiné knihovny (celé složky, ověřená kopie, pak smazání zdroje); vrací počet. Zamčené a zpracovávané odmítne. */
   moveToLibrary(jobIds: string[], targetId: string, opts?: MoveOptions): Promise<number>;
-  /** Trvale skryje nabídku přesunu článků a knih do Studia v této knihovně. */
-  keepLiterature(): Promise<void>;
+  /** Trvale skryje nabídku přesunu studijních věcí do Studia v této knihovně. */
+  keepStudy(): Promise<void>;
   /** Zamkne složku (zašifruje ji i podsložky), `false` = zámek natrvalo zruší (dešifruje); vyžaduje odemčený trezor. */
   lockFolder(id: string, locked: boolean): Promise<void>;
   onVaultChanged(handler: () => void): void;
@@ -674,6 +893,11 @@ export interface Api {
   moveFolder(id: string, parent: string | null): Promise<void>;
   /** Odpověď na dotaz, kam dokument patří; `null` = nechat, jak je. Vybraná cesta se případně založí. */
   answerFolder(jobId: string, path: string | null): Promise<void>;
+  /** Odebere naučené pravidlo zařazení (id z `ruleId`). */
+  removeFolderRule(id: string): Promise<void>;
+  /** Uloží hledání do knihovny (stejný název přepíše) / odebere ho podle názvu. */
+  saveSearch(search: SavedSearch): Promise<void>;
+  removeSavedSearch(name: string): Promise<void>;
   /** Vrátí zařazení, při kterém AI založila složky (prázdné založené složky smaže). */
   undoPlacement(placement: Placement): Promise<void>;
   /** Návrh podsložek a zařazení pro složku (`null` = celá knihovna); nic nemění. */

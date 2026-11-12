@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { inText, pageLabel, printedPages, reference, toHtml, toPlain } from '../src/shared/citation';
+import { inText, pageLabel, printedPages, reference, shortCite, toHtml, toPlain } from '../src/shared/citation';
 import type { Biblio } from '../src/shared/types';
 
 const becker: Biblio = {
@@ -175,5 +175,19 @@ describe('toHtml / toPlain', () => {
   it('escapuje a kurzívu dává do <i>', () => {
     expect(toHtml(parts)).toBe('A &amp; B &lt;x&gt; &quot;q&quot; <i>Kniha</i>');
     expect(toPlain(parts)).toBe('A & B <x> "q" Kniha');
+  });
+});
+
+describe('shortCite', () => {
+  const author = (family: string) => ({ family, given: 'X' });
+  it('jeden, dva a více autorů', () => {
+    expect(shortCite({ ...becker, year: '2020', authors: [author('Novák')] }, 'cs')).toBe('Novák, 2020');
+    expect(shortCite({ ...becker, year: '2020', authors: [author('Novák'), author('Svoboda')] }, 'cs')).toBe('Novák a Svoboda, 2020');
+    expect(shortCite({ ...becker, year: '2020', authors: [author('Novák'), author('Svoboda'), author('Dvořák')] }, 'cs')).toBe('Novák a kol., 2020');
+    expect(shortCite({ ...becker, year: '2020', authors: [author('Smith'), author('Doe'), author('Roe')] }, 'en')).toBe('Smith et al., 2020');
+  });
+  it('chybějící autor nebo rok se vynechá', () => {
+    expect(shortCite({ ...becker, year: undefined }, 'en')).toBe('Becker');
+    expect(shortCite({ ...becker, authors: [], year: '2020' }, 'cs')).toBe('2020');
   });
 });

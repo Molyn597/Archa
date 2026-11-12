@@ -1,9 +1,14 @@
 import { t, type MessageKey } from '../shared/i18n';
 import { parseSubjects } from '../shared/library-templates';
+import type { StudyOffer } from '../shared/library-transfer';
 import type { Libraries, LibraryInfo, LibraryKind, MoveOptions } from '../shared/types';
 import { cleanError, h, icon, ICONS, openModal, toast } from './dom';
 
 const KINDS: LibraryKind[] = ['work', 'study', 'personal'];
+const KIND_ICON: Record<LibraryKind, string> = { work: ICONS.briefcase, study: ICONS.cap, personal: ICONS.home, general: ICONS.briefcase };
+
+/** Barevná ikona typu knihovny (barvy --lib-work / --lib-study / --lib-personal). */
+const avatar = (kind: LibraryKind) => h('span', { class: `lib-avatar ${kind === 'general' ? 'work' : kind}` }, icon(KIND_ICON[kind]));
 
 let libs: Libraries | undefined;
 
@@ -70,13 +75,20 @@ async function runMove(ids: string[], target: LibraryInfo, opts: MoveOptions) {
   }
 }
 
+/** Věty o studijních věcech k přesunu: „8 článků a knih, 1 bakalářská práce“. */
+export function studyText(key: 'libs.studyOffer' | 'libs.studyConfirm', offer: StudyOffer) {
+  const study = studyLibrary();
+  const parts = [offer.literature && t('libs.studyLit', { count: offer.literature }), offer.projectIds.length && t('libs.studyProj', { count: offer.projectIds.length })].filter(Boolean).join(', ');
+  return t(key, { parts, library: study ? libraryTitle(study) : t('libraryKind.study') }) + (offer.skipped ? ` ${t('libs.studySkipped', { count: offer.skipped })}` : '');
+}
+
 /**
- * Přesun článků a knih (se strukturou složek) do studijní knihovny po potvrzení; bez ní ji nejdřív založí
- * (bez přepnutí, ať zdrojová knihovna zůstane otevřená).
+ * Přesun studijních věcí (články a knihy, studijní projekty se zdroji; vše se strukturou složek) do studijní knihovny
+ * po potvrzení; bez ní ji nejdřív založí (bez přepnutí, ať zdrojová knihovna zůstane otevřená).
  */
-export async function moveLiterature(ids: string[], done?: () => void) {
+export async function moveStudy(offer: StudyOffer, done?: () => void) {
   let target = studyLibrary();
-  if (!ids.length || !confirm(t('libs.litConfirm', { count: ids.length, library: target ? libraryTitle(target) : t('libraryKind.study') }))) return;
+  if (!confirm(studyText('libs.studyConfirm', offer))) return;
   try {
     if (!target) {
       target = await window.api.createLibrary('study', undefined, undefined, true);
@@ -86,7 +98,7 @@ export async function moveLiterature(ids: string[], done?: () => void) {
     toast(cleanError(e), true);
     return;
   }
-  await runMove(ids, target, { keepFolders: true });
+  await runMove(offer.ids, target, { keepFolders: true, projectIds: offer.projectIds });
   done?.();
 }
 
@@ -192,7 +204,7 @@ function render() {
   const menu = h(
     'div',
     { class: 'menu', hidden: true },
-    ...libs.list.map((l) => h('button', { type: 'button', onclick: () => void (l.id !== cur.id && switchTo(l.id)) }, l.id === cur.id ? icon(ICONS.check) : h('span', { class: 'menu-gap' }), libraryTitle(l))),
+    ...libs.list.map((l) => h('button', { type: 'button', onclick: () => void (l.id !== cur.id && switchTo(l.id)) }, avatar(l.kind), h('span', { class: 'menu-grow' }, libraryTitle(l)), l.id === cur.id && icon(ICONS.check))),
     h('div', { class: 'menu-sep' }),
     h('button', { type: 'button', onclick: newLibraryModal }, icon(ICONS.plus), t('libs.new')),
     h('button', { type: 'button', onclick: () => renameLibraryModal(cur) }, h('span', { class: 'menu-gap' }), t('libs.rename')),
@@ -213,8 +225,8 @@ function render() {
         menu.hidden = !open;
       },
     },
-    h('span', { class: 'lib-badge' }, [...name][0]?.toUpperCase() ?? ''),
-    h('span', { class: 'lib-name' }, name),
+    avatar(cur.kind),
+    h('span', { class: 'lib-text' }, h('span', { class: 'lib-name' }, name), name !== t(`libraryKind.${cur.kind}`) && h('span', { class: 'lib-kind' }, t(`libraryKind.${cur.kind}`))),
     icon(ICONS.chevron),
   );
   // Volba v nabídce ji zavře; kliknutí mimo zavře obecný obslužný kód knihovny.

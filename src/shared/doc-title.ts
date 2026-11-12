@@ -1,5 +1,6 @@
 import { t } from './i18n';
 import { day } from './invoices';
+import { applyTemplate } from './name-template';
 import type { DocumentCard, Job } from './types';
 
 type NamedJob = Pick<Job, 'name'>;
@@ -8,8 +9,14 @@ const SUBTITLE_MAX = 80;
 const clean = (s: string | undefined) => (s ?? '').trim();
 const fileTitle = (job: NamedJob) => job.name.replace(/_+/g, ' ').replace(/\s+/g, ' ').trim() || job.name;
 
-/** Název dokumentu pro seznamy: číslo faktury, předmět smlouvy, název z bibliografie, jinak název souboru. */
+// Šablona názvu z Nastavení (jen když je zapnutá „Přejmenovat podle šablony“); nastavuje ji okno.
+let nameTemplate: string | undefined;
+export const setNameTemplate = (template?: string) => void (nameTemplate = template);
+
+/** Název dokumentu pro seznamy: podle šablony (je-li zapnutá), jinak číslo faktury, předmět smlouvy, název z bibliografie, jinak název souboru. */
 export function docTitle(job: NamedJob, card?: DocumentCard | null): string {
+  const named = card && nameTemplate ? applyTemplate(card, nameTemplate) : '';
+  if (named) return named;
   const f = card?.facts;
   if (card?.type === 'invoice' && clean(f?.number)) return t('doc.invoice', { number: clean(f?.number) });
   if (card?.type === 'contract' && clean(f?.subject)) return clean(f?.subject);

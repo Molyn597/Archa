@@ -783,6 +783,8 @@ export async function runJob(ctx: JobContext): Promise<Measured> {
     if (job.sourceLang === 'auto') {
       detectedLanguage(job, detectLanguage(segments.map((s) => s.source).join('\n')));
     }
+    // Nahrání bez překladu: cílový jazyk = jazyk dokumentu, text se jen převezme.
+    if (job.translate === false && job.sourceLang !== 'auto') job.targetLang = job.sourceLang;
     if (job.pickParagraphs) {
       await store.saveSegments(job.id, segments);
       return { ...measured, paused: true };

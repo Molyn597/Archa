@@ -77,7 +77,7 @@ describe('převzetí dat starší verze', () => {
     const settings = await store.settings();
     expect(settings).toMatchObject({ provider: 'openrouter', targetLang: 'de', onboarded: true });
     expect(settings.citation.style).toBe('apa7');
-    expect(await json(path.join(root, 'settings.json'))).toEqual({ targetLang: 'de', citation: { enabled: true, style: 'apa7' }, autoCard: true });
+    expect(await json(path.join(root, 'settings.json'))).toEqual({ targetLang: 'de', citation: { enabled: true, style: 'apa7' }, autoCard: true, nameTemplate: DEFAULT_SETTINGS.nameTemplate });
   });
 
   it('druhé spuštění už nic nemění', async () => {
@@ -186,5 +186,18 @@ describe('naposledy otevřené', () => {
     expect(recent[0]).toBe('b');
     expect(new Set(recent).size).toBe(RECENT_MAX);
     expect(recent).not.toContain('a');
+  });
+});
+
+describe('library.json', () => {
+  it('uloží a znovu načte nápovědy (Nechat u nabídky přesunu) i vazby dokumentů', async () => {
+    const store = new Store(app);
+    await store.updateLibrary((l) => {
+      l.hints = { studyKept: true };
+      l.links = { a: ['b'] };
+    });
+    const again = await new Store(app).library();
+    expect(again.hints).toEqual({ studyKept: true });
+    expect(again.links).toEqual({ a: ['b'] });
   });
 });

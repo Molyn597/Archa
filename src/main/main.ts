@@ -1,4 +1,4 @@
-import { writeFile } from 'node:fs/promises';
+import { readdir, stat, writeFile } from 'node:fs/promises';
 import { tempCopy, wipeTempCopies } from './temp-open';
 import { lockTransitions, syncLocks } from './locks';
 import { passwordOk, WrongPasswordError } from './vault';
@@ -23,39 +23,52 @@ import { resolveLang, setLang, t, type MessageKey } from '../shared/i18n';
 import { LIBRARY_CHAT, projectChatKey, TRASH_DAYS } from '../shared/folders';
 import { languageName } from '../shared/languages';
 import { findRegion, normalizeCrop } from '../shared/regions';
-import type { ChatModel, DocumentCard, Libraries, LibraryKind, MoveOptions, DuplicateMatch, Highlight, Project, ProjectKind, Job, Library, LibraryFolder, JobOptions, Mode, OrganizePlan, OutputKind, Placement, Provider, RegionTranslation, Settings, Stage } from '../shared/types';
+import type { ChatModel, DocumentCard, Libraries, LibraryKind, MoveOptions, DuplicateMatch, Highlight, Project, ProjectKind, Job, Library, LibraryFolder, JobOptions, Mode, OrganizePlan, OutputKind, Placement, Provider, RegionTranslation, SavedSearch, Settings, Stage } from '../shared/types';
 import { isOnline } from '../shared/provider';
 import { exportTable, invoiceRows, isoDay, toCsv } from '../shared/invoices';
 import { buildXlsx } from './xlsx';
 import { buildDocx, loadFigures } from './docx';
 import { originalText } from './segments';
 import { isTranslated } from '../shared/detail-tabs';
-import { makeCard } from './make-card';
+import { makeCard, recheckRisks } from './make-card';
+import { compareDocs, summarizeChanges } from './compare';
 import { answerQuestion, applyPlan, markOpened, mergeFolders, moveDocs, moveFolder, removeFolder, shouldBeLocked, undoPlacement } from './library';
 import { organizeFolder, suggestMerges } from './organize';
 import { askDocument } from './chat';
 import { askLibrary } from './library-chat';
 import { askProject } from './project-chat';
+import { buildPractice, explainQuestion, gradePractice, practiceDue, practiceState } from './practice';
 import { buildIndex, embedder, embedModelFor, indexModel } from './embed';
 import { fileInfo } from './fileinfo';
 import { fillHashes, hashFile } from './hash';
 import { adoptFolder } from '../shared/duplicates';
 import { addSources, newProject } from '../shared/projects';
-import { usdCzk } from './fx';
+import { cnbRate, usdCzk } from './fx';
+import { fetchAres } from './ares';
+import { addFromOpenAlex, lookupForCard, searchWorks } from './openalex';
+import { isWebUrl, type OpenAlexWork } from '../shared/openalex';
+import { docLinks } from './related';
+import { normalizeIco } from '../shared/ares';
+import { setLink } from '../shared/related';
 import { clearKey, readKey, saveKey } from './keystore';
 import { listModels, status } from './lmstudio';
 import { fetchEmbedCatalog, openrouterStatus, refreshCatalog } from './provider';
 import { relayoutJob, translateRegion } from './pipeline';
 import { Queue, SUPPORTED, type QueueEvents } from './queue';
+import { FolderWatch } from './watch';
 import { alignLibraryFile, alignOpenLibrary, createLibrary, libraryRoot, loadLibraries, saveLibraries, setLibraryKind, setupLibraries } from './libraries';
 import { moveToLibrary } from './library-move';
+import { applyTemplate } from '../shared/name-template';
+import { removeRule } from '../shared/rules';
+import { addSaved, removeSaved } from '../shared/saved-search';
+import { isImportable } from '../shared/watch';
 import { checkUpdate, downloadUpdate } from './updates';
 import { Store } from './store';
 
 const isMac = process.platform === 'darwin';
 const TITLE_BAR = {
-  light: { color: '#F7F7F6', symbolColor: '#18181B' },
-  dark: { color: '#0B0B0C', symbolColor: '#EDEDEF' },
+  light: { color: '#F3F3F3', symbolColor: '#202020' },
+  dark: { color: '#202020', symbolColor: '#EEEEEE' },
 };
 const STAGE_LABEL: Record<Stage, MessageKey> = {
   prepare: 'tray.stage.prepare',
@@ -78,6 +91,7 @@ let libs: Libraries;
 let store: Store;
 let vault: VaultState;
 let queue: Queue;
+let folderWatch: FolderWatch;
 let win: BrowserWindow | undefined;
 let tray: Tray | undefined;
 let quitting = false;
@@ -136,6 +150,8 @@ function openLibrary(id: string) {
     send('library-changed');
   });
   queue = new Queue(store, queueEvents);
+  folderWatch?.stop();
+  folderWatch = new FolderWatch(store, queue);
 }
 
 /** Úklid knihovny po otevření: přerušené šifrování a úlohy, starý koš, otisky. */
@@ -146,6 +162,7 @@ async function startLibrary() {
   await queue.recover();
   await queue.purgeOld(TRASH_DAYS).catch(() => undefined);
   void refreshHashes();
+  folderWatch.apply(await store.settings());
 }
 
 /** Přepnutí knihovny: trezor předchozí se zamkne (dočasné kopie pryč), okno se načte znovu. */
@@ -239,7 +256,7 @@ function createWindow() {
     minWidth: 940,
     minHeight: 640,
     title: 'TransLatte',
-    backgroundColor: nativeTheme.shouldUseDarkColors ? '#0B0B0C' : '#F7F7F6',
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#141414' : '#E4E4E4',
     titleBarStyle: isMac ? 'hiddenInset' : 'hidden',
     ...(isMac ? {} : { titleBarOverlay: { ...TITLE_BAR[nativeTheme.shouldUseDarkColors ? 'dark' : 'light'], height: 36 } }),
     autoHideMenuBar: !isMac,
@@ -322,6 +339,7 @@ function registerIpc() {
     await store.saveSettings({ ...settings, lastUpdateCheck: (await store.settings()).lastUpdateCheck });
     applyTheme(settings.theme);
     applyLang(settings.uiLang);
+    folderWatch.apply(await store.settings());
   });
   ipcMain.handle('lm-status', async (_e, provider?: Provider) => {
     const s = await store.settings();
@@ -339,8 +357,45 @@ function registerIpc() {
     });
     return res.canceled ? [] : res.filePaths;
   });
+  ipcMain.handle('pick-folder', async () => {
+    const res = await dialog.showOpenDialog(win!, { properties: ['openDirectory'] });
+    if (res.canceled || !res.filePaths[0]) return [];
+    const root = res.filePaths[0];
+    const names = await readdir(root, { recursive: true });
+    return names.filter(isImportable).map((n) => path.join(root, n));
+  });
+  ipcMain.handle('pick-directory', async () => {
+    const res = await dialog.showOpenDialog(win!, { properties: ['openDirectory', 'createDirectory'] });
+    return res.canceled ? null : (res.filePaths[0] ?? null);
+  });
   ipcMain.handle('file-info', (_e, paths: string[]) => fileInfo(paths));
   ipcMain.handle('usd-czk', () => usdCzk(store));
+  ipcMain.handle('fx-rate', (_e, code: string, date: string) => cnbRate(store, code, date));
+  // ARES se ptá jen na klik (`refresh`); jinak se vrací uložený výsledek. Výsledek se ukládá do knihovny bez překreslení seznamů.
+  ipcMain.handle('ares-lookup', async (_e, ico: string, refresh: boolean) => {
+    const id = normalizeIco(ico);
+    if (!id) return undefined;
+    if (!refresh) return (await store.library()).ares?.[id];
+    const entry = { date: isoDay(), record: await fetchAres(id) };
+    await store.updateLibrary((library) => void ((library.ares ??= {})[id] = entry));
+    return entry;
+  });
+  // OpenAlex se ptá jen na klik uživatele; odchází hledaný text, DOI nebo název.
+  ipcMain.handle('openalex-search', (_e, q: string) => searchWorks(String(q ?? '')));
+  ipcMain.handle('openalex-add', (_e, work: OpenAlexWork, projectId?: string) => addFromOpenAlex(store, queue, work, projectId));
+  ipcMain.handle('openalex-lookup', async (_e, id: string) => {
+    const card = await store.card(id);
+    return card ? lookupForCard(card.biblio) : undefined;
+  });
+  ipcMain.handle('open-web', async (_e, url: string) => {
+    if (isWebUrl(url)) await shell.openExternal(url);
+  });
+  ipcMain.handle('doc-links', (_e, id: string) => docLinks(store, id));
+  ipcMain.handle('job-link', (_e, id: string, other: string, linked: boolean) => store.updateLibrary((library) => setLink(library, id, other, linked)));
+  ipcMain.handle('job-file-size', async (_e, id: string) => {
+    const job = await store.job(id);
+    return job ? (await stat(path.join(store.jobDir(id), `input${job.ext}`)).catch(() => undefined))?.size : undefined;
+  });
   ipcMain.handle('app-version', () => app.getVersion());
   ipcMain.handle('update-check', (_e, auto?: boolean) => checkUpdate(store, Boolean(auto)));
   ipcMain.handle('update-download', () => downloadUpdate((received, total) => send('update-progress', { received, total })));
@@ -406,6 +461,11 @@ function registerIpc() {
     );
   });
   ipcMain.handle('project-delete', (_e, id: string) => store.deleteProject(id));
+  ipcMain.handle('practice-set', (_e, scope: string) => practiceState(store, scope));
+  ipcMain.handle('practice-build', (_e, scope: string) => queue.exclusive(async () => buildPractice(store, await store.settings(), scope)));
+  ipcMain.handle('practice-grade', (_e, scope: string, itemId: string, known: boolean) => gradePractice(store, scope, itemId, known));
+  ipcMain.handle('practice-explain', (_e, scope: string, id: string, chosen: number) => queue.exclusive(async () => explainQuestion(store, await store.settings(), scope, id, chosen)));
+  ipcMain.handle('practice-due', () => practiceDue(store));
   ipcMain.handle('project-add', async (_e, id: string, jobIds: string[]) => {
     const project = await store.project(id);
     if (!project) throw new Error(t('project.missing'));
@@ -447,6 +507,7 @@ function registerIpc() {
   });
   ipcMain.handle('job-cancel', (_e, id: string) => queue.cancel(id));
   ipcMain.handle('job-retry', (_e, id: string, mode: Mode, targetLang?: string) => queue.retry(id, mode, targetLang));
+  ipcMain.handle('job-translate', (_e, id: string, mode: Mode, targetLang: string) => queue.translate(id, mode, targetLang));
   ipcMain.handle('job-relayout', async (_e, id: string) => {
     if (active.has(id)) return;
     const job = await store.job(id);
@@ -490,8 +551,28 @@ function registerIpc() {
     return answer;
   });
   ipcMain.handle('job-chat-clear', (_e, id: string) => store.saveChat(id, []));
-  ipcMain.handle('library-answer', (_e, jobId: string, path: string | null) => editLibrary((library) => answerQuestion(library, jobId, path)));
-  ipcMain.handle('library-keep-literature', () => editLibrary((library) => void (library.hints = { ...library.hints, literatureKept: true })));
+  ipcMain.handle('library-answer', async (_e, jobId: string, path: string | null) => {
+    const card = await store.card(jobId);
+    return editLibrary((library) => answerQuestion(library, jobId, path, undefined, card ?? undefined));
+  });
+  ipcMain.handle('library-rule-remove', (_e, id: string) =>
+    editLibrary((library) => {
+      library.rules = removeRule(library.rules, id);
+      if (!library.rules.length) delete library.rules;
+    }),
+  );
+  ipcMain.handle('library-saved-add', (_e, search: SavedSearch) =>
+    editLibrary((library) => {
+      library.saved = addSaved(library.saved, search);
+    }),
+  );
+  ipcMain.handle('library-saved-remove', (_e, name: string) =>
+    editLibrary((library) => {
+      library.saved = removeSaved(library.saved, name);
+      if (!library.saved.length) delete library.saved;
+    }),
+  );
+  ipcMain.handle('library-keep-study', () => editLibrary((library) => void (library.hints = { ...library.hints, studyKept: true })));
   ipcMain.handle('library-undo', (_e, placement: Placement) => editLibrary((library) => undoPlacement(library, placement)));
   ipcMain.handle('library-organize', async (_e, folderId: string | null, model?: ChatModel) =>
     queue.exclusive(async () => organizeFolder(store, await store.settings(), folderId, model)),
@@ -548,6 +629,15 @@ function registerIpc() {
     send('job-update', job);
     return card;
   });
+  ipcMain.handle('job-card-risks', async (_e, id: string) => {
+    const job = await store.job(id);
+    if (!job) throw new Error(t('study.noJob'));
+    return queue.exclusive(async () => recheckRisks(store, job, await store.settings()));
+  });
+  ipcMain.handle('compare-docs', (_e, aId: string, bId: string, keepOrder?: boolean) => compareDocs(store, aId, bId, keepOrder));
+  ipcMain.handle('compare-summary', (_e, aId: string, bId: string, force?: boolean) =>
+    queue.exclusive(async () => summarizeChanges(store, await store.settings(), aId, bId, force)),
+  );
   ipcMain.handle('job-card-save', async (_e, id: string, card: DocumentCard) => {
     await store.saveCard(id, { ...card, edited: true });
     send('library-changed');
@@ -624,7 +714,10 @@ function registerIpc() {
     }),
   );
   ipcMain.handle('library-folder-delete', (_e, id: string) => editLibrary((library) => removeFolder(library, id)));
-  ipcMain.handle('library-move', (_e, jobIds: string[], folderId: string | null) => editLibrary((library) => moveDocs(library, jobIds, folderId)));
+  ipcMain.handle('library-move', async (_e, jobIds: string[], folderId: string | null) => {
+    const cards = Object.fromEntries(await Promise.all(jobIds.map(async (id) => [id, (await store.card(id)) ?? undefined] as const)));
+    return editLibrary((library) => moveDocs(library, jobIds, folderId, cards));
+  });
   ipcMain.handle('invoices-paid', (_e, ids: string[], paid: boolean) =>
     editLibrary((library) => {
       const map = (library.paid ??= {});
@@ -717,13 +810,20 @@ function registerIpc() {
     const file = job && jobFile(job);
     if (file) shell.showItemInFolder(file);
   });
+  /** Název souboru při uložení kopie: podle šablony z karty, je-li zapnutá; originál na disku se nemění. */
+  const exportName = async (id: string, fallback: string) => {
+    const settings = await store.settings();
+    const card = settings.renameByTemplate ? await store.card(id) : null;
+    const name = card && applyTemplate(card, settings.nameTemplate);
+    return name ? name + path.extname(fallback) : fallback;
+  };
   ipcMain.handle('job-save-as', async (_e, id: string) => {
     const job = await store.job(id);
     const file = job && jobFile(job);
     if (!file) return;
     const pdf = jobFile(job, 'pdf');
     const res = await dialog.showSaveDialog(win!, {
-      defaultPath: path.join(app.getPath('documents'), job.output!),
+      defaultPath: path.join(app.getPath('documents'), await exportName(id, job.output!)),
       filters: [{ name: 'Word', extensions: ['docx'] }, ...(pdf ? [{ name: 'PDF', extensions: ['pdf'] }] : [])],
     });
     if (res.canceled || !res.filePath) return;
@@ -737,9 +837,9 @@ function registerIpc() {
     if (!job?.output) return null;
     const segments = await store.segments(id);
     const rebuild = which === 'original' && isTranslated(job, segments);
-    const base = path.parse(job.output).name;
+    const named = await exportName(id, job.output);
     const res = await dialog.showSaveDialog(win!, {
-      defaultPath: path.join(app.getPath('documents'), rebuild ? `${base} (${t('detail.word.originalSuffix')}).docx` : job.output),
+      defaultPath: path.join(app.getPath('documents'), rebuild ? `${path.parse(named).name} (${t('detail.word.originalSuffix')}).docx` : named),
       filters: [{ name: 'Word', extensions: ['docx'] }],
     });
     if (res.canceled || !res.filePath) return null;

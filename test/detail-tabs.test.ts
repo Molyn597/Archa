@@ -34,21 +34,16 @@ describe('wasTranslated', () => {
 });
 
 describe('defaultView', () => {
-  it('faktura a smlouva O dokumentu i když jsou přeložené', () => {
-    expect(defaultView(true, 'invoice')).toBe('about');
-    expect(defaultView(true, 'contract')).toBe('about');
-  });
-
-  it('přeložený jiný typ Překlad, nepřeložený O dokumentu', () => {
-    expect(topTab(defaultView(true, 'article'))).toBe('translation');
-    expect(defaultView(false, 'article')).toBe('about');
+  it('přeložený dokument Srovnání, nepřeložený originál', () => {
     expect(defaultView(true)).toBe('compare');
+    expect(topTab(defaultView(true))).toBe('translation');
+    expect(defaultView(false)).toBe('original');
   });
 });
 
 describe('usableView', () => {
   it('nepřeložený dokument nemá Překlad', () => {
-    expect(usableView('compare', false, true)).toBe('about');
+    expect(usableView('compare', false, true)).toBe('original');
     expect(usableView('original', false, false)).toBe('original');
   });
 

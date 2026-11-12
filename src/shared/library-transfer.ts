@@ -1,4 +1,5 @@
 import { ancestors, childFolders, fold, folderName, isLocked, resolvePath, subtree } from './folders';
+import { isStudy } from './projects';
 import type { Library, LibraryKind, Project } from './types';
 
 /** Složka cílové knihovny pro přesunutý dokument: podle návrhu karty (cesta nebo název složky), jinak Ostatní, jinak nezařazený. Zamčené složky se nepoužijí. */
@@ -132,8 +133,36 @@ export function pruneFolders(library: Library, touched: Set<string>): string[] {
   return [...gone];
 }
 
-/** Nabídka přesunu článků a knih: 'move' do existující studijní knihovny, 'create' = nejdřív ji založit, null = nenabízet. */
-export function literatureOffer(opts: { kind: LibraryKind; kept?: boolean; count: number; hasStudy: boolean }): 'move' | 'create' | null {
-  if (opts.kept || opts.count <= 0 || (opts.kind !== 'work' && opts.kind !== 'personal')) return null;
-  return opts.hasStudy ? 'move' : 'create';
+/** Studijní obsah, který patří do Studia: článkové dokumenty a studijní projekty (se zdroji). */
+export interface StudyOffer {
+  action: 'move' | 'create';
+  /** Dokumenty k přesunu: články a knihy + zdroje přesouvaných projektů. */
+  ids: string[];
+  projectIds: string[];
+  literature: number;
+  /** Zamčené nebo zpracovávané dokumenty a projekty s nimi, které se nepřesunou. */
+  skipped: number;
+}
+
+/**
+ * Nabídka přesunu studijních věcí z pracovní, osobní nebo nepřevzaté knihovny. Projekt se přesouvá celý i se zdroji:
+ * má-li zdroj, který přesunout nejde, zůstane i s ostatními zdroji. null = není co nabídnout.
+ * `docs`: všechny dokumenty knihovny (`movable` = nezamčený a nezpracovávaný).
+ */
+export function studyOffer(opts: { kind: LibraryKind; hasStudy: boolean; docs: { id: string; literature: boolean; movable: boolean }[]; projects: Project[] }): StudyOffer | null {
+  if (opts.kind === 'study') return null;
+  const byId = new Map(opts.docs.map((d) => [d.id, d]));
+  const books = opts.docs.filter((d) => d.literature && d.movable);
+  const projects = opts.projects.filter((p) => isStudy(p.kind));
+  const blocked = projects.filter((p) => p.sources.some((id) => byId.has(id) && !byId.get(id)!.movable));
+  const moving = projects.filter((p) => !blocked.includes(p));
+  const ids = new Set([...books.map((d) => d.id), ...moving.flatMap((p) => p.sources.filter((id) => byId.has(id)))]);
+  if (!ids.size && !moving.length) return null;
+  return {
+    action: opts.hasStudy ? 'move' : 'create',
+    ids: [...ids],
+    projectIds: moving.map((p) => p.id),
+    literature: books.length,
+    skipped: opts.docs.filter((d) => d.literature && !d.movable).length + blocked.length,
+  };
 }

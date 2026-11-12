@@ -4,25 +4,29 @@ import { isLiterature, navFor } from '../src/shared/nav';
 const ids = (kind: Parameters<typeof navFor>[0]) => navFor(kind).map((e) => e.id);
 
 describe('navFor', () => {
-  it('Přehled a Dokumenty jsou v každé knihovně první', () => {
-    for (const kind of ['work', 'study', 'personal', 'general'] as const) expect(ids(kind).slice(0, 2)).toEqual(['overview', 'history']);
-  });
-
-  it('práce má faktury, termíny a projekty', () => {
-    expect(ids('work')).toEqual(['overview', 'history', 'invoices', 'deadlines', 'projects']);
-    expect(navFor('work').at(-1)?.label).toBe('nav.projects');
-  });
-
-  it('osobní a obecná mají faktury, termíny a projekty', () => {
-    for (const kind of ['personal', 'general'] as const) {
-      expect(ids(kind)).toEqual(['overview', 'history', 'invoices', 'deadlines', 'projects']);
-      expect(navFor(kind).at(-1)?.label).toBe('nav.projects');
+  it('Přehled a Nahrát jsou v každé knihovně první, Dokumenty v menu nejsou', () => {
+    for (const kind of ['work', 'study', 'personal', 'general'] as const) {
+      expect(ids(kind).slice(0, 2)).toEqual(['overview', 'upload']);
+      expect(ids(kind)).not.toContain('history');
     }
   });
 
-  it('studium má literaturu a práce, bez faktur a termínů', () => {
-    expect(ids('study')).toEqual(['overview', 'history', 'projects']);
-    expect(navFor('study').at(-1)?.label).toBe('nav.works');
+  it('práce má faktury, termíny a zakázky', () => {
+    expect(ids('work')).toEqual(['overview', 'upload', 'invoices', 'deadlines', 'projects']);
+    expect(navFor('work').at(-1)?.label).toBe('nav.jobs');
+  });
+
+  it('nepřevzatý typ se chová jako práce', () => {
+    expect(navFor('general')).toEqual(navFor('work'));
+  });
+
+  it('studium má moje práce a termíny, bez faktur', () => {
+    expect(ids('study')).toEqual(['overview', 'upload', 'projects', 'deadlines']);
+    expect(navFor('study').find((e) => e.id === 'projects')?.label).toBe('nav.myWork');
+  });
+
+  it('osobní má jen termíny', () => {
+    expect(ids('personal')).toEqual(['overview', 'upload', 'deadlines']);
   });
 });
 

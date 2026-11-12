@@ -1,19 +1,26 @@
-/* Grafit: tmavé i světlé téma s jedinou akcentovou barvou (jantar), panely oddělené linkou. */
+/* Sklo: monochromní motiv s poloprůhlednými panely na jemném přechodu; akcent je černá / bílá, stavy mají barvu. */
 :root {
-  --bg: #f7f7f6;
-  --side: #f7f7f6;
-  --main: #ffffff;
-  --panel: #ffffff;
-  --raised: #f0f0ee;
-  --canvas: #ededeb;
-  --line: #e3e3e0;
-  --text: #18181b;
-  --muted: #66666d;
-  --dash: #c9c9c4;
-  --accent: #f2a31e;
-  --on-accent: #1a1100;
-  --accent-soft: rgb(242 163 30 / 18%);
-  --link: #935700;
+  --bg: #e4e4e4;
+  --bg-image: linear-gradient(180deg, #f3f3f3 0%, #d9d9d9 100%);
+  --side: rgb(255 255 255 / 30%);
+  --main: #f4f4f4;
+  --panel: #f6f6f6;
+  --pop: #f6f6f6;
+  --surface: rgb(255 255 255 / 55%);
+  --sunken: rgb(255 255 255 / 45%);
+  --hover: rgb(255 255 255 / 65%);
+  --raised: rgb(255 255 255 / 65%);
+  --canvas: #ececec;
+  --line: rgb(0 0 0 / 9%);
+  --line-strong: #c8c8c8;
+  --text: #202020;
+  --muted: #646464;
+  --faint: #8d8d8d;
+  --dash: #c8c8c8;
+  --accent: #202020;
+  --on-accent: #ffffff;
+  --accent-soft: rgb(0 0 0 / 7%);
+  --link: #202020;
   --glass: rgb(255 255 255 / 80%);
   --ok: #1e9e5a;
   --ok-soft: rgb(30 158 90 / 10%);
@@ -21,32 +28,46 @@
   --danger: #c93a30;
   --danger-soft: rgb(201 58 48 / 10%);
   --danger-text: #a82e25;
-  --warning-soft: rgb(242 163 30 / 14%);
+  --warning-soft: rgb(217 119 6 / 14%);
   --warning-text: #935700;
+  --lib-work: #3e63dd;
+  --lib-study: #e2620c;
+  --lib-personal: #12a594;
   --paper-filter: none;
+  --card-shadow: inset 0 1px 0 rgb(255 255 255 / 85%), 0 8px 24px rgb(0 0 0 / 6%);
   --shadow: 0 8px 24px rgb(0 0 0 / 12%);
   --seg-shadow: 0 1px 2px rgb(0 0 0 / 15%);
-  /* Horní pruh okna: semafory macOS, překryv tlačítek ve Windows, tlačítka panelů. */
+  --r-m: 14px;
+  --r-l: 20px;
+  /* Horní pruh okna: semafory macOS, překryv tlačítek ve Windows, horní lišta. */
   --titlebar: 36px;
-  font-family: Inter, system-ui, -apple-system, sans-serif;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
   color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0b0b0c;
-    --side: #0b0b0c;
-    --main: #121214;
-    --panel: #161619;
-    --raised: #1e1e22;
-    --canvas: #0e0e10;
-    --line: #26262b;
-    --text: #ededef;
-    --muted: #8e8e96;
-    --dash: #3a3a40;
-    --accent: #f5a524;
-    --accent-soft: rgb(245 165 36 / 16%);
-    --link: #f5b44a;
+    --bg: #141414;
+    --bg-image: linear-gradient(180deg, #202020 0%, #0e0e0e 100%);
+    --side: rgb(255 255 255 / 3%);
+    --main: #191919;
+    --panel: #1f1f1f;
+    --pop: #1f1f1f;
+    --surface: rgb(255 255 255 / 6%);
+    --sunken: rgb(255 255 255 / 5%);
+    --hover: rgb(255 255 255 / 9%);
+    --raised: rgb(255 255 255 / 9%);
+    --canvas: #0f0f0f;
+    --line: rgb(255 255 255 / 9%);
+    --line-strong: rgb(255 255 255 / 18%);
+    --text: #eeeeee;
+    --muted: #b4b4b4;
+    --faint: #7b7b7b;
+    --dash: rgb(255 255 255 / 18%);
+    --accent: #eeeeee;
+    --on-accent: #111111;
+    --accent-soft: rgb(255 255 255 / 10%);
+    --link: #eeeeee;
     --glass: rgb(30 30 34 / 72%);
     --ok: #3fb97a;
     --ok-soft: rgb(63 185 122 / 14%);
@@ -57,6 +78,7 @@
     --warning-soft: rgb(245 165 36 / 12%);
     --warning-text: #f5b44a;
     --paper-filter: brightness(0.9);
+    --card-shadow: inset 0 1px 0 rgb(255 255 255 / 6%);
     --shadow: 0 8px 24px rgb(0 0 0 / 45%);
     --seg-shadow: 0 1px 2px rgb(0 0 0 / 18%);
     color-scheme: dark;
@@ -71,7 +93,7 @@ body {
   margin: 0;
   height: 100vh;
   overflow: hidden;
-  background: var(--bg);
+  background: var(--bg) var(--bg-image) fixed;
   color: var(--text);
   font-size: 14px;
   -webkit-font-smoothing: antialiased;
@@ -146,6 +168,14 @@ h1 {
   display: flex;
 }
 
+/* Pravá část okna: horní lišta nad posuvným obsahem. */
+.stage {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 body::before {
   content: '';
   position: fixed;
@@ -194,19 +224,6 @@ body::before {
   left: 84px;
 }
 
-.bar-right {
-  right: 16px;
-}
-
-/* Na Windows je vpravo nahoře překryv s tlačítky okna (~140 px). */
-.platform-win32 .bar-right {
-  right: 150px;
-}
-
-.platform-darwin .bar-right {
-  top: 8px;
-}
-
 /* ---------- Levý panel ---------- */
 
 .sidebar {
@@ -220,25 +237,8 @@ body::before {
   padding: calc(var(--titlebar) + 8px) 12px 12px;
   background: var(--side);
   border-right: 1px solid var(--line);
-}
-
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 4px 6px 14px;
-}
-
-.brand-mark {
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-}
-
-.brand-name {
-  flex: 1;
-  font-weight: 600;
-  font-size: 15px;
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
 }
 
 .nav-panel {
@@ -268,7 +268,7 @@ body::before {
   flex: none;
 }
 
-/* Šipka u Knihovny: strom složek je rozbalený jen v Knihovně a v detailu dokumentu. */
+/* Šipka u Projektů: jejich strom je rozbalený jen v Projektech. */
 .nav-item .nav-chevron {
   width: 12px;
   height: 12px;
@@ -277,8 +277,6 @@ body::before {
   transition: transform 0.12s;
 }
 
-body[data-view='history']:not(.in-project) .nav-item[data-nav='history'] .nav-chevron,
-body[data-view='detail'] .nav-item[data-nav='history'] .nav-chevron,
 body[data-view='projects'] .nav-item[data-nav='projects'] .nav-chevron,
 body.in-project .nav-item[data-nav='projects'] .nav-chevron {
   transform: none;
@@ -296,7 +294,8 @@ body.in-project .nav-item[data-nav='projects'] .nav-chevron {
 }
 
 .nav-item.active {
-  background: var(--raised);
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--line), var(--card-shadow);
   color: var(--text);
   font-weight: 600;
 }
@@ -466,12 +465,6 @@ body.in-project .nav-item[data-nav='projects'] .nav-chevron {
   padding-inline: 8px;
 }
 
-.nav-collapsed .brand {
-  justify-content: center;
-  padding: 4px 0 14px;
-}
-
-.nav-collapsed .brand-name,
 .nav-collapsed .status-text,
 .nav-collapsed .nav-item > span:not(.nav-badge),
 .nav-collapsed .nav-item .nav-chevron {
@@ -505,10 +498,8 @@ body.in-project .nav-item[data-nav='projects'] .nav-chevron {
 .main {
   flex: 1;
   min-width: 0;
-  margin-top: var(--titlebar);
+  min-height: 0;
   overflow: auto;
-  background: var(--main);
-  border-top: 1px solid var(--line);
 }
 
 .view {
@@ -538,17 +529,24 @@ body.in-project .nav-item[data-nav='projects'] .nav-chevron {
   gap: 16px;
   margin: 0 -28px;
   padding: 0 28px;
-  background: var(--main);
+  background: color-mix(in srgb, var(--bg) 60%, transparent);
   border-bottom: 1px solid var(--line);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+}
+
+/* Nadpis stránky je v horní liště; hlavička pohledu nese jen ovládací prvky (bez nich se skryje). */
+.view > .view-head > h1 {
+  display: none;
+}
+
+.view > .view-head:not(:has(> :not(h1))) {
+  display: none;
 }
 
 .view-intro {
   margin: 0;
   line-height: 1.55;
-}
-
-.update-bar {
-  margin: 16px 28px 0;
 }
 
 .update-card {
@@ -603,8 +601,8 @@ body.in-project .nav-item[data-nav='projects'] .nav-chevron {
   gap: 8px;
   height: 34px;
   padding: 0 14px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
   background: transparent;
   color: var(--text);
   font-weight: 500;
@@ -754,6 +752,7 @@ input[type='checkbox'] {
   width: 260px;
   height: 34px;
   margin-left: auto;
+  border-radius: 999px;
 }
 
 /* ---------- Přeložit ---------- */
@@ -1331,6 +1330,19 @@ input[type='checkbox'] {
   color: var(--warning-text);
 }
 
+.card-cite-copy {
+  margin-top: 6px;
+}
+
+/* Citace je dlouhá: pod popiskem na celou šířku. */
+.detail-info .card-row.cite-row {
+  grid-template-columns: 1fr;
+}
+
+.chip.cite-gap {
+  margin-left: 6px;
+}
+
 .chip.err {
   background: var(--danger-soft);
   color: var(--danger-text);
@@ -1645,6 +1657,182 @@ input[type='checkbox'] {
   padding-bottom: 24px;
 }
 
+/* Dokument vlevo, informační sloupec vpravo; pod 860 px je sloupec pod dokumentem. */
+.detail-cols {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.detail-doc {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.detail-info {
+  flex: none;
+  width: clamp(300px, 32%, 380px);
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--line);
+}
+
+.info-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+  background: var(--canvas);
+}
+
+.detail-info .info-view {
+  max-width: none;
+  margin: 0;
+}
+
+.detail-info .card-row {
+  grid-template-columns: 112px 1fr;
+}
+
+.detail-info .tabs-row {
+  padding: 0 12px;
+}
+
+#info-tabs .tab {
+  padding: 0 9px;
+}
+
+.tab .tab-count {
+  margin-left: 5px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+@media (max-width: 860px) {
+  .detail-cols {
+    flex-direction: column;
+    overflow: auto;
+  }
+
+  .detail-doc {
+    flex: none;
+    height: max(70vh, 420px);
+  }
+
+  .detail-info {
+    flex: none;
+    width: auto;
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+
+  .info-scroll {
+    overflow: visible;
+  }
+}
+
+/* Řádky ARES a ČNB v Přehledu. */
+.check-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  margin-top: 4px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.check-row .check-text {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+
+.check-row.ok .check-text {
+  color: var(--ok-text);
+}
+
+.check-row.warn .check-text {
+  color: var(--warning-text);
+}
+
+.check-row.err .check-text {
+  color: var(--danger-text);
+}
+
+.check-row .muted {
+  font-size: 12px;
+}
+
+.dl-mini {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dl-mini > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dl-mini .overdue {
+  color: var(--danger-text);
+}
+
+/* Související dokumenty a projekty v Souvislostech. */
+.rel-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+
+.rel-item:first-of-type {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.rel-title {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.rel-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.rel-actions .btn,
+.file-actions .btn {
+  height: 28px;
+  padding: 0 10px;
+  font-size: 12.5px;
+}
+
+.file-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.card-row .link {
+  white-space: normal;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
 .compare {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1796,6 +1984,85 @@ input[type='checkbox'] {
 .card-actions {
   display: flex;
   gap: 8px;
+}
+
+/* Rizika smlouvy v Přehledu. */
+.risk {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+  line-height: 1.45;
+}
+
+.risk-icon {
+  flex: none;
+  margin-top: 1px;
+  color: var(--muted);
+}
+
+.risk-icon svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.risk.high .risk-icon {
+  color: var(--danger-text);
+}
+
+.risk.medium .risk-icon {
+  color: var(--warning-text);
+}
+
+.risk-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.risk-quote {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12.5px;
+  font-style: italic;
+  text-align: left;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.risk-quote:hover {
+  color: var(--text);
+  text-decoration: underline;
+}
+
+.risk-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.risks h2 + .risk-foot {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.risk-pill {
+  border: 0;
+  cursor: pointer;
 }
 
 .card-summary {
@@ -3267,14 +3534,19 @@ input[type='checkbox'] {
   gap: 20px;
 }
 
-/* Strom složek v levém panelu pod Knihovnou jako podpoložky; posouvá se celý sám. */
+/* Strom složek v levém panelu pod menu; posouvá se celý sám. */
 .library-folders {
   flex: 0 1 auto;
   min-height: 0;
   overflow-y: auto;
-  display: none;
+  display: flex;
   flex-direction: column;
-  padding: 2px 0 6px 14px;
+  padding: 2px 0 6px;
+}
+
+/* Mimo seznam dokumentů žádná složka nesvítí. */
+body:not([data-view='history'], [data-view='detail']) .library-folders .folder-item.active {
+  background: none;
 }
 
 /* Posuvník stromu jen při najetí myší; scrollovat jde i bez něj. */
@@ -3287,29 +3559,10 @@ input[type='checkbox'] {
   scrollbar-width: thin;
 }
 
-body[data-view='history'] .library-folders,
-body[data-view='detail'] .library-folders {
-  display: flex;
-}
-
-/* V liště se strom ukáže jen jako plovoucí panel u levého okraje (body.… přebije pravidlo podle view výše). */
-body.nav-collapsed .library-folders {
+/* V liště složky nejsou, jen ikony menu. */
+body.nav-collapsed .library-folders,
+body.nav-collapsed .folders-heading {
   display: none;
-}
-
-.nav-collapsed.tree-pop .library-folders {
-  display: flex;
-  position: fixed;
-  top: calc(var(--titlebar) + 96px);
-  left: 62px;
-  z-index: 40;
-  width: 260px;
-  max-height: calc(100vh - var(--titlebar) - 112px);
-  padding: 8px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--panel);
-  box-shadow: var(--shadow);
 }
 
 .folder-tree {
@@ -4400,12 +4653,7 @@ body.in-project #project-folders {
   display: flex;
 }
 
-body.nav-collapsed #project-folders,
-body.in-project[data-view='history'] #library-folders {
-  display: none;
-}
-
-.nav-collapsed.tree-pop #project-folders {
+body.nav-collapsed #project-folders {
   display: none;
 }
 
@@ -4420,72 +4668,114 @@ body.in-project[data-view='history'] #library-folders {
 }
 
 .lib-switch {
-  margin: -6px 0 10px;
+  margin: 0 0 14px;
 }
 
+/* Karta knihovny nahoře v panelu: barevná ikona typu, název, druh a šipka k nabídce přepnutí. */
 .lib-switch-btn {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   width: 100%;
-  height: 34px;
-  padding: 0 10px;
+  padding: 7px 8px;
   border: 1px solid var(--line);
-  border-radius: 9px;
-  background: var(--panel);
-  font-size: 13px;
+  border-radius: var(--r-m);
+  background: var(--surface);
+  box-shadow: var(--card-shadow);
   text-align: left;
 }
 
 .lib-switch-btn:hover {
-  background: var(--raised);
+  background: var(--hover);
 }
 
 .lib-switch-btn > svg {
   flex: none;
-  width: 14px;
-  height: 14px;
-  color: var(--muted);
+  width: 16px;
+  height: 16px;
+  margin-left: auto;
+  color: var(--faint);
+}
+
+.lib-avatar {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+}
+
+.lib-avatar.work {
+  background: var(--lib-work);
+}
+
+.lib-avatar.study {
+  background: var(--lib-study);
+}
+
+.lib-avatar.personal {
+  background: var(--lib-personal);
+}
+
+.lib-avatar svg {
+  width: 17px;
+  height: 17px;
+}
+
+.lib-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
 }
 
 .lib-name {
-  flex: 1;
-  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 13.5px;
   font-weight: 600;
+  line-height: 1.2;
 }
 
-.lib-badge {
-  display: none;
+.lib-kind {
+  color: var(--muted);
+  font-size: 11.5px;
 }
 
 .lib-switch .menu {
   left: 0;
-  right: auto;
-  min-width: 220px;
+  right: 0;
+  min-width: 0;
 }
 
-/* V liště je z přepínače jen kulatý odznak s prvním písmenem. */
+.menu .lib-avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+}
+
+.menu .lib-avatar svg {
+  width: 13px;
+  height: 13px;
+  color: #fff;
+}
+
+/* V liště je z karty jen ikona typu. */
 .nav-collapsed .lib-switch-btn {
-  width: 36px;
-  height: 36px;
+  width: 40px;
   margin-inline: auto;
-  padding: 0;
+  padding: 4px;
   justify-content: center;
-  border-radius: 50%;
 }
 
-.nav-collapsed .lib-name,
+.nav-collapsed .lib-text,
 .nav-collapsed .lib-switch-btn > svg {
   display: none;
-}
-
-.nav-collapsed .lib-badge {
-  display: grid;
-  place-items: center;
-  font-weight: 600;
 }
 
 .menu-gap {
@@ -4503,10 +4793,6 @@ body.in-project[data-view='history'] #library-folders {
 
 .view.overview {
   position: relative;
-}
-
-.overview #overview-add {
-  margin-left: auto;
 }
 
 .ov-ask {
@@ -5121,7 +5407,7 @@ body.in-project[data-view='history'] #library-folders {
   color: var(--danger-text);
 }
 
-/* ---------- Nástroje v menu, sbalení stromu, údržba knihovny ---------- */
+/* ---------- Nadpisy v menu, sbalení stromu, údržba knihovny ---------- */
 
 .nav-section {
   margin: 14px 0 4px;
@@ -5131,12 +5417,6 @@ body.in-project[data-view='history'] #library-folders {
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-}
-
-.nav-tools {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
 }
 
 /* V liště je oddělovač jen čára. */
@@ -5149,13 +5429,11 @@ body.in-project[data-view='history'] #library-folders {
   font-size: 0;
 }
 
-/* Druhý klik na Dokumenty / Projekty sbalí strom (mimo lištu, kde se strom vysouvá). */
-body.tree-closed:not(.nav-collapsed) .library-folders,
+/* Druhý klik na Projekty sbalí jejich strom. */
 body.tree-closed:not(.nav-collapsed) #project-folders {
   display: none;
 }
 
-body[data-view].tree-closed:not(.nav-collapsed) .nav-item[data-nav='history'] .nav-chevron,
 body[data-view].tree-closed:not(.nav-collapsed) .nav-item[data-nav='projects'] .nav-chevron {
   transform: rotate(-90deg);
 }
@@ -5192,4 +5470,1731 @@ body[data-view].tree-closed:not(.nav-collapsed) .nav-item[data-nav='projects'] .
 
 .menu button:disabled {
   opacity: 0.5;
+}
+
+/* ---------- Sklo: karty, horní lišta, paleta, řádek aktualizace ---------- */
+
+.form-card,
+.job-card,
+.recent-row,
+.job-list,
+.pending-row,
+.ov-ask-box,
+.ov-stat,
+.ov-card,
+.ov-welcome,
+.project-card {
+  background: var(--surface);
+  box-shadow: var(--card-shadow);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+}
+
+/* Horní lišta nad obsahem: výška jako pruh okna (semafory macOS, překryv Windows), tažením se hýbe oknem. */
+.topbar {
+  flex: none;
+  height: var(--titlebar);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px 0 20px;
+  -webkit-app-region: drag;
+}
+
+.topbar button {
+  -webkit-app-region: no-drag;
+}
+
+/* Sbalený panel: tlačítko panelu na macOS leží za semafory a zasahuje do lišty. */
+.nav-collapsed.platform-darwin .topbar {
+  padding-left: 70px;
+}
+
+/* Na Windows je vpravo nahoře překryv s tlačítky okna (~140 px). */
+.platform-win32 .topbar {
+  padding-right: 150px;
+}
+
+.topbar-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.topbar .icon-btn {
+  width: 28px;
+  height: 28px;
+}
+
+.topbar .icon-btn.active {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.search-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: min(280px, 28vw);
+  height: 28px;
+  padding: 0 6px 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--sunken);
+  color: var(--faint);
+  font-size: 13px;
+  text-align: left;
+}
+
+.search-pill:hover {
+  background: var(--hover);
+}
+
+.search-pill svg {
+  flex: none;
+  width: 15px;
+  height: 15px;
+}
+
+.search-pill span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+kbd {
+  padding: 0 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+}
+
+.topbar .btn.primary {
+  height: 28px;
+  padding: 0 12px;
+}
+
+/* Paleta ⌘K: pole, dokumenty a příkazy; šipky mění výběr, Enter ho provede. */
+.palette-input {
+  width: 100%;
+  height: 38px;
+  padding: 0 14px;
+  border-radius: 999px;
+}
+
+.palette-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 340px;
+  margin-top: 10px;
+  overflow-y: auto;
+}
+
+.palette-label {
+  padding: 8px 10px 4px;
+  color: var(--faint);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.palette-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 9px;
+  background: none;
+  text-align: left;
+}
+
+.palette-item svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--muted);
+}
+
+.palette-item.selected {
+  background: var(--hover);
+}
+
+.palette-item span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Kompaktní jednořádková aktualizace nad řádkem stavu. */
+.upd-one {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+  padding: 6px 6px 6px 10px;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.upd-one > svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+
+.upd-one .grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.upd-one .link {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.upd-one .icon-btn {
+  width: 22px;
+  height: 22px;
+}
+
+.upd-one .icon-btn svg {
+  width: 13px;
+  height: 13px;
+}
+
+.nav-collapsed .upd-one {
+  display: none;
+}
+
+/* ---- fáze 2 ---- */
+
+#upload-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.view.upload .view-head .spacer {
+  flex: 1;
+}
+
+.up-drop.compact .drop-icon {
+  margin: 0;
+}
+
+.up-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.up-head .section-title {
+  margin: 0;
+}
+
+.up-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.up-card,
+.up-list,
+.up-recent {
+  background: var(--surface);
+  box-shadow: var(--card-shadow);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+}
+
+.up-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+
+.up-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.up-ico {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--raised);
+}
+
+.up-ico svg {
+  width: 17px;
+  height: 17px;
+}
+
+.up-mid {
+  flex: 1;
+  min-width: 0;
+}
+
+.up-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.up-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.up-meta.err {
+  color: var(--danger-text);
+}
+
+.up-save {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--sunken);
+}
+
+.up-save.ok {
+  color: var(--ok-text);
+}
+
+.up-sg {
+  flex: 1;
+  min-width: 200px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.up-save > svg,
+.up-sg svg {
+  flex: none;
+  width: 15px;
+  height: 15px;
+}
+
+.up-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.btn.sm {
+  height: 28px;
+  padding: 0 11px;
+  font-size: 12.5px;
+}
+
+.btn.sm svg {
+  width: 14px;
+  height: 14px;
+}
+
+.up-did {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ok-text);
+  font-size: 12.5px;
+}
+
+.up-did svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+
+.up-list {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+
+.up-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) minmax(0, 1.1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px 8px 14px;
+}
+
+.up-row + .up-row {
+  border-top: 1px solid var(--line);
+}
+
+.up-row .up-sg {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.up-row .up-sg b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.up-row-did {
+  grid-column: 2 / -1;
+}
+
+.up-foot {
+  margin: 0 4px;
+}
+
+.up-recent {
+  padding: 16px;
+}
+
+.up-recent h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.up-recent h2 svg {
+  width: 16px;
+  height: 16px;
+}
+
+.up-recent h2 .ov-link {
+  margin-left: auto;
+}
+
+.up-folders {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+.up-folder {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  text-align: left;
+}
+
+.up-folder:hover {
+  background: var(--raised);
+}
+
+.up-folder svg {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  color: var(--muted);
+}
+
+.up-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+/* ---- fáze 3 ---- */
+
+:root {
+  --fin-inc: #3e63dd;
+  --fin-exp: #d97a1f;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fin-inc: #5b78e8;
+    --fin-exp: #c96d1a;
+  }
+}
+
+.fin-b-inc,
+.fin-b-exp {
+  stroke: none;
+}
+
+.ov-hello {
+  margin: 12px 0 14px;
+  font-size: 22px;
+  letter-spacing: -0.01em;
+}
+
+.ov-hello[hidden] {
+  display: none;
+}
+
+.ov-hello strong {
+  font-weight: 600;
+}
+
+.ov-attn-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 14px;
+}
+
+.ov-attn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+  padding: 16px 18px;
+  border-radius: var(--r-m);
+}
+
+.ov-attn.danger {
+  background: var(--danger-soft);
+  color: var(--danger-text);
+}
+
+.ov-attn.warn {
+  background: var(--warning-soft);
+  color: var(--warning-text);
+}
+
+.ov-attn.acc {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.ov-attn-lab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ov-attn-lab svg {
+  width: 16px;
+  height: 16px;
+}
+
+.ov-attn-big {
+  margin-top: 4px;
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+
+.ov-attn-meta {
+  font-size: 12.5px;
+  opacity: 0.85;
+}
+
+.ov-attn .btn {
+  margin-top: 10px;
+  color: var(--text);
+}
+
+.ov-calm {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: var(--r-m);
+  background: var(--ok-soft);
+}
+
+.ov-calm svg {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  color: var(--ok);
+}
+
+.ov-sect {
+  margin: 4px 0 -8px 4px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ov-work-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 14px;
+}
+
+.ov-work {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-m);
+  background: var(--surface);
+  box-shadow: var(--card-shadow);
+}
+
+.ov-work-top {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ov-work strong {
+  font-size: 16px;
+}
+
+.ov-work .btn {
+  margin-top: 4px;
+}
+
+.ov-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.ov-cols.one {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* Malá karta Finance v Přehledu. */
+.fin-mini {
+  cursor: pointer;
+}
+
+.fin-mini:hover {
+  border-color: var(--line-strong);
+}
+
+.fin-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  color: var(--text);
+}
+
+.fin-mini h2 {
+  display: flex;
+  align-items: center;
+}
+
+.fin-open svg {
+  width: 13px;
+  height: 13px;
+}
+
+.fin-mini-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 16px;
+}
+
+.fin-mini-nums {
+  display: flex;
+  flex: 1;
+  gap: 22px;
+  min-width: 200px;
+}
+
+.fin-mini-row > svg {
+  flex: none;
+  width: 200px;
+  height: 64px;
+}
+
+.fin-l {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.fin-v {
+  margin-top: 3px;
+  font-size: 20px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.fin-sw-inc,
+.fin-sw-exp {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+}
+
+.fin-sw-inc,
+.fin-b-inc {
+  background: var(--fin-inc);
+  fill: var(--fin-inc);
+}
+
+.fin-sw-exp,
+.fin-b-exp {
+  background: var(--fin-exp);
+  fill: var(--fin-exp);
+}
+
+/* Stránka Finance. */
+.fin-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 1240px;
+}
+
+.fin-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.fin-head p {
+  margin: 0;
+}
+
+.fin-acts {
+  display: flex;
+  gap: 8px;
+}
+
+.fin-sums {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.fin-sum {
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-m);
+  background: var(--surface);
+  box-shadow: var(--card-shadow);
+}
+
+.fin-sum-v {
+  margin-top: 4px;
+  font-size: 22px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.fin-sum.ok .fin-sum-v {
+  color: var(--ok-text);
+}
+
+.fin-sum.bad .fin-sum-v {
+  color: var(--danger-text);
+}
+
+.fin-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 16px;
+}
+
+.fin-layout.with-panel {
+  grid-template-columns: minmax(0, 1fr) 300px;
+}
+
+@media (max-width: 1000px) {
+  .fin-layout.with-panel {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.fin-main {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.fin-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: 16px;
+}
+
+@media (max-width: 1100px) {
+  .fin-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.fin-panel {
+  position: sticky;
+  top: 0;
+}
+
+.fin-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.fin-pl {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.fin-pl span:last-child {
+  text-align: right;
+}
+
+.fin-summary {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.fin-tl,
+.fin-chart {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.fin-tl text {
+  fill: var(--muted);
+  font-size: 14px;
+}
+
+.fin-chart text {
+  fill: var(--muted);
+  font-size: 12px;
+}
+
+.fin-tl text,
+.fin-chart text,
+.fin-mhit {
+  stroke: none;
+}
+
+.fin-page {
+  padding-top: 12px;
+}
+
+.fin-tl text.on,
+.fin-chart text.on {
+  fill: var(--text);
+  font-weight: 600;
+}
+
+.fin-tl .fin-lane {
+  fill: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.fin-mline,
+.fin-grid-line,
+.fin-chart .fin-grid {
+  stroke: var(--line);
+}
+
+.fin-base {
+  stroke: var(--line-strong);
+  stroke-dasharray: 2 4;
+}
+
+.fin-today {
+  stroke: var(--text);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+}
+
+.fin-tl .fin-tlab {
+  fill: var(--text);
+  font-weight: 600;
+}
+
+.fin-it,
+.fin-month {
+  cursor: pointer;
+  outline: none;
+}
+
+.fin-hit {
+  fill: transparent;
+  stroke: none;
+}
+
+.fin-c-inc {
+  fill: var(--fin-inc);
+}
+
+.fin-c-exp {
+  fill: var(--fin-exp);
+}
+
+.fin-c-inc,
+.fin-c-exp,
+.fin-k {
+  stroke: var(--main);
+  stroke-width: 2;
+}
+
+.fin-u-inc,
+.fin-u-exp,
+.fin-ko {
+  fill: transparent;
+  stroke-width: 2.5;
+}
+
+.fin-u-inc {
+  stroke: var(--fin-inc);
+}
+
+.fin-u-exp {
+  stroke: var(--fin-exp);
+}
+
+.fin-k {
+  fill: var(--muted);
+}
+
+.fin-k.fin-ko {
+  stroke: var(--muted);
+}
+
+.fin-it.dim {
+  opacity: 0.18;
+}
+
+.fin-it.sel .fin-vis,
+.fin-it:focus-visible .fin-vis {
+  stroke: var(--text);
+  stroke-width: 3;
+}
+
+.fin-mhit {
+  fill: transparent;
+  stroke: none;
+}
+
+.fin-mhit.on,
+.fin-month:hover .fin-mhit {
+  fill: var(--accent-soft);
+}
+
+.fin-legend {
+  display: flex;
+  gap: 14px;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.fin-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fin-hbars {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.fin-hbar-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.fin-hbar-top span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fin-hbar-top b {
+  font-variant-numeric: tabular-nums;
+}
+
+.fin-hbar-track {
+  height: 6px;
+  margin-top: 4px;
+  border-radius: 3px;
+  background: var(--line);
+}
+
+.fin-hbar-track i {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--fin-exp);
+}
+
+.fin-month-h {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.fin-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+  cursor: pointer;
+}
+
+.fin-row.on {
+  border-color: var(--text);
+}
+
+.fin-row .fin-amt,
+.fin-row .chip {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+
+.fin-amt {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.fin-amt.inc {
+  color: var(--ok-text);
+}
+
+/* ---- fáze 4 ---- */
+
+/* Odkladiště: stav návrhu, hlavní tlačítko a menu ⋯ zarovnané do sloupců */
+.inbox .lib-line {
+  border-bottom: 1px solid var(--line);
+}
+
+.inbox .lib-line .job-row {
+  border-bottom: 0;
+}
+
+.inbox-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+  padding-right: 10px;
+}
+
+.inbox-status {
+  width: 190px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inbox-primary {
+  width: 160px;
+  overflow: hidden;
+  justify-content: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inbox-primary svg {
+  flex: none;
+}
+
+.inbox .job-row .chip {
+  display: none;
+}
+
+.rule-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.rule-text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Uložená hledání v menu ⋯ */
+.menu-row {
+  display: flex;
+  align-items: center;
+}
+
+.menu-row .menu-x {
+  flex: none;
+  width: 28px;
+  padding: 0;
+  justify-content: center;
+}
+
+.menu-row .menu-x:hover {
+  color: var(--danger-text);
+}
+
+/* Nastavení › Knihovna */
+.company-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.company-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: 10px;
+}
+
+.fin-own {
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.fin-mini .fin-own {
+  display: block;
+  margin-top: 8px;
+}
+
+.watch-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.watch-path {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* ---- fáze 6 ---- */
+
+.check-row[hidden] {
+  display: none;
+}
+
+.detail-info .card h2 {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dl-mini strong {
+  flex: none;
+  white-space: nowrap;
+}
+
+/* ---- fáze 5c: porovnání verzí smlouvy ---- */
+
+.view.versions > .cmp-page {
+  max-width: 1320px;
+}
+
+.cmp-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-top: 12px;
+  container-type: inline-size;
+}
+
+.cmp-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.cmp-ttl {
+  flex: 1;
+  min-width: 0;
+}
+
+.cmp-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.cmp-ttl h1 {
+  margin: 4px 0 0;
+  overflow: hidden;
+  font-size: 20px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cmpgrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  align-items: start;
+  gap: 20px;
+}
+
+.cmpgrid .side-col {
+  position: sticky;
+  top: 12px;
+  max-height: calc(100vh - var(--titlebar) - 24px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.cmpdoc {
+  padding: 20px 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-l);
+  background: var(--surface);
+  box-shadow: var(--card-shadow);
+}
+
+.cmp-heads,
+.cmp-p {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 28px;
+}
+
+.cmp-heads {
+  margin-bottom: 6px;
+  padding: 0 8px 10px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.cmpdoc h3 {
+  margin: 16px 8px 6px;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.cmp-p {
+  padding: 7px 8px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  transition: box-shadow 0.2s;
+}
+
+.cmp-p.same {
+  color: var(--muted);
+}
+
+.cmp-p.k-chg,
+.cmp-p.k-add,
+.cmp-p.k-del {
+  background: var(--warning-soft);
+}
+
+.cmp-p .gap {
+  color: var(--faint);
+  font-size: 12.5px;
+  font-style: italic;
+}
+
+.cmpdoc del {
+  padding: 0 2px;
+  border-radius: 3px;
+  background: var(--danger-soft);
+  color: var(--danger-text);
+  text-decoration: line-through;
+}
+
+.cmpdoc ins {
+  padding: 0 2px;
+  border-radius: 3px;
+  background: var(--ok-soft);
+  color: var(--ok-text);
+  text-decoration: none;
+}
+
+.cmp-p.flash {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.cmp-fold {
+  display: block;
+  margin: 2px 8px;
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  color: var(--faint);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.cmp-fold:hover {
+  color: var(--text);
+}
+
+.chglist {
+  display: flex;
+  flex-direction: column;
+}
+
+.chglist button {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+  align-items: start;
+  gap: 4px 10px;
+  padding: 9px 6px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.chglist button:hover {
+  background: var(--hover);
+}
+
+.chglist .chip {
+  justify-self: start;
+}
+
+.chglist strong {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chglist .s {
+  grid-column: 2;
+  color: var(--muted);
+}
+
+.cmp-sum {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+}
+
+.cmp-ai-foot .btn {
+  gap: 8px;
+}
+
+/* Úzké okno: přehled změn a shrnutí pod textem. */
+@container (max-width: 860px) {
+  .cmpgrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cmpgrid .side-col {
+    position: static;
+    max-height: none;
+  }
+}
+
+.palette-item small {
+  flex: none;
+  font-size: 12px;
+}
+
+/* ---------- Procvičit: kartičky a kvíz přes celé okno ---------- */
+
+.practice {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  justify-content: center;
+  overflow: auto;
+  background: var(--bg) var(--bg-image) fixed;
+  color: var(--text);
+  outline: none;
+  -webkit-app-region: no-drag;
+}
+
+/* Horním pruhem jde okno dál táhnout. */
+.practice::before {
+  content: '';
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: var(--titlebar);
+  -webkit-app-region: drag;
+}
+
+.pr-close {
+  position: fixed;
+  top: calc(var(--titlebar) + 8px);
+  right: 16px;
+  -webkit-app-region: no-drag;
+}
+
+.pr-close svg {
+  width: 18px;
+  height: 18px;
+}
+
+.pr-in {
+  width: min(680px, 100%);
+  margin: auto 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: calc(var(--titlebar) + 24px) 20px 40px;
+}
+
+.pr-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.pr-head h2 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 20px;
+}
+
+.pr-intro {
+  margin: 0;
+  font-size: 13px;
+}
+
+.pr-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.pr-prog {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.pr-prog i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.25s;
+}
+
+.pr-flash {
+  min-height: 250px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  padding: 24px 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-m);
+  background: var(--surface);
+  box-shadow: var(--card-shadow);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  text-align: center;
+}
+
+.pr-flash .q {
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.pr-flash .a {
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+.pr-src {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+  white-space: normal;
+  text-align: inherit;
+}
+
+.pr-acts {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.pr-question {
+  margin: 4px 0;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.pr-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.opt-card {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+  line-height: 1.45;
+  cursor: pointer;
+}
+
+.opt-card:hover {
+  background: var(--hover);
+}
+
+.opt-card[aria-disabled='true'] {
+  cursor: default;
+}
+
+.opt-card[aria-disabled='true']:hover {
+  background: var(--surface);
+}
+
+.opt-card.good,
+.opt-card.good:hover {
+  border-color: var(--ok);
+  background: var(--ok-soft);
+}
+
+.opt-card.bad,
+.opt-card.bad:hover {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.pr-verdict {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.pr-explain {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--sunken);
+  border: 1px solid var(--line);
+  line-height: 1.5;
+}
+
+.pr-explain > svg {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  color: var(--muted);
+}
+
+.pr-start {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 40px 0;
+  text-align: center;
+}
+
+.pr-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.pr-keys {
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.ov-practice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: var(--r-m);
+  background: var(--accent-soft);
+}
+
+.ov-practice > svg {
+  flex: none;
+  width: 20px;
+  height: 20px;
+}
+
+.ov-practice > div {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ---------- OpenAlex ---------- */
+
+.oa-search {
+  display: flex;
+  gap: 8px;
+}
+
+.oa-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.oa-status {
+  margin: 8px 0 0;
+}
+
+.oa-list,
+.oa-fill {
+  max-height: 380px;
+  margin-top: 10px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.oa-row,
+.oa-fill-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.oa-row:last-child,
+.oa-fill-row:last-child {
+  border-bottom: 0;
+}
+
+.oa-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.oa-main .job-row-meta {
+  white-space: normal;
+}
+
+.oa-actions {
+  display: flex;
+  flex: none;
+  align-items: stretch;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.oa-fill-row {
+  cursor: pointer;
+}
+
+.oa-found {
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+.oa-fill-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.oa-fill-cell .btn {
+  max-width: 100%;
+  height: auto;
+  min-height: 28px;
+  white-space: normal;
+  text-align: left;
 }

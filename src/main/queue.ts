@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { t } from '../shared/i18n';
 import { calibrate, costKey } from '../shared/cost';
+import { IMPORT_EXTS } from '../shared/watch';
 import { activeModels, activeRates, isOnline } from '../shared/provider';
 import type { Job, JobOptions, Mode, Placement, Rates } from '../shared/types';
 import { hashFile } from './hash';
@@ -12,7 +13,7 @@ import { unloadAll } from './lmstudio';
 import { runJob, type Measured } from './pipeline';
 import type { Store } from './store';
 
-export const SUPPORTED = ['.pdf', '.docx', '.txt', '.md'];
+export const SUPPORTED = IMPORT_EXTS;
 
 export interface QueueEvents {
   update(job: Job): void;
@@ -109,6 +110,7 @@ export class Queue {
       error: undefined,
       progress: undefined,
       resume: undefined,
+      translate: undefined,
       output: undefined,
       outputPdf: undefined,
       warnings: 0,
@@ -120,6 +122,38 @@ export class Queue {
     };
     // Originál přes Store: zamčený dokument se pro novou (nezamčenou) úlohu dešifruje.
     await this.store.writeJobFile(job.id, `input${job.ext}`, await this.store.readInput(old));
+    await this.enqueue(job);
+  }
+
+  /**
+   * Přeloží už uložený dokument (nahraný bez překladu) na místě: id, složka, karta, zvýraznění i originál zůstanou,
+   * výstupy a průběh se vynulují a úloha se znovu přečte a přeloží.
+   */
+  async translate(id: string, mode: Mode, targetLang: string) {
+    const job = await this.store.job(id);
+    if (!job || job.trashedAt || job.status === 'queued' || job.status === 'running') return;
+    // Pipeline čte originál přímo z disku; zašifrovaný by nepřečetla.
+    if (await this.store.isLockedJob(id)) throw new Error(t('translate.lockedDoc'));
+    Object.assign(job, {
+      mode,
+      targetLang,
+      status: 'queued',
+      translate: undefined,
+      startedAt: undefined,
+      finishedAt: undefined,
+      error: undefined,
+      progress: undefined,
+      resume: undefined,
+      timings: undefined,
+      output: undefined,
+      outputPdf: undefined,
+      warnings: 0,
+      cost: undefined,
+      costEstimate: undefined,
+      costBase: undefined,
+      context: undefined,
+      notes: undefined,
+    });
     await this.enqueue(job);
   }
 

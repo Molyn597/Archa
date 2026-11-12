@@ -1,4 +1,5 @@
 import { getLang, resolveLang, setLang, t, type MessageKey } from '../shared/i18n';
+import { setNameTemplate } from '../shared/doc-title';
 import { languageName, LANGUAGES } from '../shared/languages';
 import { CHARS_PER_PAGE } from '../shared/cost';
 import { estimateFiles, formatUsd, setCurrency, setCzkRate } from '../shared/estimate';
@@ -8,9 +9,12 @@ import { activeModels, activeRates, isOnline } from '../shared/provider';
 import type { Api, DuplicateMatch, FileInfo, Job, LmStatus, Mode, Models, Provider, Settings } from '../shared/types';
 import { askLibrary, renderFolderOpt, setupLibraryChat, showLibraryChat, syncChatSettings } from './chat';
 import { citeSegment, closeDetail, detailJobId, openDetail, setupDetail, updateDetail, type Tab } from './detail';
-import { createProject, leaveProject, openProject, projectSelected, reloadLibrary, renderLibrary, setupLibrary, libraryView, showAll, showDeadlines, showInvoices, showUnsorted, type LibraryView } from './library';
+import { applySavedSearch, createProject, leaveProject, savedSearches, libraryCards, openFolder, openProject, projectSelected, reloadLibrary, renderLibrary, setupLibrary, libraryView, selectedTitle, showAll, showDeadlines, showInvoices, showUnsorted, type LibraryView } from './library';
 import { addToLibrary, refreshOverview, renderOverview, setupOverview } from './overview';
-import { promptLibraryKind, setupLibrarySwitch } from './library-switch';
+import { openCompare, setupCompare } from './compare-view';
+import { setupPractice } from './practice-view';
+import { currentKind, promptLibraryKind, setupLibrarySwitch } from './library-switch';
+import { openPalette, type PaletteCommand } from './palette';
 import { renderProjectsPage, setupProjectsPage } from './projects-page';
 import { refreshVault, setupVaultActivity } from './vault';
 import {
@@ -34,7 +38,8 @@ import {
   toast,
   toastAction,
 } from './dom';
-import { updateCard } from './update';
+import { updateRow } from './update';
+import { addUploads, renderUpload, setupUpload } from './upload-view';
 import { fillHelpDots, renderHelp, scrollToTopic } from './help-view';
 import { openLibrarySetup, openWelcome } from './welcome';
 import type { HelpTopic } from '../shared/help';
@@ -46,7 +51,7 @@ declare global {
   }
 }
 
-type View = 'overview' | 'home' | 'history' | 'projects' | 'detail' | 'help' | 'settings';
+type View = 'overview' | 'finance' | 'compare' | 'upload' | 'home' | 'history' | 'projects' | 'detail' | 'help' | 'settings';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const ROLE_NAMES: Record<keyof Models | 'chat', MessageKey> = { translate: 'role.translate', ocr: 'role.ocr', polish: 'role.polish', chat: 'role.chat' };
@@ -67,10 +72,10 @@ let catalog: LmStatus['models'] = [];
 // ---------- Navigace ----------
 
 function show(next: View) {
-  if (view !== 'detail') previousView = view;
+  // Porovnání verzí je podstránka detailu: Zpět z detailu po něm vede tam, odkud se do detailu přišlo.
+  if (view !== 'detail' && view !== 'compare') previousView = view;
   view = next;
   document.body.dataset.view = next;
-  setTreePopover(false);
   for (const el of document.querySelectorAll<HTMLElement>('.view')) el.hidden = el.dataset.view !== next;
   syncNav();
   if (next !== 'detail') closeDetail();
@@ -79,14 +84,15 @@ function show(next: View) {
     reloadLibrary();
     showLibraryChat();
   }
-  if (next === 'overview') void refreshOverview();
+  if (next === 'overview' || next === 'finance') void refreshOverview();
+  if (next === 'upload') renderUpload();
   if (next === 'projects') void renderProjectsPage();
   if (next === 'help') renderHelp(showWelcome);
   document.querySelector('.main')?.scrollTo(0, 0);
   $('detail-scroll').scrollTo(0, 0);
 }
 
-// Nástroje pod hlavním menu; další se přidají jedním řádkem (nav = view, který otevřou).
+// Nástroje v paletě ⌘K; další se přidají jedním řádkem (nav = view, který otevřou).
 const TOOLS: { nav?: View; run?: () => void; label: MessageKey; icon: string }[] = [
   { nav: 'home', label: 'nav.translate', icon: ICONS.translate },
   { run: () => void pdfToWord(), label: 'nav.pdfToWord', icon: ICONS.file },
@@ -111,29 +117,33 @@ function offerWord(job: Job) {
   });
 }
 
-// Pohledy Dokumentů, které mají vlastní položku v menu (zvýrazní se místo Dokumentů), a nadpis stránky pro ostatní.
+// Pohledy Dokumentů, které mají vlastní položku v menu (zvýrazní se ta), a nadpis stránky pro ostatní.
 const VIEW_NAV: Partial<Record<LibraryView, NavId>> = { invoices: 'invoices', deadlines: 'deadlines' };
 const VIEW_TITLE: Partial<Record<LibraryView, MessageKey>> = { duplicates: 'dup.title', aiLog: 'aiLog.title', trash: 'trash.title' };
 const LIBRARY_NAV: Partial<Record<NavId, () => void>> = { invoices: () => showInvoices('all'), deadlines: showDeadlines };
+// Nadpis stránek mimo Dokumenty a Projekty.
+const VIEW_LABEL: Partial<Record<View, MessageKey>> = { overview: 'nav.overview', finance: 'fin.title', compare: 'compare.title', upload: 'nav.upload', home: 'nav.translate', detail: 'nav.history', help: 'help.title', settings: 'nav.settings' };
 
 let projectsLabel: MessageKey = 'nav.projects';
 
-/** Zvýraznění v navigaci: vybraný projekt v Dokumentech svítí jako Projekty, Faktury a spol. jako vlastní položky; detail dokumentu patří Dokumentům. */
+/** Zvýraznění v navigaci a nadpis v horní liště: vybraný projekt svítí jako Projekty, Faktury a Termíny jako vlastní položky, Nahrát na svém pohledu; složky a detail nesvítí v menu nic. */
 function syncNav() {
   const sub = view === 'history' ? libraryView() : null;
   const inProject = sub === 'project';
-  const target = inProject ? 'projects' : sub && VIEW_NAV[sub] ? VIEW_NAV[sub] : view === 'detail' ? 'history' : view;
+  const target = inProject ? 'projects' : sub && VIEW_NAV[sub] ? VIEW_NAV[sub] : view === 'detail' || view === 'history' ? undefined : view;
   document.body.classList.toggle('in-project', inProject);
   const heading = document.querySelector<HTMLElement>('.view[data-view="history"] .view-head h1');
   const title = sub && VIEW_TITLE[sub];
-  if (heading) heading.textContent = t(inProject ? projectsLabel : (title ?? (sub && VIEW_NAV[sub] ? NAV_LABELS.get(VIEW_NAV[sub]!) : undefined) ?? 'nav.history'));
+  const label = inProject ? projectsLabel : (title ?? (sub && VIEW_NAV[sub] ? NAV_LABELS.get(VIEW_NAV[sub]!) : undefined) ?? 'nav.history');
+  if (heading) heading.textContent = t(label);
+  $('topbar-title').textContent = view === 'history' ? (selectedTitle() ?? t(label)) : t(view === 'projects' ? projectsLabel : (VIEW_LABEL[view] ?? 'nav.history'));
   for (const b of document.querySelectorAll<HTMLButtonElement>('.nav-item[data-nav]')) b.classList.toggle('active', b.dataset.nav === target);
 }
 
 const NAV_LABELS = new Map<NavId, MessageKey>();
-const MENU_IDS: NavId[] = ['overview', 'history', 'invoices', 'deadlines', 'projects'];
+const MENU_IDS: NavId[] = ['overview', 'upload', 'invoices', 'deadlines', 'projects'];
 
-/** Menu podle typu aktuální knihovny: skryje nepatřící položky a nastaví popisky. */
+/** Menu podle typu aktuální knihovny: skryje nepatřící položky a nastaví popisky; nadpis stromu složek (Studium: Předměty). */
 async function applyNavKind() {
   const libs = await window.api.libraries().catch(() => null);
   const kind = libs?.list.find((l) => l.id === libs.current)?.kind ?? 'general';
@@ -145,6 +155,13 @@ async function applyNavKind() {
     b.hidden = !label;
     if (label) b.querySelector('span')!.textContent = t(label);
   }
+  // Pořadí podle navFor; Projekty si s sebou berou svůj strom.
+  const heading = $('folders-heading');
+  for (const e of navFor(kind)) {
+    heading.before(document.querySelector(`.nav-item[data-nav="${e.id}"]`)!);
+    if (e.id === 'projects') heading.before($('project-folders'));
+  }
+  heading.textContent = t(kind === 'study' ? 'nav.subjects' : 'nav.folders');
   projectsLabel = NAV_LABELS.get('projects') ?? 'nav.projects';
   document.querySelector('.view[data-view="projects"] .view-head h1')!.textContent = t(projectsLabel);
   // Otevřený pohled, který tato knihovna nemá (např. Faktury ve Studiu), se vrací na Dokumenty.
@@ -173,7 +190,7 @@ async function checkUpdates() {
   const r = await window.api.checkUpdate(true).catch(() => null);
   if (!r?.newer || !r.latest) return;
   const bar = $('update-bar');
-  bar.replaceChildren(updateCard(r.latest, () => (bar.hidden = true)));
+  bar.replaceChildren(...updateRow(r.latest, () => (bar.hidden = true)));
   bar.hidden = false;
 }
 
@@ -181,6 +198,15 @@ async function openJob(id: string, tab?: Tab) {
   if (!(await openDetail(id, tab))) return;
   void window.api.jobOpened(id).catch(() => undefined);
   show('detail');
+}
+
+/** Dokument, ze kterého se otevřelo porovnání verzí (Zpět vede na jeho detail). */
+let compareFrom: string | undefined;
+
+async function showCompare(id: string, other: string) {
+  if (!(await openCompare(id, other))) return;
+  compareFrom = id;
+  show('compare');
 }
 
 // ---------- LM Studio ----------
@@ -561,7 +587,7 @@ async function startPending() {
 
 function setupDrop() {
   const zone = $('dropzone');
-  const zones = [zone, $('overview-drop')];
+  const zones = [zone, $('upload-drop')];
   zone.addEventListener('click', async () => addFiles(await window.api.pickFiles()));
   let depth = 0;
   // Jen soubory z disku; přetahování dokumentů v knihovně nesmí přepnout na úvod.
@@ -571,7 +597,7 @@ function setupDrop() {
     e.preventDefault();
     depth++;
     for (const z of zones) z.classList.add('over');
-    if (view !== 'home' && view !== 'overview') show('home');
+    if (view !== 'home' && view !== 'upload') show('upload');
   });
   document.addEventListener('dragleave', () => {
     if (--depth <= 0) for (const z of zones) z.classList.remove('over');
@@ -584,7 +610,7 @@ function setupDrop() {
     for (const z of zones) z.classList.remove('over');
     const files = [...(e.dataTransfer?.files ?? [])];
     const paths = files.map((f) => window.api.pathForFile(f)).filter(Boolean);
-    void (view === 'overview' ? addToLibrary(paths) : addFiles(paths));
+    void (view === 'home' ? addFiles(paths) : addUploads(paths));
   });
 }
 
@@ -642,8 +668,11 @@ function renderHome() {
 
 const applyTheme = () => (document.documentElement.dataset.theme = settings.theme);
 
+const applyNameTemplate = () => setNameTemplate(settings.renameByTemplate ? settings.nameTemplate : undefined);
+
 function onSettingsSaved(next: Settings) {
   settings = next;
+  applyNameTemplate();
   setCurrency(settings.currency);
   applyTheme();
   syncChatSettings(settings);
@@ -664,13 +693,8 @@ let lastAuto = false;
 
 const autoRail = () => chatOpen && window.innerWidth < AUTO_RAIL_WIDTH;
 
-function setTreePopover(on: boolean) {
-  document.body.classList.toggle('tree-pop', on && document.body.classList.contains('nav-collapsed'));
-}
-
 function setNavCollapsed(collapsed: boolean) {
   document.body.classList.toggle('nav-collapsed', collapsed);
-  if (!collapsed) setTreePopover(false);
   const toggle = $('nav-toggle');
   const label = t(collapsed ? 'nav.expand' : 'nav.collapse');
   toggle.title = label;
@@ -715,29 +739,43 @@ function setupNavToggle() {
     applyNav();
   });
   window.addEventListener('resize', applyNav);
-  // Plovoucí strom v liště: zavře klik mimo, Escape nebo výběr složky.
-  document.addEventListener('click', (e) => {
-    const target = e.target as HTMLElement;
-    if (!document.body.classList.contains('tree-pop')) return;
-    if (target.closest('.nav-item[data-nav="history"]')) return;
-    if (!target.closest('#library-folders') || target.closest('.folder-main')) setTreePopover(false);
-  }, true); // zachytávání: obslužné funkce složek stromu překreslují a ztratily by cestu k #library-folders
-  document.addEventListener('keydown', (e) => e.key === 'Escape' && setTreePopover(false));
 }
 
-/** Klik na položku menu. Dokumenty a Projekty při druhém kliknutí sbalí svůj strom (v liště vysouvací strom). */
+/** Klik na položku menu. Projekty při druhém kliknutí sbalí svůj strom;  */
 function onNavClick(nav: View | NavId) {
   const body = document.body;
-  const sub = libraryView();
-  if (nav === 'history' && view === 'history' && !sub) {
-    return body.classList.contains('nav-collapsed') ? setTreePopover(!body.classList.contains('tree-pop')) : body.classList.toggle('tree-closed');
-  }
   if (nav === 'projects' && view === 'projects') return body.classList.toggle('tree-closed');
   body.classList.remove('tree-closed');
-  // Dokumenty ukážou vždy všechny dokumenty, ne dříve vybraný projekt nebo pohled.
-  if (nav === 'history' && sub) return showAll();
   const open = LIBRARY_NAV[nav as NavId];
   (open ?? (() => show(nav as View)))();
+}
+
+// ---------- Horní lišta a paleta ----------
+
+const PALETTE_KEY = navigator.platform.startsWith('Mac') ? '⌘K' : 'Ctrl K';
+
+function paletteCommands(): PaletteCommand[] {
+  return [
+    { label: t('nav.upload'), icon: ICONS.upload, run: () => show('upload') },
+    ...(currentKind() === 'work' || currentKind() === 'general' ? [{ label: t('fin.title'), icon: ICONS.invoice, run: () => show('finance') }] : []),
+    ...savedSearches().map((s) => ({ label: t('saved.palette', { name: s.name }), icon: ICONS.search, run: () => applySavedSearch(s) })),
+    ...TOOLS.map((tool) => ({ label: t(tool.label), icon: tool.icon, run: () => (tool.nav ? show(tool.nav) : tool.run?.()) })),
+    { label: t('nav.settings'), icon: ICONS.sliders, run: () => show('settings') },
+    { label: t('nav.help'), icon: ICONS.help, run: () => showHelp() },
+  ];
+}
+
+function setupTopbar() {
+  $('topbar-kbd').textContent = PALETTE_KEY;
+  const palette = () => openPalette({ jobs: sorted, cards: libraryCards, commands: paletteCommands, open: (id) => void openJob(id) });
+  $('topbar-search').addEventListener('click', palette);
+  $('topbar-upload').addEventListener('click', () => show('upload'));
+  document.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 'k') {
+      e.preventDefault();
+      palette();
+    }
+  });
 }
 
 // ---------- Start ----------
@@ -745,6 +783,7 @@ function onNavClick(nav: View | NavId) {
 async function init() {
   document.body.classList.add(`platform-${window.api.platform}`);
   settings = await window.api.getSettings();
+  applyNameTemplate();
   setCzkRate(settings.usdCzk?.rate);
   setCurrency(settings.currency);
   setLang(resolveLang(settings.uiLang, navigator.language));
@@ -754,27 +793,26 @@ async function init() {
   jobs = new Map((await window.api.listJobs()).map((j) => [j.id, j]));
   await refreshVault();
 
-  $('nav-tools').replaceChildren(
-    ...TOOLS.map((tool) =>
-      h('button', { class: 'nav-item', ...(tool.nav ? { 'data-nav': tool.nav } : { onclick: () => tool.run?.() }) }, icon(tool.icon), h('span', {}, t(tool.label))),
-    ),
-  );
   for (const b of document.querySelectorAll<HTMLButtonElement>('.nav-item[data-nav]')) b.addEventListener('click', () => onNavClick(b.dataset.nav as View | NavId));
   setupNavToggle();
+  setupTopbar();
   setupStatus();
   setupMoreOptions();
-  setupDetail(() => show(previousView), () => show('settings'));
+  setupDetail(() => show(previousView), () => show('settings'), { open: (id) => void openJob(id), openProject, openFolder, showFinance: () => show('finance'), openCompare: (id, other) => void showCompare(id, other) });
+  setupCompare($('compare-root'), { back: () => (compareFrom ? void openJob(compareFrom) : show(previousView)) });
+  setupPractice((id) => void openJob(id));
   setupDrop();
   fillLanguages();
   renderAll();
   setupLibrary({
     jobs: sorted,
     open: (id, tab) => void openJob(id, tab),
-    showHome: () => show('home'),
+    showUpload: () => show('upload'),
     showLibrary: () => view !== 'history' && show('history'),
     folderChanged: renderFolderOpt,
     selectionChanged: syncNav,
   });
+  setupUpload({ jobs: sorted, settings: () => settings, show: () => show('upload'), openJob, showAll });
   setupOverview({
     jobs: sorted,
     settings: () => settings,
@@ -829,6 +867,7 @@ async function init() {
       else if (job.status === 'error' || job.status === 'cancelled') wordJobId = undefined;
     }
     renderHome();
+    renderUpload();
     if (view === 'history') renderLibrary();
     if (detailJobId() === job.id) void updateDetail(job);
     // Po doběhnutí se zpřesní odhad času v kartách režimů.
@@ -842,6 +881,7 @@ async function init() {
   window.api.onJobRemoved((id) => {
     jobs.delete(id);
     renderHome();
+    renderUpload();
     if (view === 'history') reloadLibrary();
     if (detailJobId() === id) show(previousView === 'detail' ? 'history' : previousView);
   });

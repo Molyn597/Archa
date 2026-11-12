@@ -3,9 +3,11 @@ import path from 'node:path';
 import { t } from '../shared/i18n';
 import { RECOMMENDED_REMOTE_MODEL } from '../shared/provider';
 import { cleanHighlights } from '../shared/highlights';
+import { DEFAULT_NAME_TEMPLATE } from '../shared/name-template';
+import type { SeenFiles } from '../shared/watch';
 import { defaultLibrary } from './library';
 import { decrypt, encrypt } from './vault';
-import type { ChatMessage, DocumentCard, Highlight, Job, Library, Project, Rates, RegionTranslation, Segment, Settings } from '../shared/types';
+import type { ChatMessage, DocumentCard, Highlight, Job, Library, PracticeSet, Project, Rates, RegionTranslation, Segment, Settings } from '../shared/types';
 
 export const DEFAULT_SETTINGS: Settings = {
   uiLang: 'system',
@@ -18,6 +20,7 @@ export const DEFAULT_SETTINGS: Settings = {
   targetLang: 'cs',
   notify: true,
   autoCard: true,
+  nameTemplate: DEFAULT_NAME_TEMPLATE,
   citation: { enabled: true, style: 'iso690' },
   unloadWhenIdle: true,
   theme: 'system',
@@ -63,11 +66,12 @@ async function listFiles(dir: string, sub = ''): Promise<string[]> {
 }
 
 /** Nastavení, které má každá knihovna vlastní; ostatní (AI, vzhled, sazby) je společné celé aplikaci. */
-export const LIBRARY_SETTINGS = ['targetLang', 'citation', 'autoCard'] as const;
+export const LIBRARY_SETTINGS = ['targetLang', 'citation', 'autoCard', 'watchFolder', 'watchOn', 'nameTemplate', 'renameByTemplate', 'ownCompany'] as const;
 
 /**
  * Úložiště jedné knihovny (`root` = userData/libraries/<id>): settings.json (jen LIBRARY_SETTINGS), library.json, library-chat.json, vault.json,
- * jobs/<id>/{job.json, segments.json, study.json, highlights.json, chat.json, card.json, vstup, výstup} a projects/<id>/project.json.
+ * jobs/<id>/{job.json, segments.json, study.json, highlights.json, chat.json, card.json, vstup, výstup}, projects/<id>/{project.json, chat.json, practice.json}
+ * a practice/<id složky>.json (procvičování složky).
  * Společné věci aplikace (settings.json, openrouter.key, dictionaries/) leží v `appRoot` = userData.
  */
 export class Store {
@@ -237,9 +241,13 @@ export class Store {
   async library(): Promise<Library> {
     const saved = await this.readJson<Partial<Library> | null>(path.join(this.root, 'library.json'), null);
     return saved?.folders
-      ? { folders: saved.folders, assign: saved.assign ?? {}, ...(saved.questions?.length && { questions: saved.questions }), ...(saved.aiLog?.length && { aiLog: saved.aiLog }), ...(saved.recent?.length && { recent: saved.recent }), ...(saved.paid && Object.keys(saved.paid).length && { paid: saved.paid }), ...(saved.templateVersion && { templateVersion: saved.templateVersion }) }
+      ? { folders: saved.folders, assign: saved.assign ?? {}, ...(saved.questions?.length && { questions: saved.questions }), ...(saved.aiLog?.length && { aiLog: saved.aiLog }), ...(saved.recent?.length && { recent: saved.recent }), ...(saved.paid && Object.keys(saved.paid).length && { paid: saved.paid }), ...(saved.templateVersion && { templateVersion: saved.templateVersion }), ...(saved.rules?.length && { rules: saved.rules }), ...(saved.saved?.length && { saved: saved.saved }), ...(saved.links && Object.keys(saved.links).length && { links: saved.links }), ...(saved.rejectedLinks && Object.keys(saved.rejectedLinks).length && { rejectedLinks: saved.rejectedLinks }), ...(saved.ares && Object.keys(saved.ares).length && { ares: saved.ares }), ...(saved.compares && Object.keys(saved.compares).length && { compares: saved.compares }), ...(saved.hints && Object.keys(saved.hints).length && { hints: saved.hints }) }
       : defaultLibrary();
   }
+
+  /** Soubory sledované složky, které už se zpracovaly (cesta → čas změny). */
+  watchSeen = () => this.readJson<SeenFiles>(path.join(this.root, 'watch.json'), {});
+  saveWatchSeen = (seen: SeenFiles) => this.writeJson(path.join(this.root, 'watch.json'), seen);
 
   saveLibrary = (library: Library) => this.writeJson(path.join(this.root, 'library.json'), library);
 
@@ -294,6 +302,21 @@ export class Store {
   saveProject = (project: Project) => this.writeJson(path.join(this.projectDir(project.id), 'project.json'), project);
   projectChat = (id: string) => this.readJson<ChatMessage[]>(path.join(this.projectDir(id), 'chat.json'), []);
   saveProjectChat = (id: string, messages: ChatMessage[]) => this.writeJson(path.join(this.projectDir(id), 'chat.json'), messages);
+  /** Procvičování: projekt ve své složce (smaže se s ním), složka knihovny v practice/. */
+  private practiceFile = (scope: string) => {
+    const id = path.basename(scope.slice(scope.indexOf(':') + 1));
+    return scope.startsWith('project:') ? path.join(this.projectDir(id), 'practice.json') : path.join(this.root, 'practice', `${id}.json`);
+  };
+  practice = (scope: string) => this.readJson<PracticeSet | null>(this.practiceFile(scope), null);
+  savePractice = (set: PracticeSet) => this.writeJson(this.practiceFile(set.scope), set);
+
+  /** Všechny sady procvičování knihovny (složky i projekty). */
+  async practiceSets(): Promise<PracticeSet[]> {
+    const folders = (await readdir(path.join(this.root, 'practice')).catch(() => [] as string[])).filter((f) => f.endsWith('.json')).map((f) => `folder:${f.slice(0, -5)}`);
+    const projects = (await readdir(path.join(this.root, 'projects')).catch(() => [] as string[])).map((id) => `project:${id}`);
+    const sets = await Promise.all([...folders, ...projects].map((scope) => this.practice(scope)));
+    return sets.filter((s): s is PracticeSet => s !== null);
+  }
   deleteProject = (id: string) => rm(this.projectDir(id), { recursive: true, force: true });
   deleteJob = (id: string) => rm(this.jobDir(id), { recursive: true, force: true });
 }

@@ -5,8 +5,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { Store } from '../src/main/store';
 import { bibliography, bibliographyHtml, bibliographyText, gaps } from '../src/shared/bibliography';
 import { setLang } from '../src/shared/i18n';
-import { addSources, isStudy, newProject, PROJECT_KINDS } from '../src/shared/projects';
-import type { DocumentCard, Job } from '../src/shared/types';
+import { addSources, citeLang, isStudy, newProject, PROJECT_KINDS, visibleProjects } from '../src/shared/projects';
+import type { DocumentCard, Job, Project } from '../src/shared/types';
 
 const job = (id: string) => ({ id, name: `soubor-${id}`, ext: '.pdf', status: 'done', createdAt: 1 }) as Job;
 const card = (title: string, family: string, year?: string, type: DocumentCard['type'] = 'article') =>
@@ -84,5 +84,24 @@ describe('seznam literatury', () => {
     expect(bibliographyText(iso)).toContain('ADAMS');
     expect(bibliographyText(apa)).toContain('Adams, A. (2020)');
     expect(bibliographyHtml(apa)).toMatch(/^<p>.*<i>Journal<\/i>.*<\/p>$/);
+  });
+});
+
+describe('visibleProjects', () => {
+  const all = [{ id: 'w', kind: 'work' }, { id: 'o', kind: 'other' }, { id: 'b', kind: 'bachelor' }] as Project[];
+  const ids = (kind?: Parameters<typeof visibleProjects>[1]) => visibleProjects(all, kind).map((p) => p.id);
+  it('práce a nepřevzatá knihovna jen zakázky, studium jen studijní, osobní vše', () => {
+    expect(ids('work')).toEqual(['w', 'o']);
+    expect(ids('general')).toEqual(['w', 'o']);
+    expect(ids('study')).toEqual(['b']);
+    expect(ids('personal')).toEqual(['w', 'o', 'b']);
+  });
+});
+
+describe('citeLang', () => {
+  it('bez volby jazyk aplikace, jinak vlastní', () => {
+    expect(citeLang({}, 'cs')).toBe('cs');
+    expect(citeLang({ citeLang: 'en' }, 'cs')).toBe('en');
+    expect(citeLang({ citeLang: 'cs' }, 'en')).toBe('cs');
   });
 });

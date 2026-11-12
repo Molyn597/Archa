@@ -28,12 +28,13 @@ export function parseMoney(text: string): { value: number; currency?: string } |
   return { value, ...(currency && { currency }) };
 }
 
-/** Částka pro zobrazení v dané lokalizaci; bez měny jen číslo na dvě desetinná místa, bez hodnoty pomlčka. */
-export function formatMoney(value: number | undefined, currency: string, locale: string): string {
+/** Částka pro zobrazení v dané lokalizaci; bez měny jen číslo na dvě desetinná místa, bez hodnoty pomlčka. `trimWhole`: celá částka bez desetinných míst (velká čísla). */
+export function formatMoney(value: number | undefined, currency: string, locale: string, trimWhole = false): string {
   if (value === undefined) return '–';
-  const plain = { minimumFractionDigits: 2, maximumFractionDigits: 2 };
+  const whole = trimWhole && Number.isInteger(value);
+  const plain = whole ? { minimumFractionDigits: 0, maximumFractionDigits: 0 } : { minimumFractionDigits: 2, maximumFractionDigits: 2 };
   try {
-    return new Intl.NumberFormat(locale, currency ? { style: 'currency', currency } : plain).format(value);
+    return new Intl.NumberFormat(locale, currency ? { style: 'currency', currency, ...(whole && plain) } : plain).format(value);
   } catch {
     // Neznámý kód měny.
     return `${new Intl.NumberFormat(locale, plain).format(value)} ${currency}`;

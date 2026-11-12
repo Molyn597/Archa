@@ -110,7 +110,11 @@ export function contextPrompt(sample: string, target: string) {
   );
 }
 
-export function cardPrompt(sample: string, target: string, folders: string[]) {
+/** Opravy, které uživatel ručně udělal po AI; jako příklady do promptu zařazování. */
+const rulesHint = (rules: string[]) =>
+  rules.length ? `The user has corrected earlier filing decisions; follow these when a document has the same party or keyword (party/keyword -> folder): ${rules.join('; ')}.\n` : '';
+
+export function cardPrompt(sample: string, target: string, folders: string[], rules: string[] = []) {
   const lang = englishName(target);
   return (
     'Read the beginning of the document below and describe it as JSON only, without any other text:\n' +
@@ -126,6 +130,7 @@ export function cardPrompt(sample: string, target: string, folders: string[]) {
     'Prefer an existing folder. When the document clearly belongs to a narrower topic that has no folder yet, propose a new subfolder ' +
     `under the best fitting existing folder (at most two new levels, e.g. "Studium / Články / Management"), with short names in ${lang}. ` +
     'Choose the most specific folder: never a folder that has subfolders – then pick one of its subfolders or propose a new one under it. ' +
+    rulesHint(rules) +
     'Use "" only when nothing fits. folderSure is true when you are confident about folder, false when the document could just as well belong elsewhere; ' +
     'then folderOptions lists 1–2 other plausible folder paths, otherwise []. ' +
     'biblio contains only what is literally stated in the document (title page, header, citation line, DOI); never invent anything and use "" when unknown. ' +
@@ -208,13 +213,14 @@ export const projectChatSystem = (kind: string, name: string, assignment: string
   '- Write in the language of the question, in your own words; quote only short phrases, in quotation marks and with a citation. Name the documents when comparing sources.\n\nPassages:\n';
 
 /** Návrh roztřídění dokumentů do (pod)složek; `scope` = cesta složky, jinak celá knihovna. */
-export const organizePrompt = (tree: string[], scope: string, catalog: string, lang: string, instruction?: string) =>
+export const organizePrompt = (tree: string[], scope: string, catalog: string, lang: string, instruction?: string, rules: string[] = []) =>
   'You organise a personal library of documents into folders and subfolders.\n' +
   (instruction ? `The user asks: ${instruction}\n` : '') +
   `Existing folder tree: ${tree.join('; ') || '(none)'}\n` +
   (scope ? `Organise only inside the folder "${scope}"; every path must start with "${scope} / ".\n` : '') +
   'Documents, one per line: [id] file name | current folder | type | year | title | summary | keywords | facts.\n' +
   `${catalog}\n\n` +
+  rulesHint(rules) +
   'Group the documents by topic. Reuse existing folders where they fit; create a new folder only for a topic with at least 2 documents, ' +
   'unless the user asks about particular documents or asks for new folders – then propose the best specific subfolder even for one document. ' +
   `Use short folder names in ${englishName(lang)}, at most 2 new levels.\n` +

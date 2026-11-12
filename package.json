@@ -12,7 +12,7 @@
     "start": "npm run build && electron .",
     "dist": "npm run build && electron-builder --publish never",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run --exclude '.claude/**'",
     "icons": "node scripts/icons.mjs"
   },
   "build": {

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { childFolders, DEFAULT_FOLDER_KEYS, fold, folderName, folderPath, isLocked, placementActive, similarName, subtree } from '../shared/folders';
 
 export { placementActive };
+import { learnRule } from '../shared/rules';
 import type { DocumentCard, Library, OrganizePlan, Placement } from '../shared/types';
 
 /** Výchozí knihovna: jedna složka za každý klíč, bez zařazených dokumentů. */
@@ -74,11 +75,31 @@ export function markOpened(library: Library, jobId: string) {
   library.recent = [jobId, ...(library.recent ?? []).filter((id) => id !== jobId)].slice(0, RECENT_MAX);
 }
 
-/** Ruční přesun dokumentů; `null` = mezi nezařazené. */
-export function moveDocs(library: Library, jobIds: string[], folderId: string | null) {
+/**
+ * Oprava zařazení uložená jako pravidlo: uživatel dal dokument jinam, než ho zařadila AI (`aiLog`),
+ * nebo než navrhla první možnost jejího dotazu. Potvrzení návrhu ani druhá ruční oprava se neučí.
+ */
+function learnCorrection(library: Library, jobId: string, card: DocumentCard | undefined, folderId: string) {
+  const target = library.folders.find((f) => f.id === folderId);
+  if (!card || !target || library.assign[jobId]?.manual) return;
+  const placed = library.aiLog?.find((p) => p.jobId === jobId && !p.undone);
+  const asked = library.questions?.find((q) => q.jobId === jobId);
+  const path = folderPath(library.folders, target);
+  if ((placed && placed.folder !== folderId) || (asked && normPath(asked.options[0]) !== normPath(path))) {
+    const rules = learnRule(library.rules, card, path);
+    if (rules) library.rules = rules;
+  }
+}
+
+/** Ruční přesun dokumentů; `null` = mezi nezařazené. Z oprav po AI se učí pravidla (viz `cards`). */
+export function moveDocs(library: Library, jobIds: string[], folderId: string | null, cards: Record<string, DocumentCard | undefined> = {}) {
   for (const id of jobIds) {
     if (folderId === null) delete library.assign[id];
-    else library.assign[id] = { folder: folderId, manual: true };
+    else {
+      learnCorrection(library, id, cards[id], folderId);
+      library.assign[id] = { folder: folderId, manual: true };
+      dropQuestion(library, id);
+    }
   }
 }
 
@@ -173,11 +194,14 @@ export function undoPlacement(library: Library, p: Placement) {
 }
 
 /** Odpověď na dotaz: vybraná cesta se případně založí a dokument se do ní ručně zařadí; `null` = nechat. */
-export function answerQuestion(library: Library, jobId: string, path: string | null, newId?: () => string) {
-  dropQuestion(library, jobId);
-  if (!path) return;
+export function answerQuestion(library: Library, jobId: string, path: string | null, newId?: () => string, card?: DocumentCard) {
+  if (!path) return dropQuestion(library, jobId);
   const { id } = ensurePath(library, path, true, newId);
-  if (id) library.assign[jobId] = { folder: id, manual: true };
+  if (id) {
+    learnCorrection(library, jobId, card, id);
+    library.assign[jobId] = { folder: id, manual: true };
+  }
+  dropQuestion(library, jobId);
 }
 
 /** Provede potvrzený návrh: založí složky, zařadí dokumenty (ručně – AI je už nepřesune), dotazy uloží. */

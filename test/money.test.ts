@@ -27,6 +27,12 @@ describe('formatMoney', () => {
     expect(formatMoney(1234.5, '', 'en-GB')).toBe('1,234.50');
   });
 
+  it('trimWhole vynechá desetinná místa jen u celých částek', () => {
+    expect(formatMoney(107900, 'CZK', 'cs-CZ', true).replace(/\s/g, ' ')).toBe('107 900 Kč');
+    expect(formatMoney(107900.5, 'CZK', 'cs-CZ', true).replace(/\s/g, ' ')).toBe('107 900,50 Kč');
+    expect(formatMoney(10, '', 'en-GB', true)).toBe('10');
+  });
+
   it('bez hodnoty pomlčka, neznámá měna zůstane za číslem', () => {
     expect(formatMoney(undefined, 'CZK', 'cs-CZ')).toBe('–');
     expect(formatMoney(10, 'XX', 'en-GB')).toBe('10.00 XX');

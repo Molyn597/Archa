@@ -4,13 +4,13 @@ import { extractJsonObject } from './review';
 
 const MAX_KEYWORDS = 10;
 
-/** Text dokumentu pro kartu: originál odstavců v pořadí, s `[p. N]` při změně stránky, zkrácený na `limit` znaků. */
-export function cardSample(segments: Segment[], limit: number): string {
+/** Text dokumentu pro kartu: originál odstavců v pořadí, s `[p. N]` při změně stránky (bez `pages`), zkrácený na `limit` znaků. */
+export function cardSample(segments: Segment[], limit: number, pages = true): string {
   const parts: string[] = [];
   let page: number | undefined;
   for (const s of segments) {
     if (s.layoutOnly || s.figure || !s.source.trim()) continue;
-    if (s.page !== undefined && s.page !== page) {
+    if (pages && s.page !== undefined && s.page !== page) {
       page = s.page;
       parts.push(`[p. ${page}]`);
     }

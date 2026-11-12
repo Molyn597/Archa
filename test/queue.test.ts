@@ -22,6 +22,8 @@ function makeStore() {
     jobDir: (id: string) => `/tmp/jobs/${id}`,
     inputPath: (job: Job) => `/tmp/jobs/${job.id}/input${job.ext}`,
     setSegments: (id: string, list: Segment[]) => segments.set(id, list),
+    locked: new Set<string>(),
+    isLockedJob: async (id: string) => store.locked.has(id),
   };
   return store;
 }
@@ -123,6 +125,38 @@ describe('Queue', () => {
       runJob.mockResolvedValue({ paused: true });
       queue['enqueue'](makeJob('q'));
       await vi.waitFor(() => expect(store.jobs.get('q')?.status).toBe('picking'));
+    });
+  });
+
+  describe('translate', () => {
+    it('přeloží nahraný dokument na místě: stejné id, nový cíl, vynulované výstupy', async () => {
+      runJob.mockResolvedValue({});
+      store.jobs.set('u', makeJob('u', { status: 'done', translate: false, targetLang: 'en', output: 'old.docx', warnings: 2, notes: ['x'], cost: 1, name: 'faktura', createdAt: 5 }));
+
+      await queue.translate('u', 'quality', 'cs');
+      await vi.waitFor(() => expect(store.jobs.get('u')?.status).toBe('done'));
+
+      expect(runJob).toHaveBeenCalledTimes(1);
+      const run = runJob.mock.calls[0]![0].job as Job;
+      expect(run).toMatchObject({ id: 'u', name: 'faktura', createdAt: 5, mode: 'quality', targetLang: 'cs', output: undefined, notes: undefined, cost: undefined, warnings: 0 });
+      expect(run.translate).toBeUndefined();
+      expect(run.resume).toBeUndefined();
+      expect([...store.jobs.keys()]).toEqual(['u']);
+    });
+
+    it('dokument v zamčené složce nepřeloží', async () => {
+      store.jobs.set('z', makeJob('z', { status: 'done', translate: false }));
+      store.locked.add('z');
+      await expect(queue.translate('z', 'fast', 'cs')).rejects.toThrow();
+      expect(runJob).not.toHaveBeenCalled();
+    });
+
+    it('běžící nebo chybějící úlohu nechá být', async () => {
+      store.jobs.set('r', makeJob('r', { status: 'running' }));
+      await queue.translate('r', 'fast', 'cs');
+      await queue.translate('nic', 'fast', 'cs');
+      expect(runJob).not.toHaveBeenCalled();
+      expect(store.jobs.get('r')?.status).toBe('running');
     });
   });
 

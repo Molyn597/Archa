@@ -249,3 +249,10 @@ export function inText(b: Biblio, style: CitationStyle, lang: Lang, pages: numbe
   const parts = [who, clean(b.year) || L.noYear, pages.length ? `${pageWord} ${pageLabel(pages)}` : '', ownTranslation ? (apaStyle ? L.apaOwn : L.own) : ''];
   return `(${parts.filter(Boolean).join(', ')})`;
 }
+
+/** Zkrácená citace do řádku seznamu: „Novák, 2020“, „Novák a Svoboda, 2020“, od tří autorů „Novák a kol., 2020“; chybějící část se vynechá. */
+export function shortCite(b: Biblio, lang: Lang): string {
+  const families = b.authors.map((a) => clean(a.family)).filter(Boolean);
+  const author = families.length > 2 ? `${families[0]} ${lang === 'cs' ? 'a kol.' : 'et al.'}` : families.join(LABELS[lang].and);
+  return [author, clean(b.year)].filter(Boolean).join(', ');
+}

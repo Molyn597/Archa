@@ -60,6 +60,18 @@ describe('moveToLibrary', () => {
     expect(await readdir(path.join(libraryRoot(app, DST), '.moving')).catch(() => [])).toEqual([]);
   });
 
+  it('přesune projekt i se zdroji, ve zdroji ho smaže', async () => {
+    await src.saveProject({ id: 'bp', name: 'Japonsko', kind: 'bachelor', sources: ['b'] } as Project);
+    await src.saveProjectChat('bp', [{ role: 'user', text: 'hi', at: 1 }]);
+    expect(await moveToLibrary(src, app, libs, ['b'], DST, { keepFolders: true, projectIds: ['bp'] })).toBe(1);
+    const copy = JSON.parse(await readFile(path.join(libraryRoot(app, DST), 'projects', 'bp', 'project.json'), 'utf8')) as Project;
+    expect(copy.sources).toEqual(['b']);
+    expect(existsSync(path.join(libraryRoot(app, DST), 'projects', 'bp', 'chat.json'))).toBe(true);
+    expect(existsSync(src.projectDir('bp'))).toBe(false);
+    expect(existsSync(path.join(libraryRoot(app, DST), 'jobs', 'b'))).toBe(true);
+    expect((await src.project('p'))!.sources).toEqual(['a']);
+  });
+
   it('bez návrhu složky dokument skončí v Ostatní', async () => {
     await moveToLibrary(src, app, libs, ['b'], DST);
     expect((await dstLibrary()).assign.b.folder).toBe('other');

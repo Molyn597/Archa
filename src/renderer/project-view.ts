@@ -1,11 +1,13 @@
 import { getLang, t, type MessageKey } from '../shared/i18n';
 import { bibliography, bibliographyHtml, bibliographyText, type BiblioEntry } from '../shared/bibliography';
-import { isStudy, kindName, PROJECT_KINDS } from '../shared/projects';
+import { citeLang, isStudy, kindName, PROJECT_KINDS } from '../shared/projects';
 import type { CitationStyle, DocumentCard, Job, Project, ProjectKind } from '../shared/types';
 import type { Tab } from './detail';
 import { openChat } from './chat';
 import { cleanError, h, icon, ICONS, openModal, toast, writeClipboard } from './dom';
+import { openOpenAlex } from './openalex-view';
 import { filterSources } from './project-filter';
+import { openPractice } from './practice-view';
 
 /** Co detail projektu potřebuje od knihovny (data, otevření dokumentu, nahrazení kopie projektu). */
 export interface ProjectCtx {
@@ -198,7 +200,8 @@ function sourcesTab(p: Project, c: ProjectCtx) {
     return h('div', { class: 'lib-item dim' }, h('div', { class: 'lib-line' }, h('div', { class: 'proj-gone' }, h('span', { class: 'muted' }, t('project.unavailable'))), removeBtn(id)));
   });
   const add = h('button', { class: 'btn primary', type: 'button', onclick: () => pickSources(p, c) }, icon(ICONS.plus), t('project.addSources'));
-  return h('div', {}, h('div', { class: 'proj-actions' }, add), rows.length ? h('div', { class: 'proj-list' }, ...rows) : h('p', { class: 'muted' }, t('project.sourcesEmpty')));
+  const online = isStudy(p.kind) ? h('button', { class: 'btn', type: 'button', onclick: () => openOpenAlex(p.name, p.id) }, icon(ICONS.globe), t('openalex.findShort')) : null;
+  return h('div', {}, h('div', { class: 'proj-actions' }, add, online), rows.length ? h('div', { class: 'proj-list' }, ...rows) : h('p', { class: 'muted' }, t('project.sourcesEmpty')));
 }
 
 function textArea(p: Project, field: TextField, placeholder: string, label?: string) {
@@ -233,12 +236,17 @@ function bibliographyTab(p: Project, c: ProjectCtx) {
     const job = jobs.find((j) => j.id === id);
     return job ? [{ job, card: c.cards()[id] }] : [];
   });
-  const { entries, missing } = bibliography(pairs, p.style, getLang(), new Date().toISOString().slice(0, 10));
+  const { entries, missing } = bibliography(pairs, p.style, citeLang(p, getLang()), new Date().toISOString().slice(0, 10));
   const style = h(
     'select',
     { 'aria-label': t('project.styleLabel'), onchange: (e: Event) => void save(p.id, { style: (e.target as HTMLSelectElement).value as CitationStyle }) },
     h('option', { value: 'iso690', ...(p.style === 'iso690' ? { selected: true } : {}) }, 'ČSN ISO 690'),
     h('option', { value: 'apa7', ...(p.style === 'apa7' ? { selected: true } : {}) }, 'APA 7'),
+  );
+  const langSelect = h(
+    'select',
+    { 'aria-label': t('project.citeLang'), onchange: (e: Event) => void save(p.id, { citeLang: ((e.target as HTMLSelectElement).value || undefined) as Project['citeLang'] }) },
+    ...[['', 'app'], ['cs', 'cs'], ['en', 'en']].map(([value, key]) => h('option', { value, ...((p.citeLang ?? '') === value ? { selected: true } : {}) }, t(`project.citeLang.${key}` as MessageKey))),
   );
   const copy = h(
     'button',
@@ -262,7 +270,7 @@ function bibliographyTab(p: Project, c: ProjectCtx) {
       { class: 'proj-ref' },
       h('p', {}, ...refParts(e)),
       warn.length
-        ? h('div', { class: 'proj-gaps' }, h('span', { class: 'chip warn' }, warn.map((g) => t(`project.gap.${g}` as MessageKey)).join(', ')), h('button', { class: 'link', type: 'button', onclick: () => c.open(e.jobId, 'about') }, t('project.openCard')))
+        ? h('div', { class: 'proj-gaps' }, h('span', { class: 'chip warn' }, warn.map((g) => t(`project.gap.${g}` as MessageKey)).join(', ')), h('button', { class: 'link', type: 'button', onclick: () => c.open(e.jobId) }, t('project.openCard')))
         : null,
     );
   });
@@ -282,12 +290,12 @@ function bibliographyTab(p: Project, c: ProjectCtx) {
         make.textContent = t('project.makeCard');
       }
     });
-    return h('div', { class: 'lib-item' }, h('div', { class: 'lib-line' }, h('button', { class: 'job-row', type: 'button', onclick: () => c.open(job.id) }, h('span', {}, h('div', { class: 'job-row-name' }, `${job.name}${job.ext}`))), noCard && job.status === 'done' ? make : h('button', { class: 'btn', type: 'button', onclick: () => c.open(job.id, 'about') }, t('project.openCard'))));
+    return h('div', { class: 'lib-item' }, h('div', { class: 'lib-line' }, h('button', { class: 'job-row', type: 'button', onclick: () => c.open(job.id) }, h('span', {}, h('div', { class: 'job-row-name' }, `${job.name}${job.ext}`))), noCard && job.status === 'done' ? make : h('button', { class: 'btn', type: 'button', onclick: () => c.open(job.id) }, t('project.openCard'))));
   });
   return h(
     'div',
     {},
-    h('div', { class: 'proj-actions' }, h('label', { class: 'row gap' }, h('span', { class: 'muted small' }, t('project.styleLabel')), style), copy),
+    h('div', { class: 'proj-actions' }, h('label', { class: 'row gap' }, h('span', { class: 'muted small' }, t('project.styleLabel')), style), h('label', { class: 'row gap' }, h('span', { class: 'muted small' }, t('project.citeLang')), langSelect), copy),
     entries.length ? h('div', { class: 'proj-refs' }, ...refs) : h('p', { class: 'muted' }, t('project.biblioEmpty')),
     lost.length ? h('div', { class: 'proj-missing' }, h('h2', {}, t('project.noCard')), h('div', { class: 'proj-list' }, ...lost)) : null,
   );
@@ -336,6 +344,7 @@ export function renderProject(root: HTMLElement, id: string, c: ProjectCtx) {
   const deadline = h('input', { type: 'date', value: p.deadline ?? '', 'aria-label': t('project.deadline') });
   deadline.addEventListener('change', () => void save(p.id, { deadline: deadline.value || undefined }));
   const chatBtn = h('button', { class: 'btn', type: 'button', onclick: openChat }, icon(ICONS.chat), t('projectChat.open'));
+  const practiceBtn = study && h('button', { class: 'btn', type: 'button', onclick: () => void openPractice(`project:${p.id}`) }, icon(ICONS.sparkle), t('practice.open'));
   const del = h(
     'button',
     {
@@ -351,7 +360,7 @@ export function renderProject(root: HTMLElement, id: string, c: ProjectCtx) {
   const head = h(
     'div',
     { class: 'proj-head' },
-    h('div', { class: 'proj-title' }, icon(ICONS.book), nameEditor(p), status, chatBtn, del),
+    h('div', { class: 'proj-title' }, icon(ICONS.book), nameEditor(p), status, chatBtn, practiceBtn, del),
     h('div', { class: 'proj-meta' }, h('span', { class: 'chip accent' }, kindName(p.kind)), h('label', { class: 'row gap' }, h('span', { class: 'muted small' }, t('project.deadline')), deadline)),
   );
   const label = (k: ProjectTab) => t(k === 'bibliography' ? (study ? 'project.tab.bibliography' : 'project.tab.materials') : (`project.tab.${k}` as MessageKey));

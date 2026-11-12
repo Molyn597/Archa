@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dropSources, ensureNamedPath, literatureOffer, pathNames, placeWithPath, pruneFolders, releaseEntries, targetFolder, touchedFolders, transferEntries, pathForTarget } from '../src/shared/library-transfer';
+import { dropSources, ensureNamedPath, studyOffer, pathNames, placeWithPath, pruneFolders, releaseEntries, targetFolder, touchedFolders, transferEntries, pathForTarget } from '../src/shared/library-transfer';
 import type { Library, Project } from '../src/shared/types';
 
 const lib = (extra: Partial<Library> = {}): Library => ({
@@ -152,21 +152,23 @@ describe('úklid zdroje', () => {
   });
 });
 
-describe('literatureOffer', () => {
-  it('nabídne jen v pracovní a osobní knihovně s články', () => {
-    expect(literatureOffer({ kind: 'work', count: 3, hasStudy: true })).toBe('move');
-    expect(literatureOffer({ kind: 'personal', count: 1, hasStudy: false })).toBe('create');
-    expect(literatureOffer({ kind: 'study', count: 3, hasStudy: true })).toBeNull();
-    expect(literatureOffer({ kind: 'general', count: 3, hasStudy: true })).toBeNull();
-    expect(literatureOffer({ kind: 'work', count: 0, hasStudy: true })).toBeNull();
-    expect(literatureOffer({ kind: 'work', count: 3, hasStudy: true, kept: true })).toBeNull();
-  });
-});
+describe('studyOffer', () => {
+  const doc = (id: string, literature = false, movable = true) => ({ id, literature, movable });
+  const project = (id: string, kind: Project['kind'], sources: string[]) => ({ id, kind, sources }) as Project;
+  const base = { kind: 'work' as const, hasStudy: true };
 
-describe('pathForTarget', () => {
-  it('při přesunu do Studia vynechá úvodní složku Studium', () => {
-    expect(pathForTarget(['Studium', 'Články', 'Management'], 'study')).toEqual(['Články', 'Management']);
-    expect(pathForTarget(['Studium'], 'study')).toEqual(['Studium']);
-    expect(pathForTarget(['Studium', 'Články'], 'work')).toEqual(['Studium', 'Články']);
+  it('spočítá články, studijní projekty a jejich zdroje', () => {
+    const offer = studyOffer({ ...base, docs: [doc('a', true), doc('b', true), doc('s1'), doc('w1')], projects: [project('p', 'bachelor', ['s1', 'gone']), project('z', 'work', ['w1'])] });
+    expect(offer).toEqual({ action: 'move', ids: ['a', 'b', 's1'], projectIds: ['p'], literature: 2, skipped: 0 });
+  });
+  it('bez studijní knihovny nabídne založení; u studia a bez obsahu nic', () => {
+    expect(studyOffer({ ...base, hasStudy: false, docs: [doc('a', true)], projects: [] })?.action).toBe('create');
+    expect(studyOffer({ ...base, kind: 'study', docs: [doc('a', true)], projects: [] })).toBeNull();
+    expect(studyOffer({ ...base, docs: [doc('w')], projects: [project('z', 'other', ['w'])] })).toBeNull();
+    expect(studyOffer({ ...base, kind: 'personal', docs: [], projects: [project('p', 'seminar', [])] })?.projectIds).toEqual(['p']);
+  });
+  it('zamčené přeskočí; projekt se zamčeným zdrojem zůstane celý', () => {
+    const offer = studyOffer({ ...base, docs: [doc('a', true), doc('l', true, false), doc('s1'), doc('s2', false, false)], projects: [project('p', 'master', ['s1', 's2'])] });
+    expect(offer).toEqual({ action: 'move', ids: ['a'], projectIds: [], literature: 1, skipped: 2 });
   });
 });

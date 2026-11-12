@@ -1,6 +1,7 @@
 import { fold, folderPath, isLocked, openPaths, resolvePath, subtree } from '../shared/folders';
 import { getLang, t } from '../shared/i18n';
 import { chatSettings, isOnline } from '../shared/provider';
+import { ruleLines } from '../shared/rules';
 import type { ChatModel, FolderMerge, Job, Library, OrganizePlan, Settings } from '../shared/types';
 import { readKey } from './keystore';
 import { pathParts, similarFolders } from './library';
@@ -82,7 +83,7 @@ export async function planOrganize(llm: Llm, library: Library, docs: LibDoc[], s
     chars += line.length + 1;
   }
   const tree = openPaths(library.folders);
-  const out = await ask(llm, 'polish', [{ role: 'user', content: organizePrompt(tree, scope, lines.join('\n'), getLang(), instruction) }], PLAN_TOKENS);
+  const out = await ask(llm, 'polish', [{ role: 'user', content: organizePrompt(tree, scope, lines.join('\n'), getLang(), instruction, ruleLines(library.rules)) }], PLAN_TOKENS);
   return parsePlan(out, docs.slice(0, lines.length), scope);
 }
 

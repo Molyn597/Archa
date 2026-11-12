@@ -3,12 +3,18 @@ import { formatUsd } from '../shared/estimate';
 import { locale, t, type MessageKey, type UiLangSetting } from '../shared/i18n';
 import { activeRates, FAST_REMOTE_MODEL, isFreeModel, RECOMMENDED_REMOTE_MODEL } from '../shared/provider';
 import { catalogRows, chatModelWarning, formatContext, isFree, sharedModel, visionWarnings } from '../shared/catalog-view';
-import type { CitationStyle, Currency, LmStatus, ModelPrice, Models, Provider, Settings, Theme } from '../shared/types';
+import { applyTemplate, DEFAULT_NAME_TEMPLATE } from '../shared/name-template';
+import type { CitationStyle, Currency, DocumentCard, LmStatus, ModelPrice, Models, Provider, Settings, Theme } from '../shared/types';
 import { chatWarningText, duration, h, icon, ICONS, rememberOpen, toast } from './dom';
 import { languageName, LANGUAGES } from '../shared/languages';
+import { currentKind } from './library-switch';
 import { changePasswordModal, refreshVault, vault } from './vault';
 
 const $ = (id: string) => document.getElementById(id)!;
+
+// Po otevření Nastavení se přesune na část Knihovna (odkaz „Nastav svou firmu“).
+let wantLibrary = false;
+export const scrollToLibrarySettings = () => (wantLibrary = true);
 
 // ---------- Nastavení ----------
 
@@ -148,9 +154,12 @@ export async function renderSettings(onSaved: (s: Settings) => void) {
       h('label', { class: 'field' }, h('span', {}, 'Jazyk aplikace / App language'), uiLang),
       h('label', { class: 'field' }, h('span', {}, t('settings.theme')), theme),
     ),
+    libraryGroup(settings, save, rerender),
     vaultGroup(),
     h('section', { class: 'setting-group' }, advanced),
   );
+  if (wantLibrary) $('settings-library').scrollIntoView();
+  wantLibrary = false;
 }
 
 /** Karta AI: kde AI běží, jestli je připravená, API klíč online a souhrn vybraných modelů. Výběr modelů je v Pokročilém. */
@@ -203,6 +212,88 @@ function aiGroup(settings: Settings, lm: LmStatus, remote: LmStatus, save: () =>
 }
 
 /** Zamčené složky: stav hesla trezoru a jeho změna. */
+/** Ukázková karta pro náhled šablony názvu. */
+const SAMPLE_CARD: DocumentCard = {
+  summary: '',
+  type: 'invoice',
+  keywords: [],
+  biblio: { authors: [], title: '' },
+  lang: 'cs',
+  createdAt: 0,
+  facts: { issued: '2026-03-04', supplier: 'ACME s.r.o.', number: '2026/015' },
+};
+
+/** Nastavení knihovny: sledovaná složka na disku a šablona názvů dokumentů. */
+function libraryGroup(settings: Settings, save: () => Promise<void>, rerender: () => Promise<void>) {
+  const folder = settings.watchFolder;
+  const pick = h(
+    'button',
+    {
+      class: 'btn',
+      type: 'button',
+      onclick: async () => {
+        const picked = await window.api.pickDirectory();
+        if (!picked) return;
+        settings.watchFolder = picked;
+        settings.watchOn = true;
+        await save();
+        await rerender();
+      },
+    },
+    t('settings.watchPick'),
+  );
+
+  const template = h('input', { type: 'text', maxlength: '120', spellcheck: false });
+  template.value = settings.nameTemplate;
+  const preview = h('span', { class: 'muted small' });
+  const showPreview = () => (preview.textContent = t('settings.nameTemplatePreview', { name: applyTemplate(SAMPLE_CARD, template.value) || '—' }));
+  showPreview();
+  template.addEventListener('input', showPreview);
+  template.addEventListener('change', () => {
+    settings.nameTemplate = template.value.trim() || DEFAULT_NAME_TEMPLATE;
+    void save();
+  });
+
+  // Moje firma: faktury knihovny se podle ní dělí na příjmy a výdaje (Studium a Osobní ji nepotřebují).
+  const company = settings.ownCompany ?? { name: '', id: '', vat: '' };
+  const companyField = (key: keyof typeof company, label: MessageKey, maxlength: string) => {
+    const input = h('input', { type: 'text', maxlength, spellcheck: false });
+    input.value = company[key];
+    input.addEventListener('change', () => {
+      company[key] = input.value.trim();
+      settings.ownCompany = company;
+      void save();
+    });
+    return h('label', { class: 'field' }, h('span', {}, t(label)), input);
+  };
+  const kind = currentKind();
+
+  return h(
+    'section',
+    { class: 'setting-group', id: 'settings-library' },
+    h('h2', {}, t('settings.library')),
+    (kind === 'work' || kind === 'general') &&
+      h(
+        'div',
+        { class: 'company-fields' },
+        h('span', {}, t('settings.company')),
+        h('span', { class: 'muted small' }, t('settings.companyHint')),
+        h('div', { class: 'company-row' }, companyField('name', 'settings.companyName', '120'), companyField('id', 'settings.companyId', '20'), companyField('vat', 'settings.companyVat', '20')),
+      ),
+    h('div', { class: 'field' }, h('span', {}, t('settings.watch')), h('div', { class: 'watch-row' }, h('span', { class: 'watch-path' }, folder ?? t('settings.watchNone')), pick), h('span', { class: 'muted small' }, t('settings.watchHint'))),
+    folder &&
+      toggle(t('settings.watchOn'), t('settings.watchOnHint'), Boolean(settings.watchOn), (v) => {
+        settings.watchOn = v;
+        void save();
+      }),
+    h('label', { class: 'field' }, h('span', {}, t('settings.nameTemplate')), template, h('span', { class: 'muted small' }, t('settings.nameTemplateHint')), preview),
+    toggle(t('settings.renameByTemplate'), t('settings.renameByTemplateHint'), Boolean(settings.renameByTemplate), (v) => {
+      settings.renameByTemplate = v;
+      void save();
+    }),
+  );
+}
+
 function vaultGroup() {
   return h(
     'section',

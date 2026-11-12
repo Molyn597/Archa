@@ -1,7 +1,8 @@
 import { t } from '../shared/i18n';
-import { kindName } from '../shared/projects';
+import { kindName, visibleProjects } from '../shared/projects';
 import type { Project } from '../shared/types';
 import { cleanError, date, h, icon, ICONS, toast } from './dom';
+import { currentKind } from './library-switch';
 
 interface ProjectsPageHost {
   open(id: string): void;
@@ -14,7 +15,7 @@ let host: ProjectsPageHost;
 export async function renderProjectsPage() {
   let projects: Project[] = [];
   try {
-    projects = await window.api.listProjects();
+    projects = visibleProjects(await window.api.listProjects(), currentKind());
   } catch (e) {
     toast(cleanError(e), true);
   }
