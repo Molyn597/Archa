@@ -6,6 +6,11 @@
 
 **Translate** a PDF (including scans), Word, TXT or Markdown file into a Word file, Markdown and a PDF that looks like the original. Then **ask about each document** on its own: you decide what to ask and get an answer **with sources** that highlight the exact passage. An AI model also describes each document and **files it into folders** for you. It runs **for free on your own computer** with a local model, so **nothing leaves your machine**: no cloud, no third party, no subscription. If you prefer, it works online through [OpenRouter](https://openrouter.ai) for a few cents.
 
+> [!IMPORTANT]
+> **Archa does not include an AI model.** Before you can upload, ask or translate you need one of these:
+> - **Local (free, private):** install [LM Studio](https://lmstudio.ai) and download the models, see [Installation](#1-lm-studio-and-models-local-mode-only). Without LM Studio, local mode shows “LM Studio not found” and nothing is processed.
+> - **Online:** an [OpenRouter API key](https://openrouter.ai/keys) with a little credit, pasted in **Settings**. No LM Studio needed.
+
 ![Chat with a contract: the answer comes only from the document and points to the clause it is based on](docs/screenshots/chat.png)
 
 ## Who it is for
@@ -120,6 +125,7 @@ Download the installer from [Releases](https://github.com/Molyn597/Archa/release
 
 - **macOS:** `Archa-…-mac-universal.dmg`. Open it and drag Archa to Applications. The app is not signed with an Apple certificate, so the first time **right-click → Open** and confirm.
 - **Windows:** `Archa-…-win.exe`. If Windows shows "Windows protected your PC", click **More info → Run anyway**. The app installs for your user only and creates a desktop shortcut.
+- **Updating from TransLatte 0.2:** the update button in TransLatte can't download Archa (the repository was renamed). Close TransLatte, download the installer above and run it; it replaces TransLatte and keeps your documents. Later updates work from inside the app again.
 
 ### 3. First run
 
