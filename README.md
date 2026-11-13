@@ -6,7 +6,7 @@
 
 **Translate** a PDF (including scans), Word, TXT or Markdown file into a Word file, Markdown and a PDF that looks like the original. Then **ask about each document** on its own: you decide what to ask and get an answer **with sources** that highlight the exact passage. An AI model also describes each document and **files it into folders** for you. It runs **for free on your own computer** with a local model, so **nothing leaves your machine**: no cloud, no third party, no subscription. If you prefer, it works online through [OpenRouter](https://openrouter.ai) for a few cents.
 
-![Chat with a translated contract: the answer cites the clause, which is highlighted in the original and in the translation](docs/screenshots/chat.png)
+![Chat with a contract: the answer comes only from the document and points to the clause it is based on](docs/screenshots/chat.png)
 
 ## Who it is for
 
@@ -21,7 +21,7 @@ Writing a seminar paper or a thesis from foreign-language sources? Archa lets yo
 - **Translate as much as you need.** The whole document, only some pages (e.g. `12-30` of a book), only the paragraphs you tick, or just one chart or table: drag over it on the page and it is translated on the spot. Translate more later without starting over.
 - **Ask instead of rereading.** *“What is the author's main argument?”*, *“How does the paper define human capital?”*, *“What method did they use and on what data?”*, *“What are the limitations?”* Every answer comes with sources and page numbers, so you can quote and cite correctly in your own work.
 - **Summaries and key terms** with one click.
-- **Learn the terminology.** The paragraph-by-paragraph comparison shows the original next to the translation; the glossary keeps the technical terms of your field consistent across all your sources.
+- **Learn the terminology.** The paragraph-by-paragraph comparison shows the original next to the translation.
 - **For free and offline.** Locally it costs nothing and works without the internet, ideal for a student budget. Online, a whole article costs about half a crown.
 
 > Archa helps you find and understand what a document says. It is not legal advice: always check important answers against the cited text.
@@ -33,7 +33,7 @@ Writing a seminar paper or a thesis from foreign-language sources? Archa lets yo
 - **Built for people on a budget.** Paid translators such as [DeepL Pro](https://www.deepl.com/pro) are monthly subscriptions, and document translation is limited on the cheaper plans. Archa has no subscription:
   - **Locally it costs nothing.** The models run on your computer.
   - **Online you pay only for what you use.** With the recommended model (DeepSeek V4.1 Flash) a 15–20-page article costs around **$0.02 (≈ 0.5 CZK)** to translate, and a question in the chat costs a fraction of a cent. A $10 OpenRouter credit is enough for hundreds of articles.
-- **Made for academic and professional texts.** It keeps paragraphs, headings, footnotes, citations, links and tables, fixes typical machine-translation errors and respects your glossary of technical terms.
+- **Made for academic and professional texts.** It keeps paragraphs, headings, footnotes, citations, links and tables, and fixes typical machine-translation errors.
 - **You see what you'll pay.** The cost is estimated before you start (in USD, CZK or both) and the real cost is shown when the job finishes.
 
 > Prices are approximate and depend on the model and the document; check current prices of paid services on their websites.
@@ -44,19 +44,19 @@ Writing a seminar paper or a thesis from foreign-language sources? Archa lets yo
 - **Ask:** a chat with one document or your whole library. Answers come only from your documents, with numbered sources that highlight the passage in the original (and in the translation). You see what the model is doing, and quick actions **Summarize** and **Key terms** are one click away.
 - **Sort:** AI describes every document and files it into folders; what it is unsure about waits in the inbox for you.
 - **Private by design:** a local model keeps documents, questions and answers on your computer. Online models are optional.
-- **Translate:** a translated PDF with the original layout, plus Word (.docx) and Markdown. Tables and figures can stay as in the original, you can pick pages or paragraphs, and a glossary keeps terminology consistent. Check and fix flags untranslated words and likely typos.
+- **Translate:** a translated PDF with the original layout, plus Word (.docx) and Markdown. Tables and figures can stay as in the original, and you can pick pages or paragraphs. Check and fix flags untranslated words and likely typos.
 - **Read comfortably:** translation, paragraph-by-paragraph comparison, translated PDF, both PDFs side by side and the original, with zoom and area translation.
 - **For the Work library:** invoices, deadlines and contracts.
 - **Clean interface:** dark and light theme (or follow the system), Czech and English, macOS and Windows.
 
 <table>
   <tr>
-    <td><img src="docs/screenshots/translate.png" alt="Translate screen: drop a document, choose where to translate, the model and the languages"></td>
-    <td><img src="docs/screenshots/compare.png" alt="Paragraph-by-paragraph comparison of the original and the translation, light theme"></td>
+    <td><img src="docs/screenshots/overview.png" alt="Overview of the Work library: ask your documents, what is waiting for you, recent documents and finance"></td>
+    <td><img src="docs/screenshots/compare.png" alt="Paragraph-by-paragraph comparison of the original and the Czech translation, with the library folders on the left"></td>
   </tr>
   <tr>
-    <td align="center">Translate: where, which model, which languages</td>
-    <td align="center">Comparison of original and translation (light theme)</td>
+    <td align="center">Overview: ask your documents, what needs attention, sorted folders</td>
+    <td align="center">Comparison of original and translation</td>
   </tr>
 </table>
 
@@ -123,23 +123,22 @@ Download the installer from [Releases](https://github.com/Molyn597/Archa/release
 
 ### 3. First run
 
-A short welcome guide asks whether you want to translate locally or online; you can change it any time on the home screen. For online mode paste your OpenRouter API key in **Settings** and you're done.
+A short welcome guide asks whether AI should run on your computer or online and which **libraries** you want: **Work** (contracts, invoices, deadlines), **Study** (subjects, articles, study plan) and **Personal**. Each library has its own documents, folders, chat and optional password; you switch between them at the top of the left panel. For online mode paste your OpenRouter API key in **Settings** and you're done.
 
-The connection status (LM Studio or OpenRouter and the active model) is shown at the bottom of the left sidebar; click it for details. In **Settings** each role (OCR, translation, fixes) has a model selected. If you downloaded the models from the table, everything is set. Change the server address (`http://localhost:1234`) only if LM Studio runs on another port or machine. The app language (Czech or English, by default following the system) can be changed in **Settings → Appearance**.
+The connection status (LM Studio or OpenRouter and the active model) is shown at the bottom of the left panel; click it for details. In **Settings** each role (OCR, translation, fixes) has a model selected. If you downloaded the models from the table, everything is set. Change the server address (`http://localhost:1234`) only if LM Studio runs on another port or machine. The app language (Czech or English, by default following the system) can be changed in **Settings → Appearance**.
 
-## How to translate
+## How to use it
 
-1. On the **Translate** tab, drop files (PDF, DOCX, TXT, MD) into the window or click **Choose files**.
-2. Choose **where** to translate (on your computer or online), check the **model** and the **languages**. Locally you can also pick the **quality** (Fast, Balanced, Best); online always uses the best mode, which costs only one extra short request. Optionally keep **tables and figures from the original**, **pick paragraphs** before translating or translate **only some pages** (e.g. `1-5, 8`).
-3. Check the estimate and click **Translate**.
-4. Finished translations are in **History**. The document detail has a fixed bar with **Word**, **Open PDF** and a **⋯** menu (save as, show in folder, re-typeset the PDF, translate again, delete) and these tabs:
-   - **Translation**: the translated text only.
-   - **Comparison**: original and translation paragraph by paragraph. The **N to review** link jumps to places worth checking.
-   - **Translated PDF** and **PDFs side by side**: the translated PDF with the original layout, on its own or next to the original.
-   - **Original** and **Information** (models used, time, cost, notes).
-5. Open the **chat** with the button in the top right corner and ask anything about the document.
+1. **Upload:** click **Upload** and drop files (PDF, scans, DOCX, TXT, MD) into the window. AI describes each document and files it into a folder; what it is unsure about waits in the **Inbox**.
+2. **Ask:** open a document and click **Ask**, or ask the whole library from the **Overview**. Every answer comes with numbered sources from the document.
+3. **Translate:** in the document click **Translate**, choose **where** (on your computer or online), check the **model** and the **languages**. Locally you can also pick the **quality** (Fast, Balanced, Best); online always uses the best mode. Optionally keep **tables and figures from the original**, **pick paragraphs** or translate **only some pages** (e.g. `1-5, 8`). Check the estimate and start.
+4. The document detail has these tabs:
+   - **Document**: the original; drag over a page to zoom into an area and translate just that part.
+   - **Translation**: **Text**, **Comparison** (paragraph by paragraph), **PDF** (the translated PDF with the original layout) and **Side by side**.
+   - **Overview**: summary, key facts and, for contracts, what to watch out for.
+   - **Related** and **File**.
 
-The **Help** tab explains everything in more detail; the “?” next to each option jumps to the right section.
+**Help** in the left panel explains everything in more detail.
 
 ### Quality (local mode)
 
@@ -153,14 +152,14 @@ The **Help** tab explains everything in more detail; the “?” next to each op
 
 1. **Extraction:** text and page layout (paragraphs, headings, tables, links) are read from the PDF. Headers, footers and page numbers are skipped. Scanned pages are read by the OCR model.
 2. **Translation:** TranslateGemma (or the online model) translates paragraph by paragraph, several requests at once. Dates like `03-10-2014` are first rewritten into an unambiguous form so day and month don't get swapped.
-3. **Check:** typical errors are found without a model: untranslated words, missing glossary terms, Czech prepositions (se/ze, ke/ve), spelling via a Hunspell dictionary, and truncated or repeated sentences. The Czech dictionary is downloaded on first use.
+3. **Check:** typical errors are found without a model: untranslated words, Czech prepositions (se/ze, ke/ve), spelling via a Hunspell dictionary, and truncated or repeated sentences. The Czech dictionary is downloaded on first use.
 4. **Fix:** Gemma rewrites only the paragraphs with errors and leaves the rest alone.
 5. **Output:** a Word file, Markdown and, for PDFs, a translated PDF. In it the original text is covered with the background colour, the translation is set in the same place and links stay clickable.
 
-Jobs, outputs and chat history are stored in the app folder:
+Documents, outputs and chat history are stored per library in the app folder:
 
-- macOS: `~/Library/Application Support/Archa/jobs`
-- Windows: `%APPDATA%\Archa\jobs`
+- macOS: `~/Library/Application Support/Archa/libraries`
+- Windows: `%APPDATA%\Archa\libraries`
 
 Archa was previously called TransLatte. On the first start it moves the old `TransLatte` app folder to `Archa`, so your documents stay where they were. On macOS the online API key has to be entered again once, because the system keychain entry belongs to the old app name.
 
@@ -171,10 +170,6 @@ Choose **Online** on the home screen and paste your [OpenRouter API key](https:/
 - **Cost:** you pay only for what you translate, from your OpenRouter credit. Measured with DeepSeek V4.1 Flash: about $0.001 per page, i.e. roughly $0.02 for a 15–20-page article. The estimate is shown before you start and the real cost after the job; prices can be shown in USD, CZK or both.
 - **Models:** in **Settings** pick a model from the OpenRouter catalog (with prices and a cost estimate per article; refresh the list any time). The default is `deepseek/deepseek-v4.1-flash` (best Czech in our comparison of eight cheap models); `google/gemini-3.1-flash-lite` is a faster alternative at about twice the price. Models ending in `:free` cost nothing but are slow (one request per ~3 s), have daily limits and the provider may use your data.
 - **Privacy:** the text of your documents (and page images when OCR or table repair runs) is sent over the internet to the model provider. The same applies to the document chat when you choose an online model in it. Use local mode for sensitive documents.
-
-## Glossary
-
-On the **Glossary** tab you set binding translations of technical terms (e.g. *performance review → hodnocení výkonu*). After translation the check warns when a term is missing and the fix step adds it.
 
 ## Troubleshooting
 
