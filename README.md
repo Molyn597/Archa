@@ -2,9 +2,9 @@
 
 # Archa
 
-**Drop a document, ask about it, and let it sort your documents. Privately, on your own computer.**
+**Translate your documents and ask them questions. Privately, on your own computer: no data leaves your machine.**
 
-Upload a PDF (including scans), Word, TXT or Markdown file and **ask it questions**: you get an answer **with sources** that highlight the exact passage in the document. An AI model describes each document and **files it into folders** for you. It runs **for free on your own computer** with a local model (nothing leaves your machine), or online through [OpenRouter](https://openrouter.ai) for a few cents. Need the document in another language? Archa also **translates** it into a Word file, Markdown and a PDF that looks like the original.
+**Translate** a PDF (including scans), Word, TXT or Markdown file into a Word file, Markdown and a PDF that looks like the original. Then **ask about each document** on its own: you decide what to ask and get an answer **with sources** that highlight the exact passage. An AI model also describes each document and **files it into folders** for you. It runs **for free on your own computer** with a local model, so **nothing leaves your machine**: no cloud, no third party, no subscription. If you prefer, it works online through [OpenRouter](https://openrouter.ai) for a few cents.
 
 ![Chat with a translated contract: the answer cites the clause, which is highlighted in the original and in the translation](docs/screenshots/chat.png)
 
