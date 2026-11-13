@@ -291,17 +291,12 @@ function editPop(hl: Highlight, anchor: DOMRect) {
   place(pop, anchor);
 }
 
-/** Přehled v záložce Informace: skok na místo, smazání jednoho i všech, skrytí. */
+/** Přehled v záložce Přehled: skok na místo, smazání jednoho i všech, skrytí. Bez zvýraznění se neukáže. */
 export function highlightsSection() {
+  if (!ctx?.current() || !list.length) return null;
   const box = h('div', { class: 'setting-group hl-overview' });
-  const detail = ctx?.current();
-  if (!detail) return box;
   const head = h('div', { class: 'hl-overview-head' }, h('h2', {}, t('highlight.overview', { count: list.length })));
   box.append(head);
-  if (!list.length) {
-    box.append(h('p', { class: 'muted' }, t('highlight.empty')));
-    return box;
-  }
   head.append(
     h('button', { class: 'btn', type: 'button', onclick: () => setHidden(!hidden) }, icon(hidden ? ICONS.eyeOff : ICONS.eye), t(hidden ? 'highlight.show' : 'highlight.hide')),
     h('button', {

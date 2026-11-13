@@ -330,7 +330,6 @@ function buildPanel() {
         },
         icon(ICONS.trash),
       ),
-      h('button', { class: 'btn', title: t('chat.hide'), 'aria-label': t('chat.hide'), onclick: () => setOpen(false) }, icon(ICONS.collapse)),
     ),
     h('div', { class: 'chat-messages', id: 'chat-messages' }),
     ...(scope === 'doc' ? [h('div', { class: 'chat-quick' }, quick('chat.summary', 'chat.summaryPrompt'), quick('chat.keyPoints', 'chat.keyPointsPrompt'))] : []),
@@ -392,9 +391,8 @@ async function loadHistory() {
   renderModel();
 }
 
-// Zavřený chat v detailu úlohy zůstane jako úzká lišta u pravého okraje.
-function syncRail() {
-  $('chat-rail').hidden = open || jobId === null;
+// Chat se otevírá a zavírá ikonou v horní liště, vidět je všude, kde je k čemu se ptát.
+function syncBar() {
   const bar = $('chat-bar');
   bar.hidden = jobId === null;
   bar.classList.toggle('active', open);
@@ -405,7 +403,7 @@ function syncRail() {
 function setOpen(value: boolean) {
   open = value;
   panel().hidden = !open;
-  syncRail();
+  syncBar();
   // Levý panel se podle toho automaticky skládá na lištu.
   document.dispatchEvent(new CustomEvent<boolean>('chat-open-changed', { detail: open }));
   if (open) {
@@ -425,13 +423,13 @@ export function showChat(j: Job) {
   jobId = j.id;
   job = j;
   if (fromLibrary && open) setOpen(false);
-  syncRail();
+  syncBar();
   void load();
 }
 
-/** Chat s celou knihovnou ve view Knihovna; panel se otevře až na žádost (nebo znovu, byl-li otevřený). */
-export function showLibraryChat() {
-  // Po návratu do Knihovny s vybraným projektem zůstává chat projektu.
+/** Chat s celou knihovnou mimo detail; panel se otevře až na žádost (nebo znovu, byl-li otevřený). keepProject: v Dokumentech zůstává chat vybraného projektu. */
+export function showLibraryChat(keepProject = true) {
+  if (!keepProject) proj = null;
   if (scope === 'project' && proj) return enter('project', projectChatKey(proj.id));
   enter('library', LIBRARY_CHAT);
 }
@@ -469,7 +467,7 @@ function enter(next: 'library' | 'project', key: string) {
   scope = next;
   jobId = key;
   job = null;
-  syncRail();
+  syncBar();
   if (restore) {
     restore = false;
     return setOpen(true);
@@ -497,7 +495,7 @@ export function resetChat() {
   if (open) restore = scope !== 'doc';
   jobId = null;
   if (open) setOpen(false);
-  syncRail();
+  syncBar();
 }
 
 const WIDTH_KEY = 'chatWidth';
@@ -558,7 +556,6 @@ export function setupChat(chatHost: ChatHost) {
     run.reasoning += d.reasoning ?? '';
     renderMessages();
   });
-  $('chat-rail').addEventListener('click', () => setOpen(true));
   $('chat-bar').addEventListener('click', () => setOpen(!open));
   setupResize();
 }

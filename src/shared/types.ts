@@ -268,6 +268,8 @@ export interface MoveOptions {
   fromFolder?: string;
   /** Projekty, které se přesunou do cíle (celé, i s chatem); jejich zdroje musí být mezi přesouvanými dokumenty. */
   projectIds?: string[];
+  /** Návrh složek v cíli (název nebo cesta; první existující vyhraje). Bez nich se použije návrh z karty dokumentu. */
+  folders?: string[];
 }
 /** Dotaz, kam zařadit dokument; možnosti jsou cesty složek (i dosud neexistujících). */
 export interface FolderQuestion {
@@ -639,6 +641,8 @@ export interface Settings {
   sourceLang: string;
   targetLang: string;
   notify: boolean;
+  /** Tečka a seznam novinek pod zvonkem v horní liště. */
+  bell: boolean;
   /** Po dokončení překladu vytvořit kartu dokumentu (shrnutí, klíčová slova, bibliografie). */
   autoCard: boolean;
   /** Sledovaná složka na disku: nové soubory se samy přečtou a padnou do Odkladiště. */

@@ -1,6 +1,7 @@
 import { cp, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { t } from '../shared/i18n';
+import { folderHints } from '../shared/library-suggest';
 import { dropSources, pathForTarget, pathNames, placeEntries, pruneFolders, releaseEntries, touchedFolders } from '../shared/library-transfer';
 import { templateLibrary } from '../shared/library-templates';
 import type { Libraries, Library, MoveOptions, Project } from '../shared/types';
@@ -68,7 +69,8 @@ export async function moveToLibrary(store: Store, appRoot: string, libs: Librari
   const source = await store.library();
 
   // 1. Kontrola předem. Karty a názvy se čtou ještě před jakoukoli změnou.
-  const suggestions: Record<string, string | undefined> = {};
+  const suggestions: Record<string, string[]> = {};
+  const hints: Record<string, string[]> = {};
   const names: Record<string, string> = {};
   for (const id of [...ids]) {
     const locked = (await store.isLockedJob(id)) || shouldBeLocked(source, id);
@@ -82,7 +84,9 @@ export async function moveToLibrary(store: Store, appRoot: string, libs: Librari
     }
     if (BUSY.has(job.status)) throw new Error(t('libs.moveBusy', { name }));
     if (await exists(path.join(targetRoot, 'jobs', id))) throw new Error(t('libs.moveExists', { name }));
-    suggestions[id] = (await store.card(id))?.folder;
+    const card = await store.card(id);
+    hints[id] = opts.folders ?? folderHints(card?.type, info.kind);
+    suggestions[id] = [...hints[id], ...(card?.folder ? [card.folder] : [])];
     names[id] = name;
   }
   // Přesouvané projekty se čtou předem; chybějící se přeskočí.
@@ -109,7 +113,9 @@ export async function moveToLibrary(store: Store, appRoot: string, libs: Librari
     const raw = await readFile(file, 'utf8').then((s) => JSON.parse(s) as Library, () => null);
     const target: Library = raw?.folders ? { ...raw, assign: raw.assign ?? {} } : templateLibrary(info.kind);
     const paths: Record<string, string[]> = {};
-    if (opts.keepFolders) for (const id of ids) paths[id] = pathForTarget(pathNames(source.folders, source.assign[id]?.folder, opts.fromFolder), info.kind);
+    // Dokument z Ostatní nebo bez složky (např. článek z Práce do Studia) se zařadí podle návrhu, ne do Ostatní v cíli.
+    const byHint = (id: string) => !opts.fromFolder && hints[id].length > 0 && (!!opts.folders || [undefined, 'other'].includes(source.assign[id]?.folder));
+    if (opts.keepFolders) for (const id of ids) if (!byHint(id)) paths[id] = pathForTarget(pathNames(source.folders, source.assign[id]?.folder, opts.fromFolder), info.kind);
     placeEntries(target, ids, suggestions, source.paid, paths);
     await writeAtomic(file, target);
   } catch (e) {

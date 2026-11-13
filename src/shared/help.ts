@@ -91,7 +91,7 @@ const cs: HelpSection[] = [
     id: 'chat',
     title: 'Chat s dokumentem',
     blocks: [
-      { p: 'V detailu dokumentu se můžeš ptát na jeho obsah. Chat otevřeš tlačítkem vpravo nahoře nebo lištou u pravého okraje. Šířku panelu změníš tažením za jeho levý okraj a stejným tlačítkem ho zasuneš.' },
+      { p: 'V detailu dokumentu se můžeš ptát na jeho obsah. Chat otevřeš tlačítkem Zeptat se nebo ikonou vpravo nahoře. Šířku panelu změníš tažením za jeho levý okraj a stejným tlačítkem ho zasuneš.' },
       { p: 'Odpovídá se jen z textu dokumentu. U odpovědi jsou čísla zdrojů [1], [2]…; kliknutím na číslo se místo zvýrazní v originálu i v překladu. Tlačítka Shrň dokument a Klíčové pojmy zeptají se na to nejčastější za tebe.' },
       { p: 'Dole vybíráš model. V počítači: dokument ani dotazy neopustí tvůj počítač. Online: dotaz a potřebné části textu se posílají přes OpenRouter, proto je potřeba API klíč z Nastavení.' },
       { p: 'Při odpovídání vidíš kroky: načítání modelu, hledání klíčových slov, nalezené úseky a psaní odpovědi.' },
@@ -232,7 +232,7 @@ const en: HelpSection[] = [
     id: 'chat',
     title: 'Chat with the document',
     blocks: [
-      { p: 'In a document’s details you can ask questions about its content. Open the chat with the button at the top right or the bar at the right edge. Drag its left edge to change the width, and use the same button to slide it away.' },
+      { p: 'In a document’s details you can ask questions about its content. Open the chat with the Ask button or the icon at the top right. Drag its left edge to change the width, and use the same button to slide it away.' },
       { p: 'Answers come only from the document’s text. They carry source numbers [1], [2]…; clicking a number highlights the place in both the original and the translation. The Summarize and Key terms buttons ask the most common questions for you.' },
       { p: 'You choose the model at the bottom. On this computer: neither the document nor your questions leave your computer. Online: the question and the needed parts of the text are sent via OpenRouter, so an API key from Settings is required.' },
       { p: 'While answering you see the steps: loading the model, searching for keywords, the passages found and writing the answer.' },

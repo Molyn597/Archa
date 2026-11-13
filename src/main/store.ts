@@ -19,6 +19,7 @@ export const DEFAULT_SETTINGS: Settings = {
   sourceLang: 'auto',
   targetLang: 'cs',
   notify: true,
+  bell: true,
   autoCard: true,
   nameTemplate: DEFAULT_NAME_TEMPLATE,
   citation: { enabled: true, style: 'iso690' },

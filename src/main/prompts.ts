@@ -156,6 +156,11 @@ export const searchTermsPrompt = (question: string, source: string, target: stri
   `in both ${englishName(source)} and ${englishName(target)}, including synonyms and related technical terms. ` +
   'Output only the keywords separated by commas.';
 
+/** Knihovny uživatele a stromová struktura otevřené: odpověď na „kam to patří“ má být existující knihovna a složka. */
+export const libraryContext = (libraries: string[], tree: string[], moveLabel: string) =>
+  `User's libraries: ${libraries.join(', ')}.\nFolders of the open library: ${tree.slice(0, 40).join('; ')}.\n` +
+  `Exception to the rules below: if asked where a document belongs, answer with one of these libraries and one of its folders, and say it can be moved via ⋯ › "${moveLabel}".\n\n`;
+
 export const DOCUMENT_CHAT_SYSTEM =
   'You answer questions about one document using only the numbered passages below (p. = page). Rules:\n' +
   '- Use only information from the passages, never outside knowledge. If they do not contain the answer, say so in one sentence.\n' +

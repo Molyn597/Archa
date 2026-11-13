@@ -2,7 +2,7 @@ import { locale, t, type MessageKey } from '../shared/i18n';
 import { formatMoney } from '../shared/money';
 import { day, filterInvoices, invoiceRows, invoiceSums, isoDay, periodRange, sortInvoices, type InvoicePeriod, type InvoiceRow, type InvoiceSortKey, type InvoiceStatusFilter } from '../shared/invoices';
 import type { DocumentCard, Job } from '../shared/types';
-import { cleanError, h, icon, ICONS, toast } from './dom';
+import { actionMenu, cleanError, h, icon, ICONS, toast } from './dom';
 
 export interface InvoicesCtx {
   jobs: Job[];
@@ -62,8 +62,8 @@ export function renderInvoices(root: HTMLElement, ctx: InvoicesCtx) {
     select(period, [['all', 'inv.period.all'], ['thisMonth', 'inv.period.thisMonth'], ['lastMonth', 'inv.period.lastMonth'], ['thisYear', 'inv.period.thisYear'], ['lastYear', 'inv.period.lastYear']], (v) => ((period = v), ctx.redraw())),
     select(status, [['all', 'inv.filter.allStatus'], ['open', 'inv.filter.open'], ['overdue', 'inv.filter.overdue'], ['paid', 'inv.filter.paid']], (v) => ((status = v), ctx.redraw())),
     h('span', { class: 'inv-count' }, t('inv.count', { count: rows.length })),
-    h('button', { class: 'btn', type: 'button', disabled: !rows.length, onclick: () => exportTo('xlsx') }, icon(ICONS.download), t('inv.exportXlsx')),
-    h('button', { class: 'btn', type: 'button', disabled: !rows.length, onclick: () => exportTo('csv') }, icon(ICONS.download), t('inv.exportCsv')),
+    h('button', { class: 'btn primary', type: 'button', disabled: !rows.length, onclick: () => exportTo('xlsx') }, icon(ICONS.download), t('inv.exportXlsx')),
+    actionMenu(() => [{ label: t('inv.exportCsv'), icon: ICONS.download, disabled: !rows.length, run: () => exportTo('csv') }]),
   );
 
   const bar = h(

@@ -60,7 +60,6 @@ export const ICONS = {
   minus: '<path d="M5 12h14" />',
   plus: '<path d="M12 5v14M5 12h14" />',
   fit: '<path d="M4 9V5h4M20 9V5h-4M4 15v4h4M20 15v4h-4" />',
-  collapse: '<path d="M13 6l6 6-6 6M5 6l6 6-6 6" />',
   chevron: '<path d="M6 9l6 6 6-6" />',
   lock: '<rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" />',
   globe: '<circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z" />',
@@ -87,6 +86,9 @@ export function chatWarningText(model: { key: string; name: string; context?: nu
   const w = chatModelWarning(model);
   return w && t(`chat.warn.${w}`, { n: formatContext(model.context) });
 }
+
+/** Malé „?“ s vysvětlením v tooltipu; delší popis nepatří pod nadpis. */
+export const helpTip = (text: string) => h('span', { class: 'help-dot', tabindex: '0', role: 'img', title: text, 'aria-label': text }, '?');
 
 export const cleanError = (e: unknown) => (e as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
 
@@ -239,4 +241,46 @@ export function rememberOpen(details: HTMLDetailsElement, key: string, forceOpen
       /* bez úložiště se stav jen nepamatuje */
     }
   });
+}
+
+// Řetězec v nabídce je nadpis skupiny, null oddělovač.
+// `remove` přidá k položce křížek (odebrání uloženého hledání apod.).
+export type MenuItem = { label: string; icon?: string; danger?: boolean; disabled?: boolean; run: () => unknown; remove?: { title: string; run: () => unknown } } | string | null;
+
+/** Tlačítko „⋯“ s nabídkou; položky se sestaví až při otevření, ať odpovídají aktuálnímu stavu. */
+export function actionMenu(items: () => MenuItem[]) {
+  const menu = h('div', { class: 'menu', role: 'menu', hidden: true });
+  const entry = (item: MenuItem) => {
+    if (item === null) return h('div', { class: 'menu-sep' });
+    if (typeof item === 'string') return h('div', { class: 'menu-label' }, item);
+    const run = (fn: () => unknown) => () => {
+      menu.hidden = true;
+      void Promise.resolve()
+        .then(fn)
+        .catch((e) => toast(cleanError(e), true));
+    };
+    const button = h('button', { type: 'button', role: 'menuitem', class: item.danger ? 'danger' : false, disabled: !!item.disabled, onclick: run(item.run) }, item.icon ? icon(item.icon) : null, item.remove ? h('span', { class: 'menu-grow' }, item.label) : item.label);
+    if (!item.remove) return button;
+    const x = h('button', { class: 'menu-x', type: 'button', title: item.remove.title, 'aria-label': `${item.remove.title}: ${item.label}`, onclick: run(item.remove.run) }, icon(ICONS.x));
+    return h('div', { class: 'menu-row', role: 'none' }, button, x);
+  };
+  const button = h(
+    'button',
+    {
+      class: 'btn icon-only',
+      type: 'button',
+      title: t('detail.more'),
+      'aria-label': t('detail.more'),
+      'aria-haspopup': 'menu',
+      onclick: (e: Event) => {
+        e.stopPropagation();
+        const open = menu.hidden;
+        for (const m of document.querySelectorAll<HTMLElement>('.menu')) m.hidden = true;
+        if (open) menu.replaceChildren(...items().map(entry));
+        menu.hidden = !open;
+      },
+    },
+    icon(ICONS.more),
+  );
+  return h('div', { class: 'menu-wrap' }, button, menu);
 }

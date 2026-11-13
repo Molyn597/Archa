@@ -3,7 +3,7 @@ import { docTitle } from '../shared/doc-title';
 import { t } from '../shared/i18n';
 import { day, isoDay } from '../shared/invoices';
 import type { ChangeSummary, CompareResult, Job } from '../shared/types';
-import { cleanError, h, icon, toast } from './dom';
+import { actionMenu, cleanError, h, helpTip, icon, toast } from './dom';
 
 export interface CompareHost {
   /** Zpět na detail dokumentu, ze kterého se porovnání otevřelo. */
@@ -76,7 +76,7 @@ function render() {
     { class: 'cmp-head' },
     h('button', { class: 'icon-btn', type: 'button', title: t('detail.back'), 'aria-label': t('detail.back'), onclick: () => host.back() }, icon(BACK)),
     h('div', { class: 'cmp-ttl' }, h('div', { class: 'cmp-meta' }, h('span', { class: 'chip accent' }, t('compare.title')), count ? h('span', {}, t('compare.count', { count })) : null), h('h1', {}, titleA)),
-    h('button', { class: 'btn', type: 'button', onclick: () => void openCompare(b.job.id, a.job.id, true) }, icon(SWAP), t('compare.swap')),
+    actionMenu(() => [{ label: t('compare.swap'), icon: SWAP, run: () => openCompare(b.job.id, a.job.id, true) }]),
   );
   const heads = h('div', { class: 'cmp-heads' }, h('span', {}, t('compare.head', { title: titleA, date: added(a.job) })), h('span', {}, t('compare.head', { title: titleB, date: added(b.job) })));
   if (!count) {
@@ -119,7 +119,7 @@ function render() {
   const list = h(
     'section',
     { class: 'ov-card' },
-    h('h2', {}, t('compare.changes')),
+    h('h2', {}, t('compare.changes'), helpTip(t('compare.changesHint'))),
     h(
       'div',
       { class: 'chglist' },
@@ -133,7 +133,6 @@ function render() {
         ),
       ),
     ),
-    h('p', { class: 'muted small' }, t('compare.changesHint')),
   );
   const ai = h('section', { class: 'ov-card cmp-ai' });
   fillAi(ai, state);
@@ -161,9 +160,9 @@ function fillAi(box: HTMLElement, r: CompareResult) {
     if (state === r) fillAi(box, r);
   };
   const s = r.summary;
-  const button = h('button', { class: 'btn', type: 'button', disabled: busy, onclick: () => void run(!!s) }, busy ? h('span', { class: 'chat-spin' }) : null, t(busy ? 'compare.summarizing' : s ? 'compare.again' : 'compare.summarize'));
+  const button = h('button', { class: 'btn primary', type: 'button', disabled: busy, onclick: () => void run(!!s) }, busy ? h('span', { class: 'chat-spin' }) : null, t(busy ? 'compare.summarizing' : s ? 'compare.again' : 'compare.summarize'));
   box.replaceChildren(
-    h('h2', {}, t('compare.ai')),
+    h('h2', {}, t('compare.ai'), helpTip(t('compare.aiNote'))),
     ...(s && !busy
       ? [
           ...(s.summary ? [h('p', {}, s.summary)] : []),
@@ -179,6 +178,5 @@ function fillAi(box: HTMLElement, r: CompareResult) {
         ]
       : []),
     h('div', { class: 'cmp-ai-foot' }, button),
-    h('p', { class: 'muted small' }, t('compare.aiNote')),
   );
 }

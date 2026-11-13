@@ -9,8 +9,9 @@ import { activeModels, activeRates, isOnline } from '../shared/provider';
 import type { Api, DuplicateMatch, FileInfo, Job, LmStatus, Mode, Models, Provider, Settings } from '../shared/types';
 import { askLibrary, renderFolderOpt, setupLibraryChat, showLibraryChat, syncChatSettings } from './chat';
 import { citeSegment, closeDetail, detailJobId, openDetail, setupDetail, updateDetail, type Tab } from './detail';
-import { applySavedSearch, createProject, leaveProject, savedSearches, libraryCards, openFolder, openProject, projectSelected, reloadLibrary, renderLibrary, setupLibrary, libraryView, selectedTitle, showAll, showDeadlines, showInvoices, showUnsorted, type LibraryView } from './library';
+import { applySavedSearch, createProject, leaveProject, savedSearches, libraryCards, openFolder, openProject, projectSelected, reloadLibrary, renderLibrary, revealDoc, setupLibrary, libraryView, selectedTitle, showAll, showDeadlines, showInvoices, showMissing, showUnsorted, type LibraryView } from './library';
 import { addToLibrary, refreshOverview, renderOverview, setupOverview } from './overview';
+import { setupNotifications, updateNotifications } from './notifications';
 import { openCompare, setupCompare } from './compare-view';
 import { setupPractice } from './practice-view';
 import { currentKind, promptLibraryKind, setupLibrarySwitch } from './library-switch';
@@ -83,7 +84,7 @@ function show(next: View) {
   if (next === 'history') {
     reloadLibrary();
     showLibraryChat();
-  }
+  } else if (next !== 'detail') showLibraryChat(false);
   if (next === 'overview' || next === 'finance') void refreshOverview();
   if (next === 'upload') renderUpload();
   if (next === 'projects') void renderProjectsPage();
@@ -196,6 +197,7 @@ async function checkUpdates() {
 
 async function openJob(id: string, tab?: Tab) {
   if (!(await openDetail(id, tab))) return;
+  revealDoc(id);
   void window.api.jobOpened(id).catch(() => undefined);
   show('detail');
 }
@@ -271,6 +273,7 @@ async function setProvider(p: Provider) {
   await window.api.saveSettings(settings);
   lastStatus = undefined;
   syncChatSettings(settings);
+  updateNotifications();
   renderAll();
   void refreshStatus();
 }
@@ -811,6 +814,7 @@ async function init() {
     showLibrary: () => view !== 'history' && show('history'),
     folderChanged: renderFolderOpt,
     selectionChanged: syncNav,
+    showSettings: () => show('settings'),
   });
   setupUpload({ jobs: sorted, settings: () => settings, show: () => show('upload'), openJob, showAll });
   setupOverview({
@@ -823,10 +827,12 @@ async function init() {
     openJob: (id) => void openJob(id),
     showDeadlines,
     showUnsorted,
+    showMissing,
     showInvoices,
     ask: (question) => void askLibrary(question),
     ai: () => (lastStatus ? { remote: lastStatus.provider === 'openrouter', online: lastStatus.online, state: lmState(lastStatus) } : undefined),
   });
+  setupNotifications({ jobs: sorted, settings: () => settings, openJob: (id) => void openJob(id), openProject, showUnsorted, showAll, showInvoices, showDeadlines });
   setupProjectsPage({ open: openProject, create: () => createProject() });
   void setupLibrarySwitch();
   void applyNavKind();
@@ -842,6 +848,7 @@ async function init() {
     },
   });
   fillHelpDots(showHelp);
+  showLibraryChat(false);
   const pageRange = $<HTMLInputElement>('page-range');
   pageRange.addEventListener('input', () => {
     pageRange.classList.toggle('invalid', !isValidPageRange(pageRange.value));
@@ -862,6 +869,7 @@ async function init() {
   window.api.onJobUpdate((job) => {
     const wasActive = jobs.get(job.id) && isActive(jobs.get(job.id)!);
     jobs.set(job.id, job);
+    updateNotifications();
     if (job.id === wordJobId) {
       if (job.status === 'done') offerWord(job);
       else if (job.status === 'error' || job.status === 'cancelled') wordJobId = undefined;
@@ -880,6 +888,7 @@ async function init() {
   });
   window.api.onJobRemoved((id) => {
     jobs.delete(id);
+    updateNotifications();
     renderHome();
     renderUpload();
     if (view === 'history') reloadLibrary();

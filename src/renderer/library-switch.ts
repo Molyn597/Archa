@@ -1,7 +1,8 @@
 import { t, type MessageKey } from '../shared/i18n';
 import { parseSubjects } from '../shared/library-templates';
+import { suggestLibrary, type LibrarySuggestion } from '../shared/library-suggest';
 import type { StudyOffer } from '../shared/library-transfer';
-import type { Libraries, LibraryInfo, LibraryKind, MoveOptions } from '../shared/types';
+import type { DocumentCard, Libraries, LibraryInfo, LibraryKind, MoveOptions } from '../shared/types';
 import { cleanError, h, icon, ICONS, openModal, toast } from './dom';
 
 const KINDS: LibraryKind[] = ['work', 'study', 'personal'];
@@ -64,7 +65,21 @@ export async function promptLibraryKind() {
 
 /** Typ otevřené knihovny a první studijní knihovna (cíl nabídky přesunu článků a knih). */
 export const currentKind = () => current()?.kind;
+export const currentTitle = () => (current() ? libraryTitle(current()!) : '');
+export const currentLibraryId = () => libs?.current;
 export const studyLibrary = () => libs?.list.find((l) => l.kind === 'study' && l.id !== libs!.current);
+
+/** Jiná knihovna, kam dokument podle karty patří (např. článek z Práce do Studia), s jejím záznamem; null = zůstává. */
+export function libraryFor(card?: DocumentCard): (LibrarySuggestion & { library: LibraryInfo }) | null {
+  const cur = current();
+  if (!libs || !cur || !card) return null;
+  const found = suggestLibrary({ kind: cur.kind, currentId: cur.id, type: card.type, cardFolder: card.folder, libraries: libs.list });
+  const library = found && libs.list.find((l) => l.id === found.libraryId);
+  return found && library ? { ...found, library } : null;
+}
+
+/** Přesun jednoho dokumentu do jiné knihovny do navržených složek (bez zachování stromu; používá nahrávání). */
+export const moveDocTo = (id: string, library: LibraryInfo, folders: string[]) => runMove([id], library, { folders });
 
 async function runMove(ids: string[], target: LibraryInfo, opts: MoveOptions) {
   try {
@@ -106,9 +121,14 @@ export async function moveStudy(offer: StudyOffer, done?: () => void) {
  * Výběr cílové knihovny pro přesun dokumentů (se strukturou složek); po přesunu toast s počtem.
  * S `folder` se přesouvá celá složka: po potvrzení se přesunou její dokumenty a prázdná složka ve zdroji zmizí.
  */
-export function moveToLibraryModal(ids: string[], done?: () => void, folder?: { id: string; name: string }) {
+export async function moveToLibraryModal(ids: string[], done?: () => void, folder?: { id: string; name: string }) {
   const targets = libs?.list.filter((l) => l.id !== libs!.current) ?? [];
   if (!targets.length || !ids.length) return;
+  // Doporučená knihovna: tu, kam podle karet patří všechny vybrané dokumenty (celé složky se nenavrhují).
+  const cards = folder ? {} : (await window.api.libraryState().catch(() => undefined))?.cards ?? {};
+  const wanted = new Set(ids.map((id) => libraryFor(cards[id])?.libraryId));
+  const suggested = wanted.size === 1 ? [...wanted][0] : undefined;
+  targets.sort((a, b) => Number(b.id === suggested) - Number(a.id === suggested));
   let close = () => {};
   const pick = async (l: LibraryInfo) => {
     close();
@@ -120,7 +140,14 @@ export function moveToLibraryModal(ids: string[], done?: () => void, folder?: { 
     t('libs.moveTitle'),
     [
       h('p', {}, t('libs.moveText', { count: ids.length })),
-      h('div', { class: 'proj-field' }, ...targets.map((l) => h('button', { class: 'kind-option', type: 'button', onclick: () => void pick(l) }, h('strong', {}, libraryTitle(l)), h('span', { class: 'muted small' }, t(`libraryKind.${l.kind}`))))),
+      h('div', { class: 'proj-field' }, ...targets.map((l) =>
+          h(
+            'button',
+            { class: `kind-option${l.id === suggested ? ' selected' : ''}`, type: 'button', onclick: () => void pick(l) },
+            h('strong', {}, libraryTitle(l)),
+            h('span', { class: 'muted small' }, t(`libraryKind.${l.kind}`), l.id === suggested && ` · ${t('libs.suggested')}`),
+          ),
+        )),
     ],
     [h('button', { class: 'btn', type: 'button', onclick: () => close() }, t('libs.cancel'))],
   );

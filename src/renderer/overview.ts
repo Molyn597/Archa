@@ -1,9 +1,9 @@
 import type { Deadline } from '../shared/deadlines';
 import { docSubtitle, docTitle } from '../shared/doc-title';
-import { locale, t, type MessageKey } from '../shared/i18n';
-import { day, invoiceRows, invoiceSums, isoDay, type CurrencySum, type InvoiceStatusFilter } from '../shared/invoices';
-import { formatMoney } from '../shared/money';
-import { daysBetween, dueTone, invoiceStats, latestProjects, newestJobs, relativeDue, toSort } from '../shared/overview';
+import { t, type MessageKey } from '../shared/i18n';
+import { day, invoiceRows, isoDay, type CurrencySum, type InvoiceStatusFilter } from '../shared/invoices';
+import { sumsText } from '../shared/notifications';
+import { citeGapCount, continueRows, dueTone, relativeAgo, relativeDue, toSort, upcoming, waitRows, type WaitInput, type WaitRow } from '../shared/overview';
 import { flowRows } from '../shared/finance';
 import { kindName, visibleProjects } from '../shared/projects';
 import type { DocumentCard, Job, LibraryKind, LibraryState, Mode, OwnCompany, PracticeDue, Project, Settings } from '../shared/types';
@@ -27,6 +27,8 @@ interface OverviewHost {
   openJob(id: string): void;
   showDeadlines(): void;
   showUnsorted(): void;
+  /** Dokumenty s filtrem Chybí údaje (citace). */
+  showMissing(): void;
   /** Soubory, pohled Faktury s filtrem stavu. */
   showInvoices(status: InvoiceStatusFilter): void;
   /** Otevře chat s knihovnou a odešle otázku. */
@@ -36,10 +38,6 @@ interface OverviewHost {
 }
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
-// Nejvýš tolik termínů na kartě Blíží se.
-const DUE_LIMIT = 5;
-// Karta Blíží se ukazuje termíny do tolika dní.
-const DUE_DAYS = 45;
 const isActive = (j: Job) => j.status === 'running' || j.status === 'queued';
 
 let host: OverviewHost;
@@ -77,8 +75,6 @@ export async function addToLibrary(paths: string[], message?: string): Promise<s
   }
 }
 
-const sumsText = (sums: CurrencySum[]) => sums.map((s) => formatMoney(s.total, s.currency, locale(), true)).join(' · ');
-
 const card = (title: string, ...body: (Node | false)[]) => h('section', { class: 'ov-card' }, h('h2', {}, title), ...body);
 const link = (text: string, onclick: () => void) => h('button', { class: 'ov-link', type: 'button', onclick }, text);
 
@@ -98,39 +94,63 @@ function docRow(job: Job, card: DocumentCard | undefined) {
     chip = h('span', { class: 'chip err' }, t(STATUS_TEXT.error));
   } else if (job.status !== 'done') {
     chip = h('span', { class: 'chip' }, t(STATUS_TEXT[job.status]));
+  } else {
+    sub = [relativeAgo(job.finishedAt ?? job.createdAt, Date.now(), isoDay()), sub].filter(Boolean).join(' · ');
   }
   return row(docTitle(job, card), sub, () => host.openJob(job.id), chip);
 }
 
+/** Projekt: druh, počet zdrojů a nejbližší termín slovy. */
 function projectRow(p: Project) {
-  const sub = `${kindName(p.kind)} · ${t('project.sourceCount', { count: p.sources.length })}`;
-  return row(p.name, sub, () => host.openProject(p.id), p.deadline ? h('span', { class: 'chip' }, t('overview.projectDue', { date: day(p.deadline) })) : false);
+  const sub = [kindName(p.kind), t('project.sourceCount', { count: p.sources.length })].join(' · ');
+  const tone = p.deadline && dueTone(p.deadline, isoDay()) === 'soon' ? ' accent' : '';
+  return row(p.name, sub, () => host.openProject(p.id), p.deadline ? h('span', { class: `chip${tone}` }, relativeDue(p.deadline, isoDay())) : false);
+}
+
+/** Řádek bloku Čeká na tebe vede na místo, kde se to řeší. */
+function waitRow(r: WaitRow, jobs: Job[]) {
+  const sums = (tone: string, list: CurrencySum[]) => h('span', { class: `chip ${tone}` }, sumsText(list));
+  switch (r.kind) {
+    case 'overdue':
+      return row(t('ov.w.overdue', { count: r.count }), t('overview.oldest', { count: r.oldestDays }), () => host.showInvoices('overdue'), sums('err', r.sums));
+    case 'soon':
+      return row(t('ov.w.soon', { count: r.count }), t('ov.attn.nearest', { date: day(r.nearest) }), () => host.showInvoices('open'), sums('warn', r.sums));
+    case 'unpaid':
+      return row(t('ov.w.unpaid', { count: r.count }), t('ov.attn.nearest', { date: day(r.nearest) }), () => host.showInvoices('open'), sums('warn', r.sums));
+    case 'inbox': {
+      const job = jobs.find((j) => j.id === r.first);
+      return row(t('ov.w.inbox', { count: r.count }), job ? docTitle(job, libraryState.cards[job.id]) : '', host.showUnsorted);
+    }
+    case 'practice':
+      return row(t('practice.dueToday', { count: r.count }), r.title, () => void openPractice(r.scope));
+    case 'cite':
+      return row(t('ov.w.cite', { count: r.count }), t('ov.w.citeSub'), host.showMissing);
+  }
 }
 
 /** Nový uživatel: tři kroky k prvnímu dotazu. */
 function welcome(aiReady: boolean) {
-  const step = (n: number, done: boolean, text: string, hint?: string, action?: Node, focus = false) =>
+  const step = (n: number, done: boolean, text: string, action?: Node, focus = false) =>
     h(
       'li',
       { class: `ov-step${done ? ' done' : ''}${focus ? ' focus' : ''}` },
       h('span', { class: 'ov-step-mark', title: done ? t('overview.welcome.done') : '' }, done ? icon(ICONS.check) : String(n)),
-      h('span', { class: 'ov-step-text' }, text, hint && h('small', {}, hint)),
+      h('span', { class: 'ov-step-text' }, text),
       action,
     );
   const pick = async () => addToLibrary(await window.api.pickFiles());
-  // Práce má texty z dřívějška, Studium a Osobní vlastní (bez faktur).
-  const text = (name: 'text' | 'first' | 'askHint') => t((kind === 'work' ? `overview.welcome.${name}` : `ov.welcome.${name}.${kind}`) as MessageKey);
+  // Práce má text z dřívějška, Studium a Osobní vlastní (bez faktur).
+  const first = t((kind === 'work' ? 'overview.welcome.first' : `ov.welcome.first.${kind}`) as MessageKey);
   return h(
     'section',
     { class: 'ov-welcome' },
     h('h2', {}, t('overview.welcome.title')),
-    h('p', {}, text('text')),
     h(
       'ol',
       { class: 'ov-steps' },
-      step(1, aiReady, t('overview.welcome.ai'), undefined, aiReady ? undefined : h('button', { class: 'btn', type: 'button', onclick: () => host.show('settings') }, t('overview.welcome.aiButton'))),
-      step(2, false, text('first'), undefined, h('button', { class: 'btn primary', type: 'button', onclick: () => void pick() }, t('home.pick')), true),
-      step(3, false, t('overview.welcome.ask'), text('askHint')),
+      step(1, aiReady, t('overview.welcome.ai'), aiReady ? undefined : h('button', { class: 'btn', type: 'button', onclick: () => host.show('settings') }, t('overview.welcome.aiButton'))),
+      step(2, false, first, h('button', { class: 'btn primary', type: 'button', onclick: () => void pick() }, t('home.pick')), true),
+      step(3, false, t('overview.welcome.ask')),
     ),
   );
 }
@@ -149,97 +169,77 @@ const financeCtx = (): FinanceCtx => ({
   showFinance: () => host.show('finance'),
 });
 
-/** Překreslí Přehled z poslední načtené knihovny a aktuálních úloh. */
-export function renderOverview() {
-  const jobs = host.jobs();
-  const { library, cards } = libraryState;
-  const ai = host.ai();
-  $('overview-note').replaceChildren(...(ai ? [...(ai.remote ? [] : [icon(ICONS.lock)]), t(ai.remote ? 'overview.ask.online' : 'overview.ask.local')] : []));
-  $('overview-ask').hidden = !jobs.length;
-  fillSamples();
+/** Typ knihovny pro oznámení pod zvonkem. */
+export const overviewKind = () => kind;
 
+/** Co čeká a co se blíží; společné pro Přehled a oznámení (`library` určuje pořadí řádků Čeká na tebe). */
+export function overviewSignals(jobs: Job[]) {
+  const { library, cards } = libraryState;
   const today = isoDay();
   const visible = jobs.filter((j) => !isActive(j));
   const sort = toSort(
     visible.map((j) => j.id),
     library,
   );
-  // Odkladiště = nezařazené dokumenty a dokumenty s otevřeným dotazem AI.
-  const inbox = new Set([...sort.unsorted, ...sort.questions]).size;
-  renderHello(jobs.length > 0, inbox);
+  const rows = flowRows(invoiceRows(jobs, cards, library.paid, today), ownCompany);
+  // K úhradě jsou přijaté faktury (výdaje); vydané čekají na platbu od odběratele.
+  const unpaid = rows.filter((r) => r.flow === 'expense' && (r.status === 'open' || r.status === 'overdue'));
+  const input: Omit<WaitInput, 'library'> = { unpaid, inbox: [...new Set([...sort.unsorted, ...sort.questions])], practice: due, citeGaps: kind === 'study' ? citeGapCount(visible, cards) : 0 };
+  return {
+    today,
+    cards,
+    wait: (library: WaitInput['library']) => waitRows({ ...input, library }, today),
+    deadlines: dueSoon({ jobs, cards, paid: library.paid, projects }).all,
+  };
+}
+
+/** Překreslí Přehled z poslední načtené knihovny a aktuálních úloh. */
+export function renderOverview() {
+  const jobs = host.jobs();
+  const { cards } = libraryState;
+  const ai = host.ai();
+  $('overview-note').replaceChildren(...(ai ? [...(ai.remote ? [] : [icon(ICONS.lock)]), t(ai.remote ? 'overview.ask.online' : 'overview.ask.local')] : []));
+  $('overview-ask').hidden = !jobs.length;
+  fillSamples();
+
+  renderHello(jobs.length > 0);
 
   if (!jobs.length) {
     $('overview-body').replaceChildren(welcome(Boolean(ai?.online)));
     return;
   }
 
-  const rows = flowRows(invoiceRows(jobs, cards, library.paid, today), ownCompany);
-  // K úhradě jsou přijaté faktury (výdaje); vydané čekají na platbu od odběratele.
-  const unpaid = rows.filter((r) => r.flow === 'expense' && (r.status === 'open' || r.status === 'overdue'));
-  const overdue = unpaid.filter((r) => r.status === 'overdue');
-  const soon = unpaid.filter((r) => r.status === 'open' && daysBetween(today, r.due) <= 7);
-
-  const due = dueSoon({ jobs, cards, paid: library.paid, projects });
-  const upcoming = due.all.filter((d) => !d.overdue && daysBetween(today, d.date) <= DUE_DAYS);
+  const signals = overviewSignals(jobs);
+  const { today } = signals;
+  const waiting = signals.wait(kind);
+  const next = upcoming(signals.deadlines, today);
   const dueRow = (d: Deadline) => deadlineRow(d, { open: host.openJob, openProject: host.openProject }, { dateText: relativeDue(d.date, today), soon: dueTone(d.date, today) === 'soon' });
-  const dueCard = card(
-    t('dl.soon'),
-    h('div', { class: 'dl-list' }, ...upcoming.slice(0, DUE_LIMIT).map(dueRow)),
-    link(t('dl.showAll', { count: due.all.length }), host.showDeadlines),
-  );
-  const newest = (title: string) => card(title, h('div', { class: 'dl-list' }, ...newestJobs(jobs).map((j) => docRow(j, cards[j.id]))), link(t('overview.allFiles'), () => host.show('history')));
-  const inboxCard = inbox > 0 && attn('acc', ICONS.file, t('ov.attn.review'), String(inbox), t('ov.attn.inInbox', { count: inbox }), t('ov.attn.openInbox'), host.showUnsorted);
-  const cols = (...children: (Node | false)[]) => h('div', { class: `ov-cols${children.filter(Boolean).length < 2 ? ' one' : ''}` }, ...children);
-  const body: (Node | false)[] = [];
+  const cont = continueRows(kind, projects, jobs);
+  const contRows = [...cont.projects.map(projectRow), ...cont.jobs.map((j) => docRow(j, cards[j.id]))];
+  const fin = kind === 'work' ? financeMini(financeCtx()) : null;
 
-  if (kind === 'work') {
-    const cards3 = [
-      overdue.length > 0 &&
-        attn('danger', ICONS.alert, t('ov.attn.overdue'), sumsText(invoiceSums(overdue)), `${t('ov.attn.invoices', { count: overdue.length })} · ${t('overview.oldest', { count: invoiceStats(rows, today).overdue.oldestDays })}`, t('ov.attn.show'), () => host.showInvoices('overdue')),
-      soon.length > 0 && attn('warn', ICONS.clock, t('ov.attn.soon'), sumsText(invoiceSums(soon)), `${t('ov.attn.invoices', { count: soon.length })} · ${t('ov.attn.nearest', { date: day(soon.map((r) => r.due).sort()[0]!) })}`, t('ov.attn.show'), () => host.showInvoices('open')),
-      inboxCard,
-    ].filter((c): c is HTMLDivElement => Boolean(c));
-    const fin = financeMini(financeCtx());
-    body.push(
-      cards3.length ? h('div', { class: 'ov-attn-grid' }, ...cards3) : h('div', { class: 'ov-calm' }, icon(ICONS.check), h('div', {}, h('b', {}, t('ov.attn.ok')), ' ', h('span', { class: 'muted' }, t('ov.attn.okWork')))),
-      cols(upcoming.length > 0 && dueCard, (fin || projects.length > 0) && h('div', { class: 'ov-stack' }, fin, projects.length > 0 && card(t('nav.jobs'), h('div', { class: 'dl-list' }, ...latestProjects(projects).map(projectRow)), link(t('ov.all'), () => host.show('projects')))) ),
-    );
-  } else if (kind === 'study') {
-    const works = [...projects].sort((a, b) => (a.deadline ?? '9999').localeCompare(b.deadline ?? '9999'));
-    body.push(
-      inboxCard && h('div', { class: 'ov-attn-grid' }, inboxCard),
-      practiceCallout(),
-      h('h2', { class: 'ov-sect' }, t('ov.study.title')),
-      works.length ? h('div', { class: 'ov-work-grid' }, ...works.map(workCard)) : card(t('ov.study.title'), h('p', { class: 'muted small' }, t('ov.study.none')), link(t('nav.myWork'), () => host.show('projects'))),
-      cols(upcoming.length > 0 && dueCard, newest(t('ov.newestSources'))),
-    );
-  } else {
-    const ending = upcoming.filter((d) => d.kind !== 'invoiceDue');
-    const personal = [
-      unpaid.length > 0 &&
-        attn('warn', ICONS.invoice, t('ov.attn.unpaid'), sumsText(invoiceSums(unpaid)), `${t('ov.attn.invoices', { count: unpaid.length })} · ${t('ov.attn.nearest', { date: day(unpaid.map((r) => r.due).filter(Boolean).sort()[0] ?? '') })}`, t('ov.attn.show'), () => host.showInvoices('open')),
-      ending.length > 0 && attn('danger', ICONS.clock, t('ov.attn.ending'), String(ending.length), `${ending[0]!.title} · ${relativeDue(ending[0]!.date, today)}`, t('dl.title'), host.showDeadlines),
-      inboxCard,
-    ].filter((c): c is HTMLDivElement => Boolean(c));
-    body.push(
-      personal.length ? h('div', { class: 'ov-attn-grid' }, ...personal) : h('div', { class: 'ov-calm' }, icon(ICONS.check), h('div', {}, h('b', {}, t('ov.attn.ok')), ' ', h('span', { class: 'muted' }, t('ov.attn.okOther')))),
-      cols(upcoming.length > 0 && dueCard, newest(t('overview.newest'))),
-    );
-  }
-  $('overview-body').replaceChildren(...body.filter((b): b is Node => Boolean(b)));
+  const left = [
+    waiting.length > 0 && card(t('ov.waiting'), h('div', { class: 'dl-list' }, ...waiting.map((r) => waitRow(r, jobs)))),
+    next.length > 0 && card(t('dl.soon'), h('div', { class: 'dl-list' }, ...next.map(dueRow)), link(t('ov.all'), host.showDeadlines)),
+  ].filter(Boolean);
+  const right = [
+    contRows.length > 0 && card(t('ov.continue'), h('div', { class: 'dl-list' }, ...contRows), link(t('ov.all'), () => host.show(cont.projects.length ? 'projects' : 'history'))),
+    fin,
+  ].filter(Boolean);
+  const stack = (children: unknown[]) => h('div', { class: 'ov-stack' }, ...(children as Node[]));
+  $('overview-body').replaceChildren(h('div', { class: `ov-cols${left.length && right.length ? '' : ' one'}` }, ...[left, right].filter((c) => c.length).map(stack)));
 }
 
-/** Pozdrav jedním řádkem: denní doba a šedá věta o Odkladišti, jinak nabídka otázky. */
-function renderHello(hasDocs: boolean, inbox: number) {
+/** Pozdrav jedním řádkem podle denní doby. */
+function renderHello(hasDocs: boolean) {
   const hour = new Date().getHours();
-  const greeting = hour < 12 ? 'ov.hello.morning' : hour < 18 ? 'ov.hello.afternoon' : 'ov.hello.evening';
   const hello = $('overview-hello');
   hello.hidden = !hasDocs;
-  hello.replaceChildren(h('strong', {}, t(greeting)), ' ', h('span', { class: 'muted' }, inbox ? t('ov.hello.pending', { count: inbox }) : t('ov.hello.ask')));
+  hello.replaceChildren(h('strong', {}, t(hour < 12 ? 'ov.hello.morning' : hour < 18 ? 'ov.hello.afternoon' : 'ov.hello.evening')));
 }
 
 const SAMPLES: Record<OverviewKind, MessageKey[]> = {
-  work: ['overview.sample.1', 'overview.sample.2', 'overview.sample.3'],
+  work: ['overview.sample.1', 'overview.sample.2'],
   study: ['ov.sample.study.1', 'ov.sample.study.2'],
   personal: ['ov.sample.personal.1', 'ov.sample.personal.2'],
 };
@@ -247,45 +247,6 @@ const SAMPLES: Record<OverviewKind, MessageKey[]> = {
 /** Ukázkové otázky podle typu knihovny. */
 function fillSamples() {
   $('overview-samples').replaceChildren(...SAMPLES[kind].map((key) => h('button', { class: 'ov-sample', type: 'button', onclick: () => host.ask(t(key)) }, t(key))));
-}
-
-/** Karta pozornosti: štítek, velké číslo nebo částka, podtext a tlačítko. */
-function attn(tone: 'danger' | 'warn' | 'acc', iconPath: string, label: string, big: string, meta: string, action: string, onclick: () => void) {
-  return h(
-    'div',
-    { class: `ov-attn ${tone}` },
-    h('div', { class: 'ov-attn-lab' }, icon(iconPath), label),
-    h('div', { class: 'ov-attn-big' }, big),
-    h('div', { class: 'ov-attn-meta' }, meta),
-    h('button', { class: 'btn', type: 'button', onclick }, action),
-  );
-}
-
-/** K zopakování dnes: počet kartiček a Opakovat otevře rozsah, kde jich je nejvíc; bez kartiček nic. */
-function practiceCallout() {
-  const top = due.scopes[0];
-  if (!due.total || !top) return false;
-  return h(
-    'div',
-    { class: 'ov-practice' },
-    icon(ICONS.sparkle),
-    h('div', {}, h('b', {}, t('practice.dueToday', { count: due.total })), ' · ', t('practice.dueNote', { name: top.title })),
-    h('button', { class: 'btn sm', type: 'button', onclick: () => void openPractice(top.scope) }, t('practice.repeat')),
-  );
-}
-
-/** Rozpracovaná práce: druh, název, termín, počet kapitol osnovy a zdrojů. */
-function workCard(p: Project) {
-  const chapters = p.outline.split('\n').filter((l) => l.trim() && !/^\s/.test(l)).length;
-  const meta = [chapters ? t('ov.study.chapters', { count: chapters }) : '', t('project.sourceCount', { count: p.sources.length })].filter(Boolean).join(' · ');
-  return h(
-    'div',
-    { class: 'ov-work' },
-    h('div', { class: 'ov-work-top' }, h('span', { class: 'chip' }, kindName(p.kind)), p.deadline && h('span', { class: `chip${dueTone(p.deadline, isoDay()) === 'soon' ? ' accent' : ''}` }, `${t('overview.projectDue', { date: day(p.deadline) })} · ${relativeDue(p.deadline, isoDay())}`)),
-    h('strong', {}, p.name),
-    h('span', { class: 'muted small' }, meta),
-    h('button', { class: 'btn', type: 'button', onclick: () => host.openProject(p.id) }, t('ov.study.continue')),
-  );
 }
 
 /** Znovu načte knihovnu, projekty a typ knihovny a překreslí. */
@@ -303,6 +264,7 @@ export async function refreshOverview() {
     toast(cleanError(e), true);
   }
   renderOverview();
+  document.dispatchEvent(new Event('overview-refreshed'));
   if (document.body.dataset.view === 'finance') renderFinance($('finance-root'), financeCtx());
 }
 

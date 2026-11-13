@@ -1,11 +1,16 @@
-import type { Job, Segment } from './types';
+import type { DocType, Job, Segment } from './types';
 
-/** Pohled v dokumentu vlevo; horní přepínač má jen Dokument a Překlad, Překlad má uvnitř přepínač pohledů. */
+/** Pohled na dokument; záložka Překlad má uvnitř přepínač pohledů. */
 export type View = 'original' | 'translation' | 'compare' | 'translated-pdf' | 'side-by-side';
-export type TopTab = 'original' | 'translation';
-/** Záložky informačního sloupce vedle dokumentu. */
+/** Záložky s informacemi o dokumentu (na celou šířku místo dokumentu). */
 export type InfoTab = 'overview' | 'links' | 'file';
-export const INFO_TABS: InfoTab[] = ['overview', 'links', 'file'];
+/** Co je v detailu otevřené: pohled na dokument, nebo informační záložka. */
+export type Tab = View | InfoTab;
+/** Horní řada záložek detailu. */
+export type TopTab = 'original' | 'translation' | InfoTab;
+export const TOP_TABS: TopTab[] = ['original', 'translation', 'overview', 'links', 'file'];
+
+export const isInfoTab = (tab: Tab): tab is InfoTab => tab === 'overview' || tab === 'links' || tab === 'file';
 
 /** Dokument jiného jazyka než originál, který už doběhl (bez segmentů, např. pro seznam). */
 export const wasTranslated = (job: Pick<Job, 'status' | 'sourceLang' | 'targetLang'>) =>
@@ -17,17 +22,23 @@ export function isTranslated(job: Pick<Job, 'status' | 'sourceLang' | 'targetLan
   return job.status === 'picking' || segments.some((s) => !s.layoutOnly && s.translation !== undefined);
 }
 
-export const topTab = (view: View): TopTab => (view === 'original' ? view : 'translation');
+export const topTab = (tab: Tab): TopTab => (tab === 'original' || isInfoTab(tab) ? tab : 'translation');
+
+/** Záložky, které dokument má; Překlad jen u přeloženého. */
+export const topTabs = (translated: boolean): TopTab[] => TOP_TABS.filter((k) => translated || k !== 'translation');
 
 /** Volby přepínače uvnitř záložky Překlad; PDF volby jen když existuje přeložené PDF. */
 export const translationViews = (hasPdf: boolean): View[] => (hasPdf ? ['translation', 'compare', 'translated-pdf', 'side-by-side'] : ['translation', 'compare']);
 
-/** Výchozí pohled při otevření: přeložený dokument Srovnání, jinak originál. */
-export const defaultView = (translated: boolean): View => (translated ? 'compare' : 'original');
+/** Výchozí záložka při otevření: faktura a smlouva Přehled, přeložený dokument Srovnání, jinak originál. */
+export function defaultTab(type: DocType | undefined, translated: boolean): Tab {
+  if (type === 'invoice' || type === 'contract') return 'overview';
+  return translated ? 'compare' : 'original';
+}
 
-/** Pohled, který zůstane dostupný, když se změní stav dokumentu (např. zmizelo přeložené PDF). */
-export function usableView(view: View, translated: boolean, hasPdf: boolean): View {
-  if (topTab(view) !== 'translation') return view;
+/** Záložka, která zůstane dostupná, když se změní stav dokumentu (např. zmizelo přeložené PDF). */
+export function usableView(tab: Tab, translated: boolean, hasPdf: boolean): Tab {
+  if (topTab(tab) !== 'translation') return tab;
   if (!translated) return 'original';
-  return translationViews(hasPdf).includes(view) ? view : 'compare';
+  return translationViews(hasPdf).includes(tab as View) ? tab : 'compare';
 }

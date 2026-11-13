@@ -1335,7 +1335,7 @@ input[type='checkbox'] {
 }
 
 /* Citace je dlouhá: pod popiskem na celou šířku. */
-.detail-info .card-row.cite-row {
+.detail-pane .card-row.cite-row {
   grid-template-columns: 1fr;
 }
 
@@ -1406,19 +1406,13 @@ input[type='checkbox'] {
   border-bottom: 1px solid var(--line);
 }
 
-.crumb {
-  flex: none;
-  color: var(--muted);
-  white-space: nowrap;
-}
-
 #detail-name {
   flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 14px;
+  font-size: 15px;
 }
 
 #detail-status {
@@ -1612,36 +1606,52 @@ input[type='checkbox'] {
   margin-right: auto;
 }
 
-/* Nástroje dokumentu: malá tlačítka pod hlavičkou. */
-.detail-tools {
+/* Detail: hlavní záložky podtržené (v19), ať se neplete s přepínačem pohledů vpravo. */
+.detail .tabs-row {
+  align-items: stretch;
+}
+
+.detail .tabs-row .tabs {
+  gap: 4px;
+  padding: 0;
+  border-radius: 0;
+  background: none;
+}
+
+.detail .tabs-row .tab {
+  height: auto;
+  padding: 0 10px;
+  border-radius: 0;
+  border-bottom: 2px solid transparent;
+}
+
+.detail .tabs-row .tab.active {
+  background: none;
+  box-shadow: none;
+  border-bottom-color: var(--text);
+}
+
+/* Vpravo v řadě záložek detailu: přepínač pohledů záložky Překlad a místa ke kontrole. */
+.detail-tab-end {
   flex: none;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--line);
-}
-
-.detail-tools .btn {
-  height: 30px;
-  padding: 0 12px;
-  font-size: 13px;
-}
-
-.detail-tools .btn svg {
-  width: 15px;
-  height: 15px;
-}
-
-/* Přepínač pohledů v záložce Překlad. */
-.detail-sub {
-  flex: none;
+  align-self: center;
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 8px 16px;
-  border-bottom: 1px solid var(--line);
-  font-size: 13px;
+  gap: 10px;
+}
+
+.detail-tab-end[hidden] {
+  display: none;
+}
+
+.detail-tab-end .segmented {
+  flex-wrap: nowrap;
+}
+
+.detail-tab-end .segment {
+  height: 26px;
+  padding: 0 10px;
+  font-size: 12.5px;
 }
 
 .detail-scroll {
@@ -1657,51 +1667,10 @@ input[type='checkbox'] {
   padding-bottom: 24px;
 }
 
-/* Dokument vlevo, informační sloupec vpravo; pod 860 px je sloupec pod dokumentem. */
-.detail-cols {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-}
-
-.detail-doc {
-  flex: 1 1 0;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.detail-info {
-  flex: none;
-  width: clamp(300px, 32%, 380px);
-  display: flex;
-  flex-direction: column;
-  border-left: 1px solid var(--line);
-}
-
-.info-scroll {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  padding: 16px;
-  background: var(--canvas);
-}
-
-.detail-info .info-view {
-  max-width: none;
+/* Informační záložky (Přehled, Souvislosti, Soubor): jeden klidný sloupec. */
+.detail-pane.info-view {
+  max-width: 760px;
   margin: 0;
-}
-
-.detail-info .card-row {
-  grid-template-columns: 112px 1fr;
-}
-
-.detail-info .tabs-row {
-  padding: 0 12px;
-}
-
-#info-tabs .tab {
-  padding: 0 9px;
 }
 
 .tab .tab-count {
@@ -1713,26 +1682,20 @@ input[type='checkbox'] {
   font-weight: 600;
 }
 
+/* Úzké okno: řada záložek se posouvá vodorovně, přepínač pohledů zůstane celý. */
 @media (max-width: 860px) {
-  .detail-cols {
-    flex-direction: column;
-    overflow: auto;
+  .tabs-row {
+    gap: 10px;
+    overflow-x: auto;
+    scrollbar-width: none;
   }
 
-  .detail-doc {
+  .tabs-row .tabs {
     flex: none;
-    height: max(70vh, 420px);
   }
 
-  .detail-info {
-    flex: none;
-    width: auto;
-    border-left: 0;
-    border-top: 1px solid var(--line);
-  }
-
-  .info-scroll {
-    overflow: visible;
+  .detail-head .detail-actions .btn:not(.icon-only) {
+    padding: 0 10px;
   }
 }
 
@@ -2060,7 +2023,8 @@ input[type='checkbox'] {
   border-top: 0;
 }
 
-.risk-pill {
+.risk-pill,
+.review-chip {
   border: 0;
   cursor: pointer;
 }
@@ -2123,23 +2087,11 @@ input[type='checkbox'] {
   align-items: flex-start;
 }
 
-.pdf-labels {
-  margin-bottom: -6px;
-}
-
-.pdf-label {
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 1.4;
-}
-
 .pdf-pairs.stacked .pdf-pair {
   flex-direction: column;
 }
 
-.pdf-pairs.stacked .pdf-spacer,
-.pdf-pairs.stacked .pdf-labels {
+.pdf-pairs.stacked .pdf-spacer {
   display: none;
 }
 
@@ -2500,36 +2452,6 @@ input[type='checkbox'] {
 .chat-resize:hover,
 .chat-resize.dragging {
   background: linear-gradient(to right, transparent 5px, var(--accent) 5px, var(--accent) 7px, transparent 7px);
-}
-
-/* Zasunutý chat: úzká lišta u pravého okraje okna. */
-.chat-rail {
-  flex: none;
-  width: 44px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  padding: calc(var(--titlebar) + 14px) 0 14px;
-  border: 0;
-  border-left: 1px solid var(--line);
-  background: var(--side);
-  color: var(--muted);
-}
-
-.chat-rail:hover {
-  background: var(--raised);
-  color: var(--text);
-}
-
-.chat-rail svg {
-  width: 18px;
-  height: 18px;
-}
-
-.chat-rail span {
-  writing-mode: vertical-rl;
-  font-weight: 500;
 }
 
 @media (max-width: 1000px) {
@@ -3196,6 +3118,12 @@ input[type='checkbox'] {
   font-weight: 700;
   line-height: 1;
   cursor: help;
+}
+
+.ov-card h2 .help-dot,
+.setting-group .help-dot {
+  margin-left: 6px;
+  vertical-align: middle;
 }
 
 .help-dot:hover,
@@ -4866,57 +4794,6 @@ body.nav-collapsed #project-folders {
   gap: 20px;
 }
 
-.ov-stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 12px;
-}
-
-.ov-stat {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  min-width: 0;
-  padding: 14px 16px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--panel);
-  text-align: left;
-}
-
-.ov-stat:hover {
-  background: var(--raised);
-}
-
-.ov-stat-label {
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.ov-stat-value {
-  font-size: 28px;
-  font-weight: 600;
-  line-height: 1.2;
-  font-variant-numeric: tabular-nums;
-}
-
-.ov-stat-sub {
-  color: var(--muted);
-  font-size: 13px;
-  font-variant-numeric: tabular-nums;
-}
-
-.ov-stat.warn {
-  border-color: var(--danger);
-}
-
-.ov-stat.warn .ov-stat-value,
-.ov-stat.warn .ov-stat-label {
-  color: var(--danger-text);
-}
-
 .ov-cols {
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
@@ -4924,7 +4801,7 @@ body.nav-collapsed #project-folders {
   gap: 16px;
 }
 
-@media (max-width: 760px) {
+@media (max-width: 900px) {
   .ov-cols {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -5480,7 +5357,6 @@ body[data-view].tree-closed:not(.nav-collapsed) .nav-item[data-nav='projects'] .
 .job-list,
 .pending-row,
 .ov-ask-box,
-.ov-stat,
 .ov-card,
 .ov-welcome,
 .project-card {
@@ -5499,6 +5375,9 @@ body[data-view].tree-closed:not(.nav-collapsed) .nav-item[data-nav='projects'] .
   gap: 12px;
   padding: 0 16px 0 20px;
   -webkit-app-region: drag;
+  /* Nad body::before (tažení okna), jinak ten pruh zachytí kliky na tlačítka lišty. */
+  position: relative;
+  z-index: 1;
 }
 
 .topbar button {
@@ -5702,49 +5581,53 @@ kbd {
   flex: 1;
 }
 
-.up-drop.compact .drop-icon {
-  margin: 0;
-}
-
-.up-head {
+/* Tenká plocha na jeden řádek; roztáhne se jen při přetahování. */
+/* Nahrát: dropzóna a vedle ní Uložit vše a ⋯, bez vlastní hlavičky. */
+.up-bar {
+  margin-top: 14px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 10px;
+}
+
+.up-bar > .up-drop {
+  flex: 1;
+  min-width: 0;
+}
+
+.up-drop {
+  min-height: 0;
+  flex-direction: row;
   gap: 12px;
+  padding: 12px 16px;
+  cursor: pointer;
 }
 
-.up-head .section-title {
-  margin: 0;
+.up-drop .drop-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
 }
 
-.up-cards {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+.up-drop .drop-icon svg {
+  width: 16px;
+  height: 16px;
 }
 
-.up-card,
+.up-drop .drop-title {
+  font-size: 14px;
+}
+
+.up-drop .drop-pick {
+  margin: 0 0 0 auto;
+}
+
 .up-list,
 .up-recent {
   background: var(--surface);
   box-shadow: var(--card-shadow);
   -webkit-backdrop-filter: blur(18px);
   backdrop-filter: blur(18px);
-}
-
-.up-card {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 14px 16px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-}
-
-.up-top {
-  display: flex;
-  align-items: center;
-  gap: 12px;
 }
 
 .up-ico {
@@ -5789,20 +5672,6 @@ kbd {
   color: var(--danger-text);
 }
 
-.up-save {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border-radius: 10px;
-  background: var(--sunken);
-}
-
-.up-save.ok {
-  color: var(--ok-text);
-}
-
 .up-sg {
   flex: 1;
   min-width: 200px;
@@ -5812,17 +5681,10 @@ kbd {
   font-size: 13px;
 }
 
-.up-save > svg,
 .up-sg svg {
   flex: none;
   width: 15px;
   height: 15px;
-}
-
-.up-tools {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
 }
 
 .btn.sm {
@@ -5882,27 +5744,29 @@ kbd {
   grid-column: 2 / -1;
 }
 
-.up-foot {
-  margin: 0 4px;
-}
-
 .up-recent {
-  padding: 16px;
+  padding: 10px 16px;
 }
 
-.up-recent h2 {
+.up-recent summary {
   display: flex;
   align-items: center;
   gap: 8px;
+  cursor: pointer;
+  font-weight: 600;
 }
 
-.up-recent h2 svg {
+.up-recent summary svg {
   width: 16px;
   height: 16px;
 }
 
-.up-recent h2 .ov-link {
-  margin-left: auto;
+.up-recent .dl-list {
+  margin-top: 8px;
+}
+
+.up-recent .ov-link {
+  margin-top: 6px;
 }
 
 .up-folders {
@@ -5973,124 +5837,6 @@ kbd {
 
 .ov-hello strong {
   font-weight: 600;
-}
-
-.ov-attn-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
-  gap: 14px;
-}
-
-.ov-attn {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-  min-width: 0;
-  padding: 16px 18px;
-  border-radius: var(--r-m);
-}
-
-.ov-attn.danger {
-  background: var(--danger-soft);
-  color: var(--danger-text);
-}
-
-.ov-attn.warn {
-  background: var(--warning-soft);
-  color: var(--warning-text);
-}
-
-.ov-attn.acc {
-  background: var(--accent-soft);
-  color: var(--text);
-}
-
-.ov-attn-lab {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.ov-attn-lab svg {
-  width: 16px;
-  height: 16px;
-}
-
-.ov-attn-big {
-  margin-top: 4px;
-  font-size: 26px;
-  font-weight: 600;
-  line-height: 1.15;
-  font-variant-numeric: tabular-nums;
-}
-
-.ov-attn-meta {
-  font-size: 12.5px;
-  opacity: 0.85;
-}
-
-.ov-attn .btn {
-  margin-top: 10px;
-  color: var(--text);
-}
-
-.ov-calm {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 16px;
-  border-radius: var(--r-m);
-  background: var(--ok-soft);
-}
-
-.ov-calm svg {
-  flex: none;
-  width: 22px;
-  height: 22px;
-  color: var(--ok);
-}
-
-.ov-sect {
-  margin: 4px 0 -8px 4px;
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.ov-work-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 14px;
-}
-
-.ov-work {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-  min-width: 0;
-  padding: 16px 18px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-m);
-  background: var(--surface);
-  box-shadow: var(--card-shadow);
-}
-
-.ov-work-top {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.ov-work strong {
-  font-size: 16px;
-}
-
-.ov-work .btn {
-  margin-top: 4px;
 }
 
 .ov-stack {
@@ -6202,13 +5948,10 @@ kbd {
   gap: 12px;
 }
 
-.fin-head p {
-  margin: 0;
-}
-
 .fin-acts {
   display: flex;
   gap: 8px;
+  margin-left: auto;
 }
 
 .fin-sums {
@@ -6536,7 +6279,7 @@ kbd {
 }
 
 .inbox-status {
-  width: 190px;
+  width: 96px;
   overflow: hidden;
   color: var(--muted);
   font-size: 12px;
@@ -6632,7 +6375,7 @@ kbd {
   display: none;
 }
 
-.detail-info .card h2 {
+.detail-pane .card h2 {
   flex-wrap: wrap;
   gap: 8px;
 }
@@ -7093,26 +6836,6 @@ kbd {
   text-align: center;
 }
 
-.ov-practice {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 16px;
-  border-radius: var(--r-m);
-  background: var(--accent-soft);
-}
-
-.ov-practice > svg {
-  flex: none;
-  width: 20px;
-  height: 20px;
-}
-
-.ov-practice > div {
-  flex: 1;
-  min-width: 0;
-}
-
 /* ---------- OpenAlex ---------- */
 
 .oa-search {
@@ -7197,4 +6920,164 @@ kbd {
   min-height: 28px;
   white-space: normal;
   text-align: left;
+}
+
+/* Dokumenty (v19): hlavička s jedním tlačítkem a ⋯, řada filtrů, ikona řádku */
+/* Dokumenty: název je v horní liště, hlavní tlačítko a ⋯ jsou na konci řady filtrů; vlastní hlavička se neukazuje. */
+.view.library > .view-head {
+  display: none;
+}
+
+.lib-filters > .view-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lib-filters > .view-actions:empty {
+  display: none;
+}
+
+.lib-filters {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.lib-filters[hidden] {
+  display: none;
+}
+
+.filter-chips {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.lib-filters .search {
+  width: 180px;
+  height: 30px;
+  margin-left: auto;
+}
+
+.lib-sort {
+  width: 140px;
+  height: 30px;
+}
+
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: none;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.filter-chip:hover {
+  background: var(--raised);
+}
+
+.filter-chip.on {
+  border-color: transparent;
+  background: var(--accent-soft);
+  color: var(--link);
+  font-weight: 600;
+}
+
+.filter-chip .n {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
+}
+
+.row-icon {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--raised);
+  color: var(--muted);
+}
+
+.row-icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* Zvonek: tečka u nepřečtených a seznam novinek pod ním. */
+.topbar #topbar-bell {
+  position: relative;
+}
+
+.bell-dot {
+  position: absolute;
+  top: 4px;
+  right: 5px;
+  width: 8px;
+  height: 8px;
+  border: 2px solid var(--main);
+  border-radius: 50%;
+  background: var(--danger);
+  box-sizing: content-box;
+  transform: translate(25%, -25%);
+}
+
+.note-pop {
+  width: 320px;
+  max-height: min(420px, 70vh);
+  overflow-y: auto;
+}
+
+.note-pop .note-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
+  height: auto;
+  padding: 8px 10px 8px 22px;
+  position: relative;
+}
+
+.note-pop .note-row.new::before {
+  content: '';
+  position: absolute;
+  left: 9px;
+  top: 14px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--danger);
+}
+
+.note-title,
+.note-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.note-title {
+  font-weight: 500;
+}
+
+.note-sub {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.note-empty {
+  margin: 0;
+  padding: 14px 10px;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
 }

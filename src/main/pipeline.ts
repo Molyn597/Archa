@@ -955,7 +955,8 @@ export async function translateRegion(store: Store, job: Job, settings: Settings
   const text = await ask(
     llm,
     'polish',
-    [{ role: 'user', content: [{ type: 'image_url', image_url: { url: image } }, { type: 'text', text: regionPrompt(job.targetLang) }] }],
+    // Nepřeložený dokument (Nahrát) má cílový jazyk = jazyk originálu; oblast se překládá do jazyka uživatele.
+    [{ role: 'user', content: [{ type: 'image_url', image_url: { url: image } }, { type: 'text', text: regionPrompt(job.translate === false ? settings.targetLang : job.targetLang) }] }],
     3000,
   );
   const region: RegionTranslation = { page, crop: area, text, createdAt: Date.now() };

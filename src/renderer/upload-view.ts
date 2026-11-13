@@ -6,7 +6,8 @@ import { isOnline } from '../shared/provider';
 import { bulkSavable, suggestion, type Suggestion } from '../shared/upload';
 import type { DocumentCard, DuplicateMatch, Job, LibraryState, Mode, Settings } from '../shared/types';
 import { openChat } from './chat';
-import { cleanError, date, h, icon, ICONS, MODES, openModal, progressBar, progressInfo, STATUS_TEXT, toast, toastAction } from './dom';
+import { currentTitle, libraryFor, libraryTitle, moveDocTo } from './library-switch';
+import { actionMenu, cleanError, date, h, icon, ICONS, MODES, openModal, progressBar, progressInfo, STATUS_TEXT, toast, toastAction } from './dom';
 
 interface UploadHost {
   jobs(): Job[];
@@ -18,9 +19,7 @@ interface UploadHost {
 }
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
-// Od tolika souborů je výchozí seznam místo karet.
-const LIST_FROM = 4;
-const RECENT = 6;
+const RECENT = 5;
 const QUALITY: Record<Mode, MessageKey> = { fast: 'quality.fast', balanced: 'quality.balanced', quality: 'quality.quality' };
 
 interface DupWait {
@@ -34,11 +33,12 @@ let lib: LibraryState = { library: { folders: [], assign: {} }, cards: {} };
 // Soubory nahrané v této relaci, nejnovější první; po restartu seznam začíná prázdný.
 let tray: string[] = [];
 let waiting: DupWait[] = [];
-let layout: 'cards' | 'list' | undefined;
-let menuOpen: string | null = null;
-// Řádky „Hotovo“ pod kartou (Word uložen, překlad zařazen) a běžící nástroje.
+let recentOpen = false;
+// Řádky „Hotovo“ pod řádkem (Word uložen, překlad zařazen) a běžící nástroje.
 const did = new Map<string, string[]>();
 const busy = new Set<string>();
+// Dokumenty, u kterých uživatel odmítl návrh jiné knihovny („Nechat v …“).
+const stay = new Set<string>();
 
 const isActive = (j: Job) => j.status === 'running' || j.status === 'queued';
 const note = (id: string, text: string) => did.set(id, [...(did.get(id) ?? []), text]);
@@ -48,7 +48,6 @@ const trayJobs = () => {
   const byId = new Map(host.jobs().map((j) => [j.id, j]));
   return tray.map((id) => byId.get(id)).filter((j): j is Job => Boolean(j));
 };
-const currentLayout = () => layout ?? (traySize() >= LIST_FROM ? 'list' : 'cards');
 
 /** Přidá soubory: duplicity počkají na rozhodnutí, ostatní se zařadí do zpracování bez překladu. */
 export async function addUploads(paths: string[]) {
@@ -70,7 +69,7 @@ export async function addUploads(paths: string[]) {
   render();
 }
 
-/** Zpracování bez překladu: soubor se přečte, popíše a zařadí; překlad je nástroj na kartě. */
+/** Zpracování bez překladu: soubor se přečte, popíše a zařadí; překlad je nástroj v nabídce řádku. */
 async function enqueue(paths: string[]) {
   if (!paths.length) return;
   const s = host.settings();
@@ -86,7 +85,7 @@ async function enqueue(paths: string[]) {
   }
 }
 
-// ---------- Akce karty ----------
+// ---------- Akce řádku ----------
 
 async function reloadState() {
   try {
@@ -108,10 +107,19 @@ const saveTo = async (id: string, s: Suggestion) => {
   await reloadState();
 };
 
+/** Návrh jiné knihovny pro hotový, dosud nepotvrzený dokument. */
+function otherLibrary(job: Job) {
+  if (job.status !== 'done' || stay.has(job.id) || suggestion(lib.library, job.id, lib.cards[job.id])?.confirmed) return null;
+  return libraryFor(lib.cards[job.id]);
+}
+
+/** Hromadně se ukládá jen v otevřené knihovně: přesun mezi knihovnami kopíruje soubory, ať ho uživatel potvrdí u každého dokumentu zvlášť. */
+const bulkReady = (job: Job) => job.status === 'done' && !otherLibrary(job) && bulkSavable(suggestion(lib.library, job.id, lib.cards[job.id]));
+
 function saveAll() {
   const todo = trayJobs().flatMap((j) => {
     const s = suggestion(lib.library, j.id, lib.cards[j.id]);
-    return j.status === 'done' && bulkSavable(s) ? [{ id: j.id, s }] : [];
+    return bulkReady(j) && s ? [{ id: j.id, s }] : [];
   });
   void Promise.all(todo.map(({ id, s }) => saveTo(id, s)));
 }
@@ -150,7 +158,7 @@ const elsewhere = (id: string) =>
     void window.api.moveToFolder([id], folder).then(reloadState, (e) => toast(cleanError(e), true));
   });
 
-/** Do koše (jde obnovit); karta zmizí a po Vrátit se vrátí. */
+/** Do koše (jde obnovit); řádek zmizí a po Vrátit se vrátí. */
 async function discard(id: string) {
   try {
     await window.api.deleteJob(id);
@@ -225,8 +233,6 @@ const remove = (id: string) => {
   render();
 };
 
-const removeButton = (id: string) => h('button', { class: 'icon-btn', type: 'button', title: t('upload.removeFromList'), 'aria-label': t('upload.removeFromList'), onclick: () => remove(id) }, icon(ICONS.x));
-
 /** Název, typ a první věta shrnutí; u rozpracovaného souboru stav průběhu. */
 function describe(job: Job, card?: DocumentCard) {
   if (isActive(job)) {
@@ -240,76 +246,33 @@ function describe(job: Job, card?: DocumentCard) {
 
 const typeIcon = (job: Job) => h('span', { class: 'up-ico' }, icon(job.status === 'error' ? ICONS.alert : ICONS.file));
 
-/** Návrh složky s tlačítky; po potvrzení řádek „Uloženo do …“. */
-function saveRow(job: Job, s?: Suggestion) {
-  const id = job.id;
-  if (s?.confirmed) {
-    return h('div', { class: 'up-save ok' }, icon(ICONS.check), h('span', { class: 'up-sg' }, t('upload.savedTo'), ' ', h('b', {}, s.path)));
-  }
-  const suggest = s
-    ? h('span', { class: 'up-sg' }, icon(ICONS.sparkle), t('upload.suggests'), ' ', h('b', {}, s.path), ' ', h('span', { class: `chip${s.sure ? ' ok' : ' warn'}` }, t(s.sure ? 'upload.sure' : 'upload.unsure')))
-    : h('span', { class: 'up-sg muted' }, t('upload.noSuggestion'));
-  return h(
-    'div',
-    { class: 'up-save' },
-    suggest,
-    s && h('button', { class: 'btn primary sm', type: 'button', onclick: () => void saveTo(id, s) }, icon(ICONS.check), t('upload.saveHere')),
-    h('button', { class: 'btn sm', type: 'button', onclick: () => elsewhere(id) }, t('upload.elsewhere')),
-    h('button', { class: 'btn sm', type: 'button', onclick: () => void discard(id) }, t('upload.discard')),
-  );
-}
-
 const didRows = (id: string) => (did.get(id) ?? []).map((text) => h('div', { class: 'up-did' }, icon(ICONS.check), h('span', {}, text)));
-
-function trayCard(job: Job) {
-  const card = lib.cards[job.id];
-  const { name, meta } = describe(job, card);
-  const ready = job.status === 'done';
-  return h(
-    'div',
-    { class: `up-card${isActive(job) ? ' reading' : ''}` },
-    h(
-      'div',
-      { class: 'up-top' },
-      typeIcon(job),
-      h('div', { class: 'up-mid' }, h('div', { class: 'up-name', title: name }, name), h('div', { class: `up-meta${job.status === 'error' ? ' err' : ''}` }, isActive(job) && h('span', { class: 'chat-spin' }), meta)),
-      removeButton(job.id),
-    ),
-    isActive(job) && progressBar(progressInfo(job).fraction),
-    ready && saveRow(job, suggestion(lib.library, job.id, card)),
-    ready &&
-      h(
-        'div',
-        { class: 'up-tools' },
-        ...TOOLS.map((tool) => h('button', { class: 'btn sm', type: 'button', disabled: busy.has(job.id), onclick: () => tool.run(job) }, icon(tool.icon), t(tool.label))),
-      ),
-    ...didRows(job.id),
-  );
-}
 
 function trayRow(job: Job) {
   const card = lib.cards[job.id];
   const { name, meta } = describe(job, card);
   const ready = job.status === 'done';
   const s = ready ? suggestion(lib.library, job.id, card) : undefined;
+  const other = otherLibrary(job);
   const status = isActive(job)
     ? h('span', { class: 'up-sg muted' }, h('span', { class: 'chat-spin' }), t('upload.reading'))
-    : s?.confirmed
+    : other
+      ? h('span', { class: 'up-sg' }, h('span', { class: 'muted' }, '→'), h('b', {}, [libraryTitle(other.library), other.folders[0]].filter(Boolean).join(' · ')))
+      : s?.confirmed
       ? h('span', { class: 'up-sg' }, icon(ICONS.check), t('upload.savedTo'), ' ', h('b', {}, s.path))
       : s
         ? h('span', { class: 'up-sg' }, h('span', { class: 'muted' }, '→'), h('b', {}, s.path), h('span', { class: `chip${s.sure ? ' ok' : ' warn'}` }, t(s.sure ? 'upload.sure' : 'upload.unsure')))
         : h('span', { class: 'up-sg muted' }, job.status === 'error' ? t(STATUS_TEXT.error) : t('upload.noSuggestion'));
-  const save = ready && s && !s.confirmed ? h('button', { class: 'btn sm', type: 'button', onclick: () => void saveTo(job.id, s) }, icon(ICONS.check), t('upload.save')) : h('span');
-  const item = (label: string, ico: string, run: () => void, danger = false) =>
-    h('button', { type: 'button', role: 'menuitem', class: danger ? 'danger' : '', onclick: () => ((menuOpen = null), run()) }, icon(ico), label);
-  const menu = h(
-    'div',
-    { class: 'menu', role: 'menu' },
-    ...(ready ? [item(t('upload.saveElsewhere'), ICONS.folder, () => elsewhere(job.id)), ...(s?.confirmed ? [] : [item(t('upload.discard'), ICONS.trash, () => void discard(job.id))]), h('div', { class: 'menu-sep' })] : []),
-    ...(ready ? TOOLS.map((tool) => item(t(tool.label), tool.icon, () => tool.run(job))) : []),
-    ...(ready ? [h('div', { class: 'menu-sep' })] : []),
-    item(t('upload.removeFromList'), ICONS.x, () => remove(job.id)),
-  );
+  const save = other
+    ? h('button', { class: 'btn primary sm', type: 'button', onclick: () => void moveDocTo(job.id, other.library, other.folders).then(reloadState) }, icon(ICONS.check), t('upload.save'))
+    : ready && s && !s.confirmed
+      ? h('button', { class: 'btn primary sm', type: 'button', onclick: () => void saveTo(job.id, s) }, icon(ICONS.check), t('upload.save'))
+      : h('span');
+  const menu = actionMenu(() => [
+    ...(ready ? [{ label: t('upload.saveElsewhere'), icon: ICONS.folder, run: () => elsewhere(job.id) }, ...(other ? [{ label: t('upload.stay', { library: currentTitle() }), icon: ICONS.check, run: () => (stay.add(job.id), render()) }] : []), ...(s?.confirmed ? [] : [{ label: t('upload.discard'), icon: ICONS.trash, run: () => discard(job.id) }]), null] : []),
+    ...(ready ? [...TOOLS.map((tool) => ({ label: t(tool.label), icon: tool.icon, disabled: busy.has(job.id), run: () => tool.run(job) })), null] : []),
+    { label: t('upload.removeFromList'), icon: ICONS.x, run: () => remove(job.id) },
+  ]);
   return h(
     'div',
     { class: `up-row${isActive(job) ? ' reading' : ''}` },
@@ -317,33 +280,13 @@ function trayRow(job: Job) {
     h('div', { class: 'up-mid' }, h('div', { class: 'up-name', title: name }, name), h('div', { class: `up-meta${job.status === 'error' ? ' err' : ''}` }, meta)),
     status,
     save,
-    h(
-      'span',
-      { class: 'menu-wrap' },
-      h(
-        'button',
-        {
-          class: 'icon-btn',
-          type: 'button',
-          title: t('library.more'),
-          'aria-label': t('library.more'),
-          'aria-haspopup': 'menu',
-          onclick: (e: Event) => {
-            e.stopPropagation();
-            menuOpen = menuOpen === job.id ? null : job.id;
-            render();
-          },
-        },
-        icon(ICONS.more),
-      ),
-      menuOpen === job.id && menu,
-    ),
+    menu,
     ...didRows(job.id).map((r) => h('div', { class: 'up-row-did' }, r)),
   );
 }
 
 /** Soubor, který už v knihovně je: otevřít nebo přesto nahrát. */
-function dupCard(w: DupWait) {
+function dupRow(w: DupWait) {
   const drop = () => {
     waiting = waiting.filter((x) => x !== w);
     render();
@@ -351,22 +294,17 @@ function dupCard(w: DupWait) {
   const trashed = w.match.trashed;
   return h(
     'div',
-    { class: 'up-card' },
-    h(
-      'div',
-      { class: 'up-top' },
-      h('span', { class: 'up-ico' }, icon(ICONS.copy)),
-      h('div', { class: 'up-mid' }, h('div', { class: 'up-name', title: w.path }, w.name), h('div', { class: 'up-meta' }, t(trashed ? 'upload.dupTrash' : 'upload.dupHave', { name: w.match.name }))),
-      h('button', { class: 'icon-btn', type: 'button', title: t('upload.removeFromList'), 'aria-label': t('upload.removeFromList'), onclick: drop }, icon(ICONS.x)),
-    ),
-    h(
-      'div',
-      { class: 'up-save' },
-      trashed
-        ? h('button', { class: 'btn sm', type: 'button', onclick: () => void window.api.restoreJobs([w.match.id]).then(() => (toast(t('home.dupRestored')), drop()), (e) => toast(cleanError(e), true)) }, t('home.dupRestore'))
-        : h('button', { class: 'btn sm', type: 'button', onclick: () => (drop(), void host.openJob(w.match.id)) }, t('home.dupOpen')),
-      h('button', { class: 'btn sm', type: 'button', onclick: () => (drop(), void enqueue([w.path]).then(render)) }, t('upload.dupAnyway')),
-    ),
+    { class: 'up-row up-dup' },
+    h('span', { class: 'up-ico' }, icon(ICONS.copy)),
+    h('div', { class: 'up-mid' }, h('div', { class: 'up-name', title: w.path }, w.name), h('div', { class: 'up-meta' }, t(trashed ? 'upload.dupTrash' : 'upload.dupHave', { name: w.match.name }))),
+    h('span'),
+    trashed
+      ? h('button', { class: 'btn sm', type: 'button', onclick: () => void window.api.restoreJobs([w.match.id]).then(() => (toast(t('home.dupRestored')), drop()), (e) => toast(cleanError(e), true)) }, t('home.dupRestore'))
+      : h('button', { class: 'btn sm', type: 'button', onclick: () => (drop(), void host.openJob(w.match.id)) }, t('home.dupOpen')),
+    actionMenu(() => [
+      { label: t('upload.dupAnyway'), icon: ICONS.upload, run: () => (drop(), enqueue([w.path]).then(render)) },
+      { label: t('upload.removeFromList'), icon: ICONS.x, run: drop },
+    ]),
   );
 }
 
@@ -377,10 +315,10 @@ function recentSection() {
     .sort((a, b) => b.createdAt - a.createdAt)
     .slice(0, RECENT);
   if (!done.length) return null;
-  return h(
-    'section',
+  const details = h(
+    'details',
     { class: 'ov-card up-recent' },
-    h('h2', {}, icon(ICONS.clock), t('upload.recent'), h('button', { class: 'ov-link', type: 'button', onclick: host.showAll }, t('overview.allFiles'))),
+    h('summary', {}, icon(ICONS.clock), t('upload.recent', { count: done.length })),
     h(
       'div',
       { class: 'dl-list' },
@@ -394,7 +332,11 @@ function recentSection() {
         );
       }),
     ),
-  );
+    h('button', { class: 'ov-link', type: 'button', onclick: host.showAll }, t('overview.allFiles')),
+  ) as HTMLDetailsElement;
+  details.open = recentOpen;
+  details.addEventListener('toggle', () => (recentOpen = details.open));
+  return details;
 }
 
 export function renderUpload() {
@@ -405,27 +347,14 @@ export function renderUpload() {
 function render() {
   const jobs = trayJobs();
   const total = traySize();
-  const savable = jobs.filter((j) => j.status === 'done' && bulkSavable(suggestion(lib.library, j.id, lib.cards[j.id]))).length;
+  const savable = jobs.filter(bulkReady).length;
   const all = $<HTMLButtonElement>('upload-save-all');
   all.hidden = savable < 2;
   all.querySelector('span')!.textContent = t('upload.saveAll', { count: savable });
-  $('upload-drop').classList.toggle('compact', total > 0);
 
-  const body = $('upload-body');
-  if (!total) {
-    const recent = recentSection();
-    body.replaceChildren(...(recent ? [recent] : []));
-    return;
-  }
-  const view = currentLayout();
-  const seg = (key: 'cards' | 'list', label: MessageKey) =>
-    h('button', { class: view === key ? 'segment active' : 'segment', type: 'button', 'aria-pressed': String(view === key), onclick: () => ((layout = key), render()) }, t(label));
-  const items = view === 'list' ? [...waiting.map(dupCard), ...jobs.map(trayRow)] : [...waiting.map(dupCard), ...jobs.map(trayCard)];
   const recent = recentSection();
-  body.replaceChildren(
-    h('div', { class: 'up-head' }, h('h2', { class: 'section-title' }, t('upload.tray', { count: total })), h('div', { class: 'segmented', role: 'group', 'aria-label': t('upload.layout') }, seg('cards', 'upload.cards'), seg('list', 'upload.list'))),
-    h('div', { class: view === 'list' ? 'up-list' : 'up-cards' }, ...items),
-    h('p', { class: 'muted small up-foot' }, t('upload.foot')),
+  $('upload-body').replaceChildren(
+    ...(total ? [h('h2', { class: 'section-title' }, t('upload.tray', { count: total })), h('div', { class: 'up-list' }, ...waiting.map(dupRow), ...jobs.map(trayRow))] : []),
     ...(recent ? [recent] : []),
   );
 }
@@ -433,17 +362,20 @@ function render() {
 export function setupUpload(uploadHost: UploadHost) {
   host = uploadHost;
   $('upload-drop').addEventListener('click', async () => addUploads(await window.api.pickFiles()));
-  $('upload-import').addEventListener('click', async () => {
-    const paths = await window.api.pickFolder();
-    if (paths.length) await addUploads(paths);
-    else toast(t('upload.folderEmpty'));
-  });
+  $('upload-more').replaceChildren(
+    actionMenu(() => [
+      {
+        label: t('upload.import'),
+        icon: ICONS.folder,
+        run: async () => {
+          const paths = await window.api.pickFolder();
+          if (paths.length) await addUploads(paths);
+          else toast(t('upload.folderEmpty'));
+        },
+      },
+    ]),
+  );
   $('upload-save-all').addEventListener('click', saveAll);
-  document.addEventListener('click', () => {
-    if (menuOpen === null) return;
-    menuOpen = null;
-    renderUpload();
-  });
   window.api.onLibraryChanged(() => void reloadState());
   document.addEventListener('libraries-changed', () => void reloadState());
   void reloadState();

@@ -2,11 +2,15 @@ import { ancestors, childFolders, fold, folderName, isLocked, resolvePath, subtr
 import { isStudy } from './projects';
 import type { Library, LibraryKind, Project } from './types';
 
-/** Složka cílové knihovny pro přesunutý dokument: podle návrhu karty (cesta nebo název složky), jinak Ostatní, jinak nezařazený. Zamčené složky se nepoužijí. */
-export function targetFolder(target: Library, suggestion?: string): string | undefined {
+/**
+ * Složka cílové knihovny pro přesunutý dokument: podle návrhu (cesta nebo název složky; při více návrzích první, který v cíli existuje),
+ * jinak Ostatní, jinak nezařazený. Zamčené složky se nepoužijí.
+ */
+export function targetFolder(target: Library, suggestion?: string | string[]): string | undefined {
   const open = target.folders.filter((f) => !isLocked(target.folders, f));
-  const wanted = suggestion?.trim();
-  if (wanted) {
+  for (const raw of [suggestion ?? []].flat()) {
+    const wanted = raw?.trim();
+    if (!wanted) continue;
     const byPath = resolvePath(open, wanted);
     if (byPath) return byPath;
     const leaf = fold(wanted.split(/\s*[/>]\s*/).filter(Boolean).at(-1) ?? '');
@@ -63,7 +67,7 @@ export function placeWithPath(target: Library, jobId: string, names: string[], n
 }
 
 /** Zařadí dokumenty v cílové knihovně (`suggestions`: id → návrh složky z karty; `paths`: id → cesta názvů ze zdroje, má přednost) a přenese zaplacení (`paid` ze zdroje). Vrací id složky nebo undefined. */
-export function placeEntries(target: Library, ids: string[], suggestions: Record<string, string | undefined> = {}, paid: Library['paid'] = {}, paths: Record<string, string[] | undefined> = {}) {
+export function placeEntries(target: Library, ids: string[], suggestions: Record<string, string | string[] | undefined> = {}, paid: Library['paid'] = {}, paths: Record<string, string[] | undefined> = {}) {
   const placed: Record<string, string | undefined> = {};
   for (const id of ids) {
     const folder = (paths[id]?.length ? placeWithPath(target, id, paths[id]!) : undefined) ?? targetFolder(target, suggestions[id]);
@@ -90,7 +94,7 @@ export function releaseEntries(source: Library, ids: string[]) {
 }
 
 /** Obojí najednou (obě knihovny se upraví). */
-export function transferEntries(source: Library, target: Library, ids: string[], suggestions: Record<string, string | undefined> = {}) {
+export function transferEntries(source: Library, target: Library, ids: string[], suggestions: Record<string, string | string[] | undefined> = {}) {
   const placed = placeEntries(target, ids, suggestions, source.paid);
   releaseEntries(source, ids);
   return placed;

@@ -5,8 +5,10 @@ import { getLang, locale, t, type MessageKey } from '../shared/i18n';
 import { languageName } from '../shared/languages';
 import { childFolders, fold, folderName, folderPath, isLocked, placementActive, resolvePath, subtree, TRASH_DAYS } from '../shared/folders';
 import { duplicateGroups, type DuplicateGroup } from '../shared/duplicates';
-import type { InvoiceStatusFilter } from '../shared/invoices';
+import { invoiceRows, isoDay, type InvoiceRow, type InvoiceStatusFilter } from '../shared/invoices';
 import { gaps } from '../shared/bibliography';
+import { filterChips, matchesFilter, type DocFilter, type FilterDoc } from '../shared/doc-filter';
+import { formatMoney } from '../shared/money';
 import { isLiterature } from '../shared/nav';
 import { studyOffer, type StudyOffer } from '../shared/library-transfer';
 import { visibleProjects } from '../shared/projects';
@@ -14,8 +16,8 @@ import { OTHER_FOLDER } from '../shared/overview';
 import { ruleId } from '../shared/rules';
 import type { DocumentCard, FolderMerge, Job, LibraryState, OrganizePlan, Placement, Project, ProjectKind, SavedSearch } from '../shared/types';
 import type { Tab } from './detail';
-import { currentKind, hasOtherLibrary, libraryTitle, moveStudy, moveToLibraryModal, studyLibrary, studyText } from './library-switch';
-import { cleanError, date, h, icon, ICONS, jobTitle, openModal, progressInfo, statusIcon, STATUS_TEXT, toast, toastAction } from './dom';
+import { currentKind, currentLibraryId, hasOtherLibrary, moveStudy, moveToLibraryModal, studyLibrary, studyText } from './library-switch';
+import { actionMenu, cleanError, date, h, icon, ICONS, jobTitle, openModal, progressInfo, statusIcon, STATUS_TEXT, toast, toastAction, type MenuItem } from './dom';
 import { showProjectChat } from './chat';
 import { planView } from './plan-view';
 import { flushProject, newProjectModal, pickProjectModal, renderProject, type ProjectCtx } from './project-view';
@@ -37,6 +39,8 @@ export interface LibraryHost {
   folderChanged(): void;
   /** Výběr se změnil (vybraný projekt zvýrazňuje v navigaci Projekty, ne Soubory). */
   selectionChanged(): void;
+  /** Nastavení (sledované složky Odkladiště). */
+  showSettings(): void;
 }
 
 /** Výběr v seznamu složek: všechny, nezařazené, nebo id složky. */
@@ -49,14 +53,13 @@ const AI_LOG = '@aiLog';
 const DUPLICATES = '@duplicates';
 const INVOICES = '@invoices';
 const DEADLINES = '@deadlines';
-// Běžný seznam dokumentů, jen s kartou článku, knihy, kapitoly nebo práce.
-const LITERATURE = 'literature';
 // Výběr projektu: PROJECT + id (v hlavní oblasti je pak detail projektu, ne seznam dokumentů).
 const PROJECT = 'project:';
 const DAY = 86_400_000;
 const FOLDER_KEY = 'libraryFolder';
 const ERROR_PREVIEW = 90;
-const COLLAPSED_KEY = 'libraryCollapsed';
+// Rozbalené složky se pamatují zvlášť pro každou knihovnu.
+const EXPANDED_KEY = 'libraryExpanded:';
 const DRAG_TYPE = 'application/x-translatte-job';
 const FOLDER_DRAG_TYPE = 'application/x-translatte-folder';
 const INDENT = 14;
@@ -75,8 +78,13 @@ let activeSearch: SavedSearch | undefined;
 // Právě se vytváří nebo přejmenovává složka: překreslení by rozepsaný název smazalo.
 let editing: string | null = null;
 let progress: { done: number; total: number } | null = null;
-// Sbalené složky (mají skryté podsložky).
-let collapsed = new Set<string>();
+// Rozbalené složky (podsložky jsou vidět jen u rozbalených) a knihovna, pro kterou se načetly.
+let expanded = new Set<string>();
+let expandedFor: string | undefined;
+// Filtr typu nad seznamem, řazení a faktury pro podtext řádků.
+let filter: DocFilter = 'all';
+let sortBy: 'newest' | 'oldest' | 'name' = 'newest';
+let invoiceById = new Map<string, InvoiceRow>();
 // Hromadný výběr dokumentů, naposledy kliknutý (kotva pro Shift) a dokumenty právě viditelné v seznamu.
 const chosen = new Set<string>();
 let anchor: string | null = null;
@@ -93,13 +101,46 @@ let dragFolder: string | null = null;
 
 try {
   selected = localStorage.getItem(FOLDER_KEY) ?? ALL;
-  collapsed = new Set(JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? '[]'));
 } catch {}
 
-function saveCollapsed() {
+/** Rozbalené složky aktuální knihovny (po přepnutí knihovny se načtou její). */
+function loadExpanded() {
+  const id = currentLibraryId() ?? '';
+  if (id === expandedFor) return;
+  expandedFor = id;
   try {
-    localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...collapsed]));
+    expanded = new Set(JSON.parse(localStorage.getItem(EXPANDED_KEY + id) ?? '[]'));
+  } catch {
+    expanded = new Set();
+  }
+}
+
+function saveExpanded() {
+  try {
+    localStorage.setItem(EXPANDED_KEY + expandedFor, JSON.stringify([...expanded]));
   } catch {}
+}
+
+/** Rozbalí všechny nadřazené složky, ať je složka ve stromu vidět. */
+function reveal(id: string) {
+  loadExpanded();
+  const { folders } = state.library;
+  let parent = folders.find((f) => f.id === id)?.parent;
+  let changed = false;
+  while (parent && !expanded.has(parent)) {
+    expanded.add(parent);
+    changed = true;
+    parent = folders.find((f) => f.id === parent)?.parent;
+  }
+  if (changed) saveExpanded();
+}
+
+/** Otevření dokumentu z jiného místa (hledání, přehled) rozbalí jeho složku ve stromu. */
+export function revealDoc(jobId: string) {
+  const folder = folderOf(jobId);
+  if (!folder) return;
+  reveal(folder);
+  renderFolders(host.jobs());
 }
 
 /** Uložená hledání knihovny (pro paletu). */
@@ -108,7 +149,9 @@ export const savedSearches = () => state.library.saved ?? [];
 /** Otevře Dokumenty s uloženým hledáním ve složce, ve které bylo uloženo (smazaná složka = všude). */
 export function applySavedSearch(s: SavedSearch) {
   $<HTMLInputElement>('history-search').value = s.query;
-  const known = state.library.folders.some((f) => f.id === s.folder) || s.folder === UNSORTED || s.folder === LITERATURE;
+  // Dřívější hledání ve složce „Články a knihy“ je teď filtr nad všemi dokumenty.
+  filter = s.folder === 'literature' ? 'literature' : 'all';
+  const known = state.library.folders.some((f) => f.id === s.folder) || s.folder === UNSORTED;
   select(known ? s.folder! : ALL, s);
 }
 
@@ -117,7 +160,7 @@ function saveSearchModal() {
   const query = $<HTMLInputElement>('history-search').value.trim();
   const name = h('input', { type: 'text', maxlength: '60', 'aria-label': t('saved.name') });
   name.value = query;
-  const folder = state.library.folders.some((f) => f.id === selected) || selected === UNSORTED || selected === LITERATURE ? selected : undefined;
+  const folder = state.library.folders.some((f) => f.id === selected) || selected === UNSORTED ? selected : undefined;
   let close = () => {};
   const submit = () => {
     close();
@@ -144,10 +187,9 @@ const folderOf = (id: string) => {
 };
 
 /** Který pohled je otevřený: pro zvýraznění menu a nadpis stránky (běžná složka = null). */
-export type LibraryView = 'invoices' | 'deadlines' | 'literature' | 'duplicates' | 'aiLog' | 'trash' | 'project';
+export type LibraryView = 'invoices' | 'deadlines' | 'duplicates' | 'aiLog' | 'trash' | 'project';
 export function libraryView(): LibraryView | null {
   if (inProject()) return 'project';
-  if (selected === LITERATURE) return 'literature';
   const view = [INVOICES, DEADLINES, DUPLICATES, AI_LOG, TRASH].find((v) => v === selected);
   return view ? (view.slice(1) as LibraryView) : null;
 }
@@ -158,7 +200,6 @@ export function selectedTitle(): string | null {
   if (activeSearch && $<HTMLInputElement>('history-search').value === activeSearch.query) return activeSearch.name;
   if (selected === ALL) return t('library.allDocs');
   if (selected === UNSORTED) return t('library.unsorted');
-  if (selected === LITERATURE) return t('nav.literature');
   const f = state.library.folders.find((x) => x.id === selected);
   return f ? folderName(f) : null;
 }
@@ -247,7 +288,7 @@ function renderAsk(jobs: Job[]) {
     return;
   }
   const known = new Set(jobs.map((j) => j.id));
-  // V Odkladišti mají otázky vlastní řádky (stav a tlačítko), nad seznamem je jen hromadné zařazení.
+  // V Odkladišti mají otázky vlastní řádky (stav a tlačítko).
   const questions = selected === UNSORTED ? [] : (state.library.questions ?? []).filter((q) => known.has(q.jobId));
   const blocks = questions.map((q) =>
     h(
@@ -264,10 +305,6 @@ function renderAsk(jobs: Job[]) {
       ),
     ),
   );
-  if (selected === UNSORTED) {
-    const sure = sureInbox(jobs);
-    if (sure.length) blocks.push(h('div', { class: 'library-ask-item' }, h('div', { class: 'library-ask-actions' }, h('button', { class: 'btn primary', type: 'button', onclick: () => void fileSure(sure) }, icon(ICONS.check), t('inbox.fileSure', { count: sure.length })))));
-  }
   const folder = state.library.folders.find((f) => f.id === selected);
   if (folder && !childFolders(state.library.folders, folder.id).length) {
     const count = jobs.filter((j) => folderOf(j.id) === folder.id).length;
@@ -327,6 +364,7 @@ function select(value: string, search?: SavedSearch) {
   host.showLibrary();
   flushProject();
   selected = value;
+  reveal(value);
   activeSearch = search;
   try {
     localStorage.setItem(FOLDER_KEY, value);
@@ -394,7 +432,7 @@ interface FolderOpts {
 
 function folderItem(id: string, label: string, count: number, opts: FolderOpts = {}) {
   const { depth = 0, docTarget, folderTarget, kids = 0 } = opts;
-  const open = !collapsed.has(id);
+  const open = expanded.has(id);
   const toggle = kids
     ? h(
         'button',
@@ -405,9 +443,9 @@ function folderItem(id: string, label: string, count: number, opts: FolderOpts =
           'aria-label': t(open ? 'library.collapse' : 'library.expand'),
           'aria-expanded': String(open),
           onclick: () => {
-            if (open) collapsed.add(id);
-            else collapsed.delete(id);
-            saveCollapsed();
+            if (open) expanded.delete(id);
+            else expanded.add(id);
+            saveExpanded();
             draw();
           },
         },
@@ -576,8 +614,8 @@ function folderMenu(id: string, name: string) {
         role: 'menuitem',
         onclick: () => {
           // Rodič se rozbalí, aby bylo políčko vidět.
-          collapsed.delete(id);
-          saveCollapsed();
+          expanded.add(id);
+          saveExpanded();
           editing = `+${id}`;
           draw();
         },
@@ -697,10 +735,14 @@ export function leaveProject() {
 /** Otevře Soubory na pohledu Termíny. */
 export const showDeadlines = () => select(DEADLINES);
 
-/** Otevře Dokumenty na článcích a knihách. */
-
 /** Otevře Soubory na všech dokumentech. */
 export const showAll = () => select(ALL);
+
+/** Otevře Dokumenty s filtrem Chybí údaje (citace). */
+export function showMissing() {
+  filter = 'missing';
+  showAll();
+}
 
 /** Otevře Soubory na pohledu Faktury s filtrem stavu. */
 export function showInvoices(status: InvoiceStatusFilter) {
@@ -742,10 +784,8 @@ function renderFolders(jobs: Job[]) {
   }
   const total = (id: string) => [...subtree(folders, id)].reduce((sum, x) => sum + (counts.get(x) ?? 0), 0);
 
-  const items: HTMLElement[] = [folderItem(ALL, t('library.allDocs'), jobs.length, { folderTarget: null, iconPath: ICONS.list })];
-  // Filtr přes všechny složky; jen když v knihovně nějaký článek nebo kniha je.
-  const literature = jobs.filter((j) => isLiterature(state.cards[j.id]?.type)).length;
-  if (literature || selected === LITERATURE) items.push(folderItem(LITERATURE, t('nav.literature'), literature, { iconPath: ICONS.book }));
+  loadExpanded();
+  const items: HTMLElement[] = [folderItem(ALL, t('library.allDocs'), jobs.length, { folderTarget: null, iconPath: ICONS.list }), folderItem(UNSORTED, t('library.unsorted'), unsorted, { docTarget: null, iconPath: ICONS.inbox })];
   const branch = (parent: string | undefined, depth: number) => {
     for (const f of childFolders(folders, parent)) {
       const name = folderName(f);
@@ -762,11 +802,10 @@ function renderFolders(jobs: Job[]) {
         row.style.paddingLeft = `${(depth + 1) * INDENT}px`;
         items.push(row);
       }
-      if (!collapsed.has(f.id)) branch(f.id, depth + 1);
+      if (expanded.has(f.id)) branch(f.id, depth + 1);
     }
   };
   branch(undefined, 0);
-  items.push(folderItem(UNSORTED, t('library.unsorted'), unsorted, { docTarget: null, iconPath: ICONS.inbox }));
 
   items.push(
     editing === '+'
@@ -794,57 +833,53 @@ function renderFolders(jobs: Job[]) {
   );
   $('library-folders').replaceChildren(h('div', { class: 'folder-tree' }, ...items));
   $('project-folders').replaceChildren(projectBlock);
-  renderMore(jobs);
 }
 
-/** Uložená hledání: klik ho použije, křížek odebere. */
-const savedItems = () =>
-  (state.library.saved ?? []).map((s) =>
-    h(
-      'div',
-      { class: 'menu-row', role: 'none' },
-      h('button', { type: 'button', role: 'menuitem', onclick: () => applySavedSearch(s) }, icon(ICONS.search), h('span', { class: 'menu-grow' }, s.name)),
-      h('button', { class: 'menu-x', type: 'button', title: t('saved.remove'), 'aria-label': `${t('saved.remove')}: ${s.name}`, onclick: () => void window.api.removeSavedSearch(s.name).catch(fail) }, icon(ICONS.x)),
-    ),
-  );
+/** Uložená hledání v menu ⋯: klik ho použije, křížek odebere. */
+const savedItems = (): MenuItem[] =>
+  (state.library.saved ?? []).map((s) => ({ label: s.name, icon: ICONS.search, run: () => applySavedSearch(s), remove: { title: t('saved.remove'), run: () => window.api.removeSavedSearch(s.name) } }));
 
-/** Menu ⋯ v hlavičce Dokumentů: údržba knihovny (duplicity, co zařadila AI, koš, podobné složky). */
-function renderMore(jobs: Job[]) {
+/** Hlavička Dokumentů: nejvýš jedno hlavní tlačítko podle místa a menu ⋯ se zbytkem (údržba, uložená hledání, zamykání). */
+function renderHead(jobs: Job[]) {
+  const { folders } = state.library;
+  const current = folders.find((f) => f.id === selected);
+  const query = $<HTMLInputElement>('history-search').value.trim();
+  const study = currentKind() === 'study';
+  const searching = !!activeSearch && $<HTMLInputElement>('history-search').value === activeSearch.query;
+  const sure = selected === UNSORTED ? sureInbox(jobs) : [];
+  let primary: HTMLElement | null = null;
+  if (selected === UNSORTED && sure.length) {
+    primary = h('button', { class: 'btn primary', type: 'button', onclick: () => void fileSure(sure) }, icon(ICONS.check), t('inbox.fileSure', { count: sure.length }));
+  } else if (study && current && !isLocked(folders, current) && !searching) {
+    primary = h('button', { class: 'btn primary', type: 'button', onclick: () => void openPractice(`folder:${selected}`) }, icon(ICONS.sparkle), t('practice.open'));
+  }
   const dups = duplicateGroups(jobs, state.cards, state.library).length;
   const offer = currentStudyOffer(jobs);
-  const entry = (label: string, view: string, count?: number, disabled = false) =>
-    h('button', { type: 'button', role: 'menuitem', disabled, onclick: () => select(view) }, h('span', { class: 'menu-grow' }, label), count !== undefined && h('span', { class: 'menu-count' }, String(count)));
-  const menu = h(
-    'div',
-    { class: 'menu', role: 'menu', hidden: true },
-    entry(t('dup.title'), DUPLICATES, dups, !dups),
-    entry(t('aiLog.title'), AI_LOG),
-    ...savedItems(),
-    h('button', { type: 'button', role: 'menuitem', onclick: showRules }, h('span', { class: 'menu-grow' }, t('inbox.rules')), h('span', { class: 'menu-count' }, String(state.library.rules?.length ?? 0))),
-    entry(t('trash.title'), TRASH, trash.length),
-    offer && h('button', { type: 'button', role: 'menuitem', onclick: () => void moveStudy(offer, () => void reloadLibrary()) }, h('span', { class: 'menu-grow' }, t('libs.studyMenu'))),
-    h('div', { class: 'menu-sep' }),
-    h('button', { type: 'button', role: 'menuitem', disabled: findingMerges, onclick: () => void findMerges() }, t(findingMerges ? 'merge.finding' : 'merge.find')),
-  );
-  const button = h(
-    'button',
-    {
-      class: 'icon-btn library-more',
-      type: 'button',
-      title: t('library.more'),
-      'aria-label': t('library.more'),
-      'aria-haspopup': 'menu',
-      onclick: (e: Event) => {
-        e.stopPropagation();
-        const wasHidden = menu.hidden;
-        for (const m of document.querySelectorAll<HTMLElement>('.menu')) m.hidden = true;
-        menu.hidden = !wasHidden;
-      },
-    },
-    icon(ICONS.more),
-    trash.length > 0 && h('span', { class: 'more-count' }, String(trash.length)),
-  );
-  $('library-more').replaceChildren(button, menu);
+  const plain = !special();
+  const menu = (): MenuItem[] => {
+    const items: (MenuItem | false)[] = [
+      study && selected === ALL && { label: t('openalex.find'), icon: ICONS.globe, run: () => openOpenAlex() },
+      selected === UNSORTED && { label: t('inbox.watched'), icon: ICONS.folder, run: host.showSettings },
+      plain && !!current && !isLocked(folders, current) && { label: t(encrypting === current.id ? 'vault.encrypting' : 'vault.lockMenu'), icon: ICONS.lock, disabled: !!encrypting, run: () => lockFolder(current.id, (on) => ((encrypting = on ? current.id : null), renderLibrary())) },
+      vault.unlocked && folders.some((f) => f.locked) && { label: t('vault.lockNow'), icon: ICONS.lock, run: () => window.api.vaultLock() },
+      plain && !!query && { label: t('saved.save'), icon: ICONS.plus, run: saveSearchModal },
+    ];
+    const saved = savedItems();
+    return [
+      ...items.filter((i): i is MenuItem => !!i),
+      ...(saved.length ? [null, ...saved] : []),
+      null,
+      { label: `${t('dup.title')}${dups ? ` (${dups})` : ''}`, disabled: !dups, run: () => select(DUPLICATES) },
+      { label: t('aiLog.title'), run: () => select(AI_LOG) },
+      { label: `${t('inbox.rules')} (${state.library.rules?.length ?? 0})`, run: showRules },
+      { label: `${t('trash.title')} (${trash.length})`, icon: ICONS.trash, run: () => select(TRASH) },
+      ...(offer ? [{ label: t('libs.studyMenu'), run: () => moveStudy(offer, () => void reloadLibrary()) }] : []),
+      null,
+      { label: t(findingMerges ? 'merge.finding' : 'merge.find'), disabled: findingMerges, run: findMerges },
+    ];
+  };
+  $('library-primary').replaceChildren(...(primary ? [primary] : []));
+  $('library-more').replaceChildren(actionMenu(menu));
 }
 
 // ---------- Banner s chybějícími kartami ----------
@@ -1214,46 +1249,39 @@ function showRules() {
   close = openModal(t('inbox.rules'), [h('p', { class: 'muted small' }, t('inbox.rulesHint')), list], [h('button', { class: 'btn', type: 'button', onclick: () => close() }, t('region.close'))]);
 }
 
-/** Stav návrhu, hlavní tlačítko a menu ⋯ u řádku dokumentu v Odkladišti. */
+/** Stav návrhu, hlavní tlačítko (složka je jen na něm) a menu ⋯ u řádku dokumentu v Odkladišti. */
 function inboxActions(job: Job, dup: boolean) {
   const s = suggestion(job.id);
   const done = job.status === 'done';
-  const text = s ? [prettyPath(s.path), ' · ', t(s.sure ? 'inbox.sure' : 'inbox.unsure')].join('') : t('inbox.noSuggestion');
-  const status = h('span', { class: 'inbox-status', title: text }, dup ? h('span', { class: 'chip warn' }, t('inbox.duplicate')) : text);
+  const text = dup ? t('inbox.duplicate') : !s ? t('inbox.noSuggestion') : s.sure ? '' : t('inbox.unsure');
+  const status = h('span', { class: 'inbox-status' }, text && h('span', { class: `chip${dup ? ' warn' : ''}` }, text));
   const primary =
     s?.sure && done
       ? h('button', { class: 'btn inbox-primary', type: 'button', title: t('inbox.fileToTitle', { path: prettyPath(s.path) }), onclick: () => void window.api.answerFolder(job.id, s.path).catch(fail) }, icon(ICONS.check), t('inbox.fileTo', { folder: leafName(s.path) }))
       : h('button', { class: 'btn inbox-primary', type: 'button', disabled: !done, onclick: () => chooseFolder(job) }, icon(ICONS.folder), t('inbox.choose'));
-  const menu = h(
-    'div',
-    { class: 'menu', role: 'menu', hidden: true },
-    h('button', { type: 'button', role: 'menuitem', disabled: !done, onclick: () => chooseFolder(job) }, icon(ICONS.arrow), t('inbox.elsewhere')),
-    h('button', { type: 'button', role: 'menuitem', onclick: () => host.open(job.id) }, icon(ICONS.file), t('inbox.open')),
-    h('button', { type: 'button', role: 'menuitem', class: 'danger', onclick: () => void toTrash([job.id]) }, icon(ICONS.trash), t('inbox.trash')),
-  );
-  const more = h(
-    'button',
-    {
-      class: 'icon-btn',
-      type: 'button',
-      title: t('inbox.more'),
-      'aria-label': t('inbox.more'),
-      'aria-haspopup': 'menu',
-      onclick: (e: Event) => {
-        e.stopPropagation();
-        const wasHidden = menu.hidden;
-        for (const m of document.querySelectorAll<HTMLElement>('.menu')) m.hidden = true;
-        menu.hidden = !wasHidden;
-      },
-    },
-    icon(ICONS.more),
-  );
-  return h('div', { class: 'inbox-actions' }, status, primary, h('span', { class: 'menu-wrap' }, more, menu));
+  const more = actionMenu(() => [
+    { label: t('inbox.elsewhere'), icon: ICONS.arrow, disabled: !done, run: () => chooseFolder(job) },
+    { label: t('inbox.open'), icon: ICONS.file, run: () => host.open(job.id) },
+    { label: t('inbox.trash'), icon: ICONS.trash, danger: true, run: () => toTrash([job.id]) },
+  ]);
+  return h('div', { class: 'inbox-actions' }, status, primary, more);
 }
 
 // ---------- Řádky dokumentů ----------
 
-/** Řádek dokumentu: název z karty, jeden řádek podtextu, vpravo datum a typ; ikona jen u dokumentů, které ještě nejsou hotové. */
+/** Ikona dokumentu podle typu karty. */
+const typeIcon = (type?: string) => (type === 'invoice' ? ICONS.invoice : isLiterature(type as DocumentCard['type']) ? ICONS.book : ICONS.file);
+
+/** Faktura: dodavatel, částka a stav úhrady. */
+function invoiceMeta(row: InvoiceRow) {
+  const total = row.total !== undefined ? formatMoney(row.total, row.currency, locale()) : '';
+  return [row.supplier, total, t(`inv.status.${row.status}` as MessageKey)].filter(Boolean).join(' · ');
+}
+
+/** Studium: zdroj bez autora nebo roku (chybí citace). */
+const citeGaps = (card: DocumentCard | undefined) => (currentKind() === 'study' && card && isLiterature(card.type) ? gaps(card).filter((g) => g === 'author' || g === 'year') : []);
+
+/** Řádek dokumentu: ikona, název z karty, jeden tichý řádek podtextu a datum. */
 function docRow(job: Job) {
   const card = state.cards[job.id];
   const busy = job.status === 'running' || job.status === 'queued';
@@ -1267,10 +1295,11 @@ function docRow(job: Job) {
         : card
           ? docSubtitle(job, card) || (wasTranslated(job) ? t('doc.translatedFrom', { lang: languageName(job.sourceLang) }) : '')
           : '';
-  // Ve Studiu zkrácená citace zdroje, nebo upozornění na chybějící údaj.
-  const source = job.status === 'done' && !!card && currentKind() === 'study' && isLiterature(card.type);
-  const cite = source ? shortCite(card.biblio, getLang()) : '';
-  const citeGaps = source ? gaps(card).filter((g) => g === 'author' || g === 'year') : [];
+  // Ve Studiu zkrácená citace zdroje, nebo upozornění na chybějící údaj; u faktury dodavatel, částka a stav.
+  const missing = job.status === 'done' ? citeGaps(card) : [];
+  const cite = job.status === 'done' && card && currentKind() === 'study' && isLiterature(card.type) ? shortCite(card.biblio, getLang()) : '';
+  const invoice = job.status === 'done' ? invoiceById.get(job.id) : undefined;
+  const meta = invoice ? invoiceMeta(invoice) : cite || (missing.length ? '' : subtitle);
   const check = h('input', { type: 'checkbox', class: 'lib-check', title: t('library.selectRow'), 'aria-label': t('library.selectRow') });
   check.checked = chosen.has(job.id);
   // Klik na zaškrtávátko dokument neotevírá; Shift vybere rozsah ve viditelném seznamu.
@@ -1287,15 +1316,14 @@ function docRow(job: Job) {
   const row = h(
     'button',
     { class: 'job-row', type: 'button', onclick: () => host.open(job.id) },
-    job.status === 'done' ? null : statusIcon(job),
+    job.status === 'done' ? h('span', { class: 'row-icon' }, icon(typeIcon(card?.type))) : statusIcon(job),
     h(
       'span',
       { class: 'job-row-text' },
       h('div', { class: 'job-row-name', title: `${job.name}${job.ext}` }, card ? cardTitle(job, card) : `${job.name}${job.ext}`),
-      subtitle || cite || citeGaps.length ? h('div', { class: `job-row-meta${failed ? ' err' : ''}` }, [cite, subtitle].filter(Boolean).join(' · '), ...citeGaps.map((g) => h('span', { class: 'chip warn cite-gap' }, t(`project.gap.${g}` as MessageKey)))) : null,
+      meta || missing.length ? h('div', { class: `job-row-meta${failed || invoice?.status === 'overdue' ? ' err' : ''}` }, meta, ...missing.map((g) => h('span', { class: 'chip warn cite-gap' }, t(`project.gap.${g}` as MessageKey)))) : null,
     ),
     h('span', { class: 'job-row-date' }, new Date(job.createdAt).toLocaleDateString(locale())),
-    card ? h('span', { class: 'chip' }, t(`docType.${card.type}` as MessageKey)) : '',
   );
   const item = h('div', { class: `lib-item doc-item${chosen.has(job.id) ? ' chosen' : ''}`, draggable: 'true' }, h('div', { class: 'lib-line' }, check, row));
   item.addEventListener('dragstart', (e) => {
@@ -1327,10 +1355,10 @@ export function renderLibrary() {
   if (document.querySelector<HTMLElement>('.view[data-view="history"]')?.hidden === false) showProjectChat(inProject() ? (projects.find((p) => p.id === projectId()) ?? null) : null);
 }
 
-/** Lišta hromadných akcí nad seznamem; viditelná u neprázdného seznamu, akce jen s výběrem. */
+/** Lišta hromadných akcí nad seznamem; ukáže se, až je zaškrtnutý aspoň jeden dokument. */
 function renderBar() {
   const bar = $('library-bar');
-  bar.hidden = !visible.length;
+  bar.hidden = !chosen.size;
   if (bar.hidden) return;
   const all = h('input', { type: 'checkbox', class: 'lib-check', title: t('library.selectAll'), 'aria-label': t('library.selectAll') });
   all.checked = visible.length > 0 && visible.every((id) => chosen.has(id));
@@ -1419,13 +1447,7 @@ function renderBar() {
     },
     icon(ICONS.x),
   );
-  const allLabel = h('label', { class: 'lib-bar-all' }, all, h('span', {}, chosen.size ? t('library.selected', { count: chosen.size }) : t('library.selectAll')));
-  const none = !chosen.size;
-  moveTo.disabled = none;
-  toProject.disabled = none;
-  toLibrary.disabled = none;
-  del.disabled = none;
-  clear.hidden = none;
+  const allLabel = h('label', { class: 'lib-bar-all' }, all, h('span', {}, t('library.selected', { count: chosen.size })));
   bar.replaceChildren(allLabel, moveTo, toProject, toLibrary, del, clear);
 }
 
@@ -1502,10 +1524,36 @@ function drawLocked() {
   );
 }
 
+/** Řazení seznamu: úlohy chodí od nejnovější, jinak podle data nebo názvu. */
+function sorter() {
+  const name = (j: Job) => (state.cards[j.id] ? cardTitle(j, state.cards[j.id]) : `${j.name}${j.ext}`);
+  const collator = new Intl.Collator(getLang());
+  if (sortBy === 'oldest') return (a: Job, b: Job) => a.createdAt - b.createdAt;
+  if (sortBy === 'name') return (a: Job, b: Job) => collator.compare(name(a), name(b));
+  return (a: Job, b: Job) => b.createdAt - a.createdAt;
+}
+
+/** Jedna řada nad seznamem: čipy filtru typu (vlevo), políčko pro filtrování a řazení (vpravo); v Fakturách a Koši jen políčko. */
+function renderFilters(chips: ReturnType<typeof filterChips>, searchable: boolean) {
+  const box = $('library-filters');
+  box.hidden = !searchable;
+  if (!searchable) return;
+  const chip = (f: DocFilter, label: string, count?: number) =>
+    h('button', { class: `filter-chip${filter === f ? ' on' : ''}`, type: 'button', 'aria-pressed': String(filter === f), onclick: () => ((filter = f), renderLibrary()) }, label, count !== undefined && h('span', { class: 'n' }, String(count)));
+  const label = (f: DocFilter) => (f === 'literature' ? t('nav.literature') : f === 'missing' ? t('library.filterMissing') : t(`docType.${f.slice(5)}` as MessageKey));
+  const sort = h(
+    'select',
+    { class: 'lib-sort', 'aria-label': t('library.sort'), onchange: (e: Event) => ((sortBy = (e.target as HTMLSelectElement).value as typeof sortBy), renderLibrary()) },
+    ...(['newest', 'oldest', 'name'] as const).map((k) => h('option', { value: k, ...(k === sortBy ? { selected: true } : {}) }, t(`library.sort.${k}` as MessageKey))),
+  );
+  $('library-chips').replaceChildren(...(chips.length ? [chip('all', t('library.filterAll')), ...chips.map((c) => chip(c.filter, label(c.filter), c.count))] : []));
+  $('library-sort').replaceChildren(...(special() ? [] : [sort]));
+}
+
 function draw() {
   const jobs = host.jobs();
   const { folders } = state.library;
-  if (selected !== ALL && selected !== UNSORTED && selected !== LITERATURE && !special() && !folders.some((f) => f.id === selected)) selected = ALL;
+  if (selected !== ALL && selected !== UNSORTED && !special() && !folders.some((f) => f.id === selected)) selected = ALL;
   if (selected === UNSORTED && !jobs.some((j) => inInbox(j.id))) selected = ALL;
   if (inProject() && projectsLoaded && !projects.some((p) => p.id === projectId())) selected = ALL;
   if (selected === DUPLICATES && !duplicateGroups(jobs, state.cards, state.library).length) selected = ALL;
@@ -1513,30 +1561,36 @@ function draw() {
   renderFolders(jobs);
   renderBanner(jobs);
   renderAsk(jobs);
-  $('vault-lock').hidden = !vault.unlocked || !folders.some((f) => f.locked);
 
   const current = folders.find((f) => f.id === selected);
-  // Procvičit jen u běžné složky Studia (ne zamčené, ne použité uložené hledání).
-  const searching = !!activeSearch && $<HTMLInputElement>('history-search').value === activeSearch.query;
-  $('practice-btn').hidden = currentKind() !== 'study' || !current || isLocked(folders, current) || searching;
-  $('oa-btn').hidden = currentKind() !== 'study' || selected !== ALL;
-  if (current && isLocked(folders, current) && !vault.unlocked) return drawLocked();
+  renderHead(jobs);
+  if (current && isLocked(folders, current) && !vault.unlocked) {
+    $('library-filters').hidden = true;
+    return drawLocked();
+  }
 
   const query = fold($<HTMLInputElement>('history-search').value);
-  $('save-search').hidden = !query;
+  invoiceById = new Map(invoiceRows(jobs, state.cards, state.library.paid, isoDay()).map((r) => [r.jobId, r]));
   if (special()) {
+    // Filtr, typy a řazení jen u běžného seznamu; hledání má Faktury a Koš.
+    renderFilters([], selected === INVOICES || selected === TRASH);
     drawSpecial(query);
     return;
   }
   // Vybraná složka ukazuje dokumenty celého podstromu.
-  const inFolders = selected === ALL || selected === UNSORTED || selected === LITERATURE ? null : subtree(folders, selected);
-  const list = jobs
+  const inFolders = selected === ALL || selected === UNSORTED ? null : subtree(folders, selected);
+  const inPlace = jobs
     .filter((j) => {
       if (inFolders) return inFolders.has(folderOf(j.id) ?? '');
       if (selected === UNSORTED) return inInbox(j.id);
-      return selected !== LITERATURE || isLiterature(state.cards[j.id]?.type);
+      return true;
     })
     .filter((j) => !query || searchText(j, state.cards[j.id]).includes(query));
+  const filterDoc = (j: Job): FilterDoc => ({ type: state.cards[j.id]?.type, gap: j.status === 'done' && citeGaps(state.cards[j.id]).length > 0 });
+  const chips = filterChips(inPlace.map(filterDoc));
+  if (filter !== 'all' && !chips.some((c) => c.filter === filter)) filter = 'all';
+  renderFilters(chips, true);
+  const list = inPlace.filter((j) => matchesFilter(filter, filterDoc(j))).sort(sorter());
   visible = list.map((j) => j.id);
   // Výběr nesmí obsahovat dokumenty, které nejsou vidět (jiná složka, hledání, smazané).
   for (const id of chosen) if (!visible.includes(id)) chosen.delete(id);
@@ -1554,7 +1608,7 @@ function draw() {
   );
   $('history-empty').hidden = list.length > 0;
   // Prázdná knihovna nabízí první překlad, prázdná složka nebo hledání jen vysvětlení.
-  $('history-empty-text').textContent = t(!jobs.length ? 'history.empty' : query ? 'library.noResults' : selected === LITERATURE ? 'library.noLiterature' : 'library.emptyFolder');
+  $('history-empty-text').textContent = t(!jobs.length ? 'history.empty' : query || filter !== 'all' ? 'library.noResults' : 'library.emptyFolder');
   $('history-empty-action').hidden = jobs.length > 0;
 }
 
@@ -1577,10 +1631,6 @@ export function setupLibrary(libraryHost: LibraryHost) {
   host = libraryHost;
   $('history-list').before(h('div', { class: 'library-ask', id: 'library-ask', hidden: true }), h('div', { class: 'lib-bar', id: 'library-bar', hidden: true }));
   $('history-search').addEventListener('input', renderLibrary);
-  $('history-search').after(h('button', { class: 'btn', id: 'save-search', type: 'button', hidden: true, onclick: saveSearchModal }, icon(ICONS.plus), t('saved.save')));
-  $('history-search').before(h('button', { class: 'btn', id: 'oa-btn', type: 'button', hidden: true, onclick: () => openOpenAlex() }, icon(ICONS.globe), t('openalex.find')));
-  $('history-search').before(h('button', { class: 'btn', id: 'practice-btn', type: 'button', hidden: true, onclick: () => void openPractice(`folder:${selected}`) }, icon(ICONS.sparkle), t('practice.open')));
-  $('history-search').before(h('button', { class: 'btn vault-lock', id: 'vault-lock', type: 'button', hidden: true, onclick: () => void window.api.vaultLock().catch((e) => toast(cleanError(e), true)) }, icon(ICONS.lock), t('vault.lockNow')));
   document.addEventListener('keydown', (e) => {
     const field = (e.target as HTMLElement).closest('input[type=text], textarea, select');
     // Escape zruší výběr jen v zobrazené knihovně a mimo psaní do políčka.

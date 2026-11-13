@@ -4,7 +4,7 @@ import { citeLang, isStudy, kindName, PROJECT_KINDS } from '../shared/projects';
 import type { CitationStyle, DocumentCard, Job, Project, ProjectKind } from '../shared/types';
 import type { Tab } from './detail';
 import { openChat } from './chat';
-import { cleanError, h, icon, ICONS, openModal, toast, writeClipboard } from './dom';
+import { actionMenu, cleanError, h, icon, ICONS, openModal, toast, writeClipboard } from './dom';
 import { openOpenAlex } from './openalex-view';
 import { filterSources } from './project-filter';
 import { openPractice } from './practice-view';
@@ -199,7 +199,7 @@ function sourcesTab(p: Project, c: ProjectCtx) {
     // Bez názvu: zamčený dokument by ho při zamčeném trezoru neměl prozradit.
     return h('div', { class: 'lib-item dim' }, h('div', { class: 'lib-line' }, h('div', { class: 'proj-gone' }, h('span', { class: 'muted' }, t('project.unavailable'))), removeBtn(id)));
   });
-  const add = h('button', { class: 'btn primary', type: 'button', onclick: () => pickSources(p, c) }, icon(ICONS.plus), t('project.addSources'));
+  const add = h('button', { class: 'btn', type: 'button', onclick: () => pickSources(p, c) }, icon(ICONS.plus), t('project.addSources'));
   const online = isStudy(p.kind) ? h('button', { class: 'btn', type: 'button', onclick: () => openOpenAlex(p.name, p.id) }, icon(ICONS.globe), t('openalex.findShort')) : null;
   return h('div', {}, h('div', { class: 'proj-actions' }, add, online), rows.length ? h('div', { class: 'proj-list' }, ...rows) : h('p', { class: 'muted' }, t('project.sourcesEmpty')));
 }
@@ -343,24 +343,22 @@ export function renderProject(root: HTMLElement, id: string, c: ProjectCtx) {
   status = h('span', { class: 'muted small proj-status', role: 'status' });
   const deadline = h('input', { type: 'date', value: p.deadline ?? '', 'aria-label': t('project.deadline') });
   deadline.addEventListener('change', () => void save(p.id, { deadline: deadline.value || undefined }));
-  const chatBtn = h('button', { class: 'btn', type: 'button', onclick: openChat }, icon(ICONS.chat), t('projectChat.open'));
+  const chatBtn = h('button', { class: 'btn primary', type: 'button', onclick: openChat }, icon(ICONS.chat), t('projectChat.open'));
   const practiceBtn = study && h('button', { class: 'btn', type: 'button', onclick: () => void openPractice(`project:${p.id}`) }, icon(ICONS.sparkle), t('practice.open'));
-  const del = h(
-    'button',
+  const more = actionMenu(() => [
     {
-      class: 'btn danger',
-      type: 'button',
-      onclick: () => {
+      label: t('project.delete'),
+      icon: ICONS.trash,
+      danger: true,
+      run: () => {
         if (confirm(t('project.confirmDelete', { name: p.name }))) c.remove(p.id);
       },
     },
-    icon(ICONS.trash),
-    t('project.delete'),
-  );
+  ]);
   const head = h(
     'div',
     { class: 'proj-head' },
-    h('div', { class: 'proj-title' }, icon(ICONS.book), nameEditor(p), status, chatBtn, practiceBtn, del),
+    h('div', { class: 'proj-title' }, icon(ICONS.book), nameEditor(p), status, chatBtn, practiceBtn, more),
     h('div', { class: 'proj-meta' }, h('span', { class: 'chip accent' }, kindName(p.kind)), h('label', { class: 'row gap' }, h('span', { class: 'muted small' }, t('project.deadline')), deadline)),
   );
   const label = (k: ProjectTab) => t(k === 'bibliography' ? (study ? 'project.tab.bibliography' : 'project.tab.materials') : (`project.tab.${k}` as MessageKey));

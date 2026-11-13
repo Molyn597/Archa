@@ -4,7 +4,7 @@ import { locale, t, type MessageKey } from '../shared/i18n';
 import { day, invoiceRows, isoDay } from '../shared/invoices';
 import { formatMoney } from '../shared/money';
 import type { DocumentCard, Job, OwnCompany } from '../shared/types';
-import { h, icon, ICONS } from './dom';
+import { actionMenu, h, helpTip, icon, ICONS } from './dom';
 
 export interface FinanceCtx {
   jobs: Job[];
@@ -294,12 +294,12 @@ export function renderFinance(root: HTMLElement, ctx: FinanceCtx) {
       h(
         'div',
         { class: 'fin-head' },
-        h('p', { class: 'muted' }, t('fin.sub'), ' ', !hasOwnCompany(ctx.own) && ownHint(ctx)),
+        !hasOwnCompany(ctx.own) ? ownHint(ctx) : h('span'),
         h(
           'div',
           { class: 'fin-acts' },
           month && h('button', { class: 'btn', type: 'button', onclick: () => pickMonth(month) }, icon(ICONS.x), t('fin.clearMonth', { month: cap(monthName(month, 'long')) })),
-          h('button', { class: 'btn', type: 'button', onclick: ctx.showInvoices }, icon(ICONS.invoice), t('inv.title')),
+          actionMenu(() => [{ label: t('inv.title'), icon: ICONS.invoice, run: ctx.showInvoices }]),
         ),
       ),
       h('div', { class: 'fin-sums' }, sumCard(t('fin.income'), perCurrency((x) => x.income)), sumCard(t('fin.expense'), perCurrency((x) => x.expense)), sumCard(t('fin.diff'), perCurrency((x) => x.income - x.expense, true), diffTone)),
@@ -309,11 +309,11 @@ export function renderFinance(root: HTMLElement, ctx: FinanceCtx) {
         h(
           'div',
           { class: 'fin-main' },
-          h('section', { class: 'ov-card' }, h('h2', {}, t('fin.timeline')), timelineChart(timelineItems(all, ctx.jobs, ctx.cards, tlMonths, currency), tlMonths, today, ctx)),
+          h('section', { class: 'ov-card' }, h('h2', {}, t('fin.timeline'), helpTip(t('fin.sub'))), timelineChart(timelineItems(all, ctx.jobs, ctx.cards, tlMonths, currency), tlMonths, today, ctx)),
           h(
             'div',
             { class: 'fin-grid' },
-            h('section', { class: 'ov-card' }, h('h2', {}, `${t('fin.byMonth')} · ${t('fin.byMonthHint')}`), monthlyChart(monthTotals(rows, months, currency), currency)),
+            h('section', { class: 'ov-card' }, h('h2', {}, t('fin.byMonth'), helpTip(`${t('fin.byMonthHint')} ${t('fin.note')}`)), monthlyChart(monthTotals(rows, months, currency), currency)),
             h('section', { class: 'ov-card' }, h('h2', {}, t('fin.suppliers')), suppliersList(rows, currency)),
           ),
           h(
@@ -327,7 +327,7 @@ export function renderFinance(root: HTMLElement, ctx: FinanceCtx) {
         ),
         panel,
       ),
-      h('p', { class: 'muted small' }, t('fin.note'), currencies.size > 1 && ` ${t('fin.currencyNote', { currency })}`),
+      currencies.size > 1 && h('p', { class: 'muted small' }, t('fin.currencyNote', { currency })),
     ),
   );
   if (main) main.scrollTop = scroll;

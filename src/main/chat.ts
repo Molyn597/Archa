@@ -1,9 +1,11 @@
+import { openPaths } from '../shared/folders';
 import { t } from '../shared/i18n';
 import { chatSettings, isOnline } from '../shared/provider';
 import type { ChatMessage, ChatModel, Job, Settings } from '../shared/types';
 import { readKey } from './keystore';
+import { loadLibraries } from './libraries';
 import { ask, askStream, connect, loadModel, type Llm } from './pipeline';
-import { DOCUMENT_CHAT_SYSTEM, searchTermsPrompt } from './prompts';
+import { DOCUMENT_CHAT_SYSTEM, libraryContext, searchTermsPrompt } from './prompts';
 import { cleanCitations, formatPassages, passages, search, selectPassages, totalChars } from './rag';
 import type { Store } from './store';
 
@@ -26,6 +28,15 @@ export interface ChatHooks {
   step(step: string, tags?: string[]): void;
   /** Část odpovědi (`reasoning` = úvahy modelu); sloučené po ~50 ms. */
   delta(d: { content?: string; reasoning?: string }): void;
+}
+
+/** Krátký kontext pro odpověď „kam dokument patří“: knihovny (název a typ) a složky otevřené knihovny. */
+export async function libraryHint(store: Store): Promise<string> {
+  // Kontext je jen pomoc: chyba čtení knihoven nesmí zablokovat odpověď.
+  const { list, current } = await loadLibraries(store.appRoot).catch(() => ({ list: [], current: '' }));
+  if (!list.length) return '';
+  const libraries = list.map((l) => `${l.name || t(`libraryKind.${l.kind}`)} (${l.kind}${l.id === current ? ', open' : ''})`);
+  return libraryContext(libraries, openPaths((await store.library()).folders), t('libs.move'));
 }
 
 /**
@@ -69,7 +80,7 @@ export async function askDocument(store: Store, job: Job, base: Settings, questi
   }
 
   const recent = history.slice(-HISTORY).map((m) => ({ role: m.role, content: m.text.slice(0, HISTORY_CHARS) }));
-  const messages = [{ role: 'system' as const, content: DOCUMENT_CHAT_SYSTEM + formatPassages(chosen) }, ...recent, { role: 'user' as const, content: question }];
+  const messages = [{ role: 'system' as const, content: (await libraryHint(store)) + DOCUMENT_CHAT_SYSTEM + formatPassages(chosen) }, ...recent, { role: 'user' as const, content: question }];
   step(t('chat.stepWrite'));
   const raw = await answer(llm, messages, hooks);
   const { text, sources } = cleanCitations(raw, new Set(chosen.map((p) => p.id)));

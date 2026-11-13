@@ -5,7 +5,7 @@ import { activeRates, FAST_REMOTE_MODEL, isFreeModel, RECOMMENDED_REMOTE_MODEL }
 import { catalogRows, chatModelWarning, formatContext, isFree, sharedModel, visionWarnings } from '../shared/catalog-view';
 import { applyTemplate, DEFAULT_NAME_TEMPLATE } from '../shared/name-template';
 import type { CitationStyle, Currency, DocumentCard, LmStatus, ModelPrice, Models, Provider, Settings, Theme } from '../shared/types';
-import { chatWarningText, duration, h, icon, ICONS, rememberOpen, toast } from './dom';
+import { chatWarningText, duration, h, helpTip, icon, ICONS, rememberOpen, toast } from './dom';
 import { languageName, LANGUAGES } from '../shared/languages';
 import { currentKind } from './library-switch';
 import { changePasswordModal, refreshVault, vault } from './vault';
@@ -52,7 +52,17 @@ function toggle(label: string, hint: string, checked: boolean, onChange: (v: boo
   const input = h('input', { type: 'checkbox' });
   input.checked = checked;
   input.addEventListener('change', () => onChange(input.checked));
-  return h('label', { class: 'toggle' }, h('span', {}, h('div', {}, label), h('div', { class: 'muted small' }, hint)), input);
+  return h('label', { class: 'toggle' }, h('span', {}, label, helpTip(hint)), input);
+}
+
+/** Pole s popiskem; vysvětlení je v tooltipu (?) u popisku, ne pod polem. */
+const labeled = (label: string, hint: string, ...body: (Node | string)[]) => h('label', { class: 'field' }, h('span', {}, label, hint ? helpTip(hint) : ''), ...body);
+
+/** Jediný sbalený blok „Pokročilé“ na konci sekce; stav se pamatuje zvlášť pro každou sekci. */
+function advancedBlock(storeKey: string, forceOpen: boolean, ...body: (Node | string | false)[]) {
+  const block = h('details', { class: 'advanced' }, h('summary', {}, t('settings.app')), h('div', { class: 'advanced-body stack' }, ...body));
+  rememberOpen(block, storeKey, forceOpen);
+  return block;
 }
 
 export async function renderSettings(onSaved: (s: Settings) => void) {
@@ -107,56 +117,53 @@ export async function renderSettings(onSaved: (s: Settings) => void) {
     void save();
   });
 
-  const advanced = h(
-    'details',
-    { class: 'advanced' },
-    h('summary', {}, t('settings.app')),
-    h(
-      'div',
-      { class: 'advanced-body stack' },
+  // Pořadí: Obecné, Vzhled, AI, Knihovna, Zamčené složky; v každé sekci jen běžné volby a sbalené Pokročilé.
+  const ai = aiGroup(settings, lm, remote, save, rerender);
+  ai.append(
+    advancedBlock(
+      'settingsAdvancedOpen',
+      openAdvanced,
       modelGroup,
-      currencySelect(settings, save, rerender),
-      toggle(t('settings.notify'), t('settings.notifyHint'), settings.notify, (v) => {
-        settings.notify = v;
-        void save();
-      }),
-      toggle(t('settings.autoCard'), t('settings.autoCardHint'), settings.autoCard, (v) => {
-        settings.autoCard = v;
-        void save();
-      }),
-      toggle(t('settings.layoutPdf'), t('settings.layoutPdfHint'), settings.layoutPdf, (v) => {
-        settings.layoutPdf = v;
-        void save();
-      }),
       toggle(t('settings.unload'), t('settings.unloadHint'), settings.unloadWhenIdle, (v) => {
         settings.unloadWhenIdle = v;
         void save();
       }),
-      citationRow(settings, save),
-      h(
-        'div',
-        { class: 'toggle' },
-        h('span', {}, h('div', {}, t('settings.rates')), h('div', { class: 'muted small' }, t('settings.ratesText', { ocr: duration(r.ocrPerPage), translate: duration(r.translatePerKChar), fix: duration(r.fixPerSegment) }))),
-      ),
+      currencySelect(settings, save, rerender),
+      h('div', { class: 'toggle' }, h('span', {}, t('settings.rates'), helpTip(t('settings.ratesText', { ocr: duration(r.ocrPerPage), translate: duration(r.translatePerKChar), fix: duration(r.fixPerSegment) })))),
     ),
   );
-  rememberOpen(advanced, 'settingsAdvancedOpen', openAdvanced);
   openAdvanced = false;
 
-  // Pořadí: AI, Jazyk překladu, Vzhled, Zamčené složky, Pokročilé (sbalené).
-  $('settings').replaceChildren(
-    aiGroup(settings, lm, remote, save, rerender),
-    h('section', { class: 'setting-group' }, h('h2', {}, t('settings.targetLang')), h('label', { class: 'field' }, targetLang, h('span', { class: 'muted small' }, t('settings.targetLangHint')))),
-    h(
-      'section',
-      { class: 'setting-group' },
-      h('h2', {}, t('settings.section.look')),
-      h('label', { class: 'field' }, h('span', {}, 'Jazyk aplikace / App language'), uiLang),
-      h('label', { class: 'field' }, h('span', {}, t('settings.theme')), theme),
+  const general = h(
+    'section',
+    { class: 'setting-group' },
+    h('h2', {}, t('settings.section.general')),
+    h('label', { class: 'field' }, h('span', {}, 'Jazyk aplikace / App language'), uiLang),
+    labeled(t('settings.targetLang'), t('settings.targetLangHint'), targetLang),
+    toggle(t('settings.notify'), t('settings.notifyHint'), settings.notify, (v) => {
+      settings.notify = v;
+      void save();
+    }),
+    toggle(t('settings.bell'), t('settings.bellHint'), settings.bell, (v) => {
+      settings.bell = v;
+      void save();
+    }),
+    advancedBlock(
+      'settingsAdvancedOpen.general',
+      false,
+      toggle(t('settings.layoutPdf'), t('settings.layoutPdfHint'), settings.layoutPdf, (v) => {
+        settings.layoutPdf = v;
+        void save();
+      }),
     ),
+  );
+
+  $('settings').replaceChildren(
+    general,
+    h('section', { class: 'setting-group' }, h('h2', {}, t('settings.section.look')), h('label', { class: 'field' }, h('span', {}, t('settings.theme')), theme)),
+    ai,
     libraryGroup(settings, save, rerender),
     vaultGroup(),
-    h('section', { class: 'setting-group' }, advanced),
   );
   if (wantLibrary) $('settings-library').scrollIntoView();
   wantLibrary = false;
@@ -200,13 +207,11 @@ function aiGroup(settings: Settings, lm: LmStatus, remote: LmStatus, save: () =>
   const card = h(
     'section',
     { class: 'setting-group' },
-    h('h2', {}, t('settings.ai')),
+    h('h2', {}, t('settings.ai'), helpTip(t(`home.provider.${settings.provider}Desc`))),
     h('div', { class: 'segmented', role: 'radiogroup', 'aria-label': t('home.provider') }, ...segments),
-    h('p', { class: 'muted small' }, t(`home.provider.${settings.provider}Desc`)),
     h('p', { class: ready ? 'ok-box' : 'warn-box' }, stateText),
     online ? keyBlock(remote, rerender) : '',
     online ? remoteSummary(settings, remote) : localSummary(settings, lm),
-    h('p', { class: 'muted small' }, t('settings.ai.advancedHint')),
   );
   return card;
 }
@@ -267,6 +272,8 @@ function libraryGroup(settings: Settings, save: () => Promise<void>, rerender: (
     return h('label', { class: 'field' }, h('span', {}, t(label)), input);
   };
   const kind = currentKind();
+  // Citační styl je běžná volba jen ve Studiu; jinde je v Pokročilém.
+  const citation = citationRow(settings, save);
 
   return h(
     'section',
@@ -276,21 +283,30 @@ function libraryGroup(settings: Settings, save: () => Promise<void>, rerender: (
       h(
         'div',
         { class: 'company-fields' },
-        h('span', {}, t('settings.company')),
-        h('span', { class: 'muted small' }, t('settings.companyHint')),
+        h('span', {}, t('settings.company'), helpTip(t('settings.companyHint'))),
         h('div', { class: 'company-row' }, companyField('name', 'settings.companyName', '120'), companyField('id', 'settings.companyId', '20'), companyField('vat', 'settings.companyVat', '20')),
       ),
-    h('div', { class: 'field' }, h('span', {}, t('settings.watch')), h('div', { class: 'watch-row' }, h('span', { class: 'watch-path' }, folder ?? t('settings.watchNone')), pick), h('span', { class: 'muted small' }, t('settings.watchHint'))),
+    h('div', { class: 'field' }, h('span', {}, t('settings.watch'), helpTip(t('settings.watchHint'))), h('div', { class: 'watch-row' }, h('span', { class: 'watch-path' }, folder ?? t('settings.watchNone')), pick)),
     folder &&
       toggle(t('settings.watchOn'), t('settings.watchOnHint'), Boolean(settings.watchOn), (v) => {
         settings.watchOn = v;
         void save();
       }),
-    h('label', { class: 'field' }, h('span', {}, t('settings.nameTemplate')), template, h('span', { class: 'muted small' }, t('settings.nameTemplateHint')), preview),
-    toggle(t('settings.renameByTemplate'), t('settings.renameByTemplateHint'), Boolean(settings.renameByTemplate), (v) => {
-      settings.renameByTemplate = v;
-      void save();
-    }),
+    kind === 'study' && citation,
+    advancedBlock(
+      'settingsAdvancedOpen.library',
+      false,
+      toggle(t('settings.autoCard'), t('settings.autoCardHint'), settings.autoCard, (v) => {
+        settings.autoCard = v;
+        void save();
+      }),
+      kind !== 'study' && citation,
+      labeled(t('settings.nameTemplate'), t('settings.nameTemplateHint'), template, preview),
+      toggle(t('settings.renameByTemplate'), t('settings.renameByTemplateHint'), Boolean(settings.renameByTemplate), (v) => {
+        settings.renameByTemplate = v;
+        void save();
+      }),
+    ),
   );
 }
 
@@ -298,10 +314,9 @@ function vaultGroup() {
   return h(
     'section',
     { class: 'setting-group' },
-    h('h2', {}, t('vault.settingsTitle')),
+    h('h2', {}, t('vault.settingsTitle'), helpTip(t('vault.autoLock'))),
     h('p', { class: vault.exists ? 'ok-box' : 'muted small' }, t(vault.exists ? 'vault.statusSet' : 'vault.statusNone')),
     vault.exists && h('div', { class: 'row gap' }, h('button', { class: 'btn', type: 'button', onclick: () => changePasswordModal(() => void refreshVault()) }, t('vault.change'))),
-    h('p', { class: 'muted small' }, t('vault.autoLock')),
   );
 }
 
@@ -318,7 +333,7 @@ function citationRow(settings: Settings, save: () => Promise<void>) {
     settings.citation.style = style.value as CitationStyle;
     void save();
   });
-  return h('label', { class: 'field' }, h('span', {}, t('settings.citationStyle')), style, h('span', { class: 'muted small' }, t('settings.citationStyleHint')));
+  return labeled(t('settings.citationStyle'), t('settings.citationStyleHint'), style);
 }
 
 function selectedCard(label: string, body: (Node | string)[], chips: Node[] = []) {
@@ -396,7 +411,7 @@ function taskNotes(task: Task, key: string, catalog: CatalogModel[], models: Mod
 }
 
 function taskRow(task: (typeof TASKS)[number], ...body: (Node | string)[]) {
-  return h('div', { class: 'field task-row' }, h('span', { class: 'task-title' }, t(task.title)), h('span', { class: 'muted small' }, t(task.hint)), ...body);
+  return h('div', { class: 'field task-row' }, h('span', { class: 'task-title' }, t(task.title), helpTip(t(task.hint))), ...body);
 }
 
 /** Výběr modelu v počítači pro jednu úlohu; chat má navíc volbu „automaticky“ (= model oprav). Vrací řádek a funkci na obnovení po změně jiné úlohy. */
@@ -486,7 +501,6 @@ function remoteTask(task: (typeof TASKS)[number], settings: Settings, remote: Lm
 function embedRow(provider: Provider, settings: Settings, save: () => Promise<void>) {
   const slot = provider === 'local' ? 'local' : 'remote';
   const body = h('div', { class: 'stack' });
-  const hint = h('p', { class: 'muted small' }, t(provider === 'local' ? 'settings.embed.localHint' : 'settings.embed.remoteHint'));
   window.api.embedModels(provider).then(
     (models) => {
       const chosen = settings.embedModels?.[slot];
@@ -501,11 +515,11 @@ function embedRow(provider: Provider, settings: Settings, save: () => Promise<vo
     },
     (e) => body.replaceChildren(h('p', { class: 'error-box' }, t('settings.embed.failed', { error: (e as Error).message }))),
   );
-  return h('div', { class: 'field task-row' }, h('span', { class: 'task-title' }, t('settings.embed.title')), body, hint);
+  return h('div', { class: 'field task-row' }, h('span', { class: 'task-title' }, t('settings.embed.title'), helpTip(t(provider === 'local' ? 'settings.embed.localHint' : 'settings.embed.remoteHint'))), body);
 }
 
-function providerTitle(text: string, active: boolean) {
-  return h('h3', { class: 'models-subtitle' }, text, active ? h('span', { class: 'chip accent in-use-now' }, t('settings.inUseNow')) : '');
+function providerTitle(text: string, active: boolean, hint = '') {
+  return h('h3', { class: 'models-subtitle' }, text, hint ? helpTip(hint) : '', active ? h('span', { class: 'chip accent in-use-now' }, t('settings.inUseNow')) : '');
 }
 
 /** Jedna sekce Modely: přepínač poskytovatele (jen volba, co se upravuje) a pod ním model pro každou úlohu. */
@@ -523,10 +537,10 @@ function modelsGroup(settings: Settings, lm: LmStatus, remote: LmStatus, url: HT
   local.append(h('label', { class: 'field' }, h('span', {}, t('settings.serverUrl')), url));
   if (!lm.cli) local.append(h('p', { class: 'error-box' }, t('settings.noCli')));
 
-  const online = h('div', { class: 'models-panel stack' }, providerTitle(t('settings.remote.title'), settings.provider === 'openrouter'));
+  const onlineHint = [t('settings.remote.info'), Object.values(settings.remoteModels).some(isFreeModel) ? t('settings.remote.freeHint') : ''].filter(Boolean).join(' ');
+  const online = h('div', { class: 'models-panel stack' }, providerTitle(t('settings.remote.title'), settings.provider === 'openrouter', onlineHint));
   if (!remote.models.length) online.append(h('p', { class: 'error-box' }, t('settings.remote.noCatalog')));
   for (const task of TASKS) online.append(remoteTask(task, settings, remote, save, rerender));
-  if (Object.values(settings.remoteModels).some(isFreeModel)) online.append(h('p', { class: 'muted small' }, t('settings.remote.freeHint')));
   online.append(embedRow('openrouter', settings, save));
   online.append(...remoteExtras(remote, rerender));
 
@@ -547,8 +561,7 @@ function modelsGroup(settings: Settings, lm: LmStatus, remote: LmStatus, url: HT
   return h(
     'div',
     { class: 'stack' },
-    h('h3', { class: 'models-subtitle' }, t('settings.models.title')),
-    h('p', { class: 'muted small' }, t('settings.models.hint')),
+    h('h3', { class: 'models-subtitle' }, t('settings.models.title'), helpTip(t('settings.models.hint'))),
     h('div', { class: 'segmented models-switch', role: 'radiogroup', 'aria-label': t('settings.models.title') }, ...tabs.values()),
     local,
     online,
@@ -577,7 +590,7 @@ function keyBlock(lm: LmStatus, rerender: () => Promise<void>) {
   );
 }
 
-/** Online katalog: informace o výběru modelu a obnovení katalogu. */
+/** Online katalog: obnovení seznamu modelů. */
 function remoteExtras(lm: LmStatus, rerender: () => Promise<void>) {
   const refresh = h(
     'button',
@@ -596,7 +609,7 @@ function remoteExtras(lm: LmStatus, rerender: () => Promise<void>) {
     t('settings.remote.refresh'),
   );
   const stamp = lm.catalogAt ? t('settings.remote.catalogAt', { date: new Date(lm.catalogAt).toLocaleString(locale()) }) : '';
-  return [h('p', { class: 'muted small' }, t('settings.remote.info')), h('div', { class: 'row gap' }, refresh, h('span', { class: 'muted small' }, stamp))];
+  return [h('div', { class: 'row gap' }, refresh, h('span', { class: 'muted small' }, stamp))];
 }
 
 const usd = (n?: number) => (n === undefined ? '—' : price(n));

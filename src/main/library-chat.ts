@@ -2,7 +2,10 @@ import { t } from '../shared/i18n';
 import { chatSettings, isOnline } from '../shared/provider';
 import { openPaths } from '../shared/folders';
 import type { ChatMessage, ChatModel, Job, Library, LibraryRef, Settings } from '../shared/types';
-import { answer, type ChatHooks } from './chat';
+import { answer, libraryHint, type ChatHooks } from './chat';
+import { loadLibraries } from './libraries';
+import { suggestLibrary } from '../shared/library-suggest';
+import { docTitle } from '../shared/doc-title';
 import { dot, embedder, embedModelFor, loadIndex, rrf, type VectorIndex } from './embed';
 import { ensurePath, matchFolder } from './library';
 import { cardText, docFactsText, factsText, libraryDocs, type LibDoc } from './library-docs';
@@ -239,6 +242,21 @@ export async function askLibrary(
     return reply;
   };
 
+  /** Konkrétní dokumenty, které patří do jiné knihovny (článek v Práci → Studium): věta k návrhu, ten řeší jen složky otevřené knihovny. */
+  const elsewhere = async (named: LibDoc[]) => {
+    const { list, current } = await loadLibraries(store.appRoot).catch(() => ({ list: [], current: '' }));
+    const kind = list.find((l) => l.id === current)?.kind;
+    if (!kind) return '';
+    const lines = named.slice(0, 5).flatMap((d) => {
+      const s = suggestLibrary({ kind, currentId: current, type: d.card?.type, libraries: list });
+      const lib = s && list.find((l) => l.id === s.libraryId);
+      if (!s || !lib) return [];
+      const where = [lib.name || t(`libraryKind.${lib.kind}`), s.folders[0]].filter(Boolean).join(' › ');
+      return [t('organize.elsewhere', { name: docTitle(d.job, d.card), where, move: t('libs.move') })];
+    });
+    return lines.length ? `\n\n${lines.join('\n')}` : '';
+  };
+
   if (routed.organize || isOrganizeRequest(question)) {
     // Příkaz: návrh roztřídění k potvrzení v chatu, nic se nemění.
     // Konkrétní dokumenty („kam bys zařadil tento článek“): jen ty, cesta kdekoli ve stromu. Jinak celá složka.
@@ -251,7 +269,7 @@ export async function askLibrary(
     const size = planSize(plan);
     return save({
       role: 'assistant',
-      text: size ? t('organize.proposal', { count: size }) : t('organize.nothing'),
+      text: (size ? t('organize.proposal', { count: size }) : t('organize.nothing')) + (await elsewhere(named)),
       ...(size && { plan }),
       steps,
       docs: docs.length,
@@ -297,7 +315,7 @@ export async function askLibrary(
   step(t('libraryChat.stepFound', { n: chosen.length, docs: docCount }));
 
   const recent = history.slice(-HISTORY).map((m) => ({ role: m.role, content: m.text.slice(0, HISTORY_CHARS) }));
-  const messages = [{ role: 'system' as const, content: todayLine() + LIBRARY_CHAT_SYSTEM + formatPassages(chosen) }, ...recent, { role: 'user' as const, content: question }];
+  const messages = [{ role: 'system' as const, content: todayLine() + (await libraryHint(store)) + LIBRARY_CHAT_SYSTEM + formatPassages(chosen) }, ...recent, { role: 'user' as const, content: question }];
   step(t('chat.stepWrite'));
   const raw = await answer(llm, messages, hooks);
   const { text, sources } = cleanCitations(raw, new Set(chosen.map((p) => p.id)));
