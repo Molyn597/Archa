@@ -66,4 +66,4 @@ jobs:
             *) flags="--latest" ;;
           esac
           gh release create "$GITHUB_REF_NAME" installers/* --repo "$GITHUB_REPOSITORY" \
-            --title "${GITHUB_REF_NAME#v}" --generate-notes --verify-tag $flags
+            --title "Archa ${GITHUB_REF_NAME#v}" --generate-notes --verify-tag $flags
