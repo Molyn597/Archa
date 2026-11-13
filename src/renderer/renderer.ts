@@ -12,6 +12,8 @@ import { citeSegment, closeDetail, detailJobId, openDetail, setupDetail, updateD
 import { applySavedSearch, createProject, leaveProject, savedSearches, libraryCards, openFolder, openProject, projectSelected, reloadLibrary, renderLibrary, revealDoc, setupLibrary, libraryView, selectedTitle, showAll, showDeadlines, showInvoices, showMissing, showUnsorted, showWarranty, type LibraryView } from './library';
 import { addToLibrary, refreshOverview, renderOverview, setupOverview } from './overview';
 import { setupNotifications, updateNotifications } from './notifications';
+import { renderDock, setupDock } from './progress-dock';
+import { renderTranslations } from './translations-view';
 import { openCompare, setupCompare } from './compare-view';
 import { setupPractice } from './practice-view';
 import { currentKind, promptLibraryKind, setupLibrarySwitch } from './library-switch';
@@ -20,7 +22,6 @@ import { renderProjectsPage, setupProjectsPage } from './projects-page';
 import { refreshVault, setupVaultActivity } from './vault';
 import {
   applyI18n,
-  date,
   duration,
   chatWarningText,
   cleanError,
@@ -28,14 +29,10 @@ import {
   icon,
   ICONS,
   jobDuration,
-  jobTitle,
   langPair,
   MODES,
-  progressBar,
-  progressInfo,
   rememberOpen,
   statusIcon,
-  STATUS_TEXT,
   toast,
   toastAction,
 } from './dom';
@@ -121,9 +118,9 @@ function offerWord(job: Job) {
 // Pohledy Dokumentů, které mají vlastní položku v menu (zvýrazní se ta), a nadpis stránky pro ostatní.
 const VIEW_NAV: Partial<Record<LibraryView, NavId>> = { invoices: 'invoices', deadlines: 'deadlines' };
 const VIEW_TITLE: Partial<Record<LibraryView, MessageKey>> = { duplicates: 'dup.title', aiLog: 'aiLog.title', trash: 'trash.title' };
-const LIBRARY_NAV: Partial<Record<NavId, () => void>> = { invoices: () => showInvoices('all'), deadlines: showDeadlines };
+const LIBRARY_NAV: Partial<Record<NavId, () => void>> = { invoices: () => showInvoices('all'), deadlines: showDeadlines, translate: () => show('home') };
 // Nadpis stránek mimo Dokumenty a Projekty.
-const VIEW_LABEL: Partial<Record<View, MessageKey>> = { overview: 'nav.overview', finance: 'fin.title', compare: 'compare.title', upload: 'nav.upload', home: 'nav.translate', detail: 'nav.history', help: 'help.title', settings: 'nav.settings' };
+const VIEW_LABEL: Partial<Record<View, MessageKey>> = { overview: 'nav.overview', finance: 'fin.title', compare: 'compare.title', upload: 'nav.upload', home: 'nav.translation', detail: 'nav.history', help: 'help.title', settings: 'nav.settings' };
 
 let projectsLabel: MessageKey = 'nav.projects';
 
@@ -131,7 +128,7 @@ let projectsLabel: MessageKey = 'nav.projects';
 function syncNav() {
   const sub = view === 'history' ? libraryView() : null;
   const inProject = sub === 'project';
-  const target = inProject ? 'projects' : sub && VIEW_NAV[sub] ? VIEW_NAV[sub] : view === 'detail' || view === 'history' ? undefined : view;
+  const target = inProject ? 'projects' : sub && VIEW_NAV[sub] ? VIEW_NAV[sub] : view === 'detail' || view === 'history' ? undefined : view === 'home' ? 'translate' : view;
   document.body.classList.toggle('in-project', inProject);
   const heading = document.querySelector<HTMLElement>('.view[data-view="history"] .view-head h1');
   const title = sub && VIEW_TITLE[sub];
@@ -142,7 +139,7 @@ function syncNav() {
 }
 
 const NAV_LABELS = new Map<NavId, MessageKey>();
-const MENU_IDS: NavId[] = ['overview', 'upload', 'invoices', 'deadlines', 'projects'];
+const MENU_IDS: NavId[] = ['overview', 'upload', 'translate', 'invoices', 'deadlines', 'projects'];
 
 /** Menu podle typu aktuální knihovny: skryje nepatřící položky a nastaví popisky; nadpis stromu složek (Studium: Předměty). */
 async function applyNavKind() {
@@ -323,13 +320,42 @@ function renderEngine() {
   );
   $('engine-warn').textContent = warn;
   $('engine-warn').hidden = !warn;
+  renderReady();
   renderStart();
+  checkReadiness();
+}
+
+// Poslední zjištěná připravenost obou poskytovatelů (důvod, proč nejde použít, nebo null).
+const readiness: Partial<Record<Provider, string | null>> = {};
+let readyCheck = 0;
+
+/** Připravenost se ověřuje v hlavním procesu; zastaralá odpověď (rychlé přepnutí) se zahodí. */
+function checkReadiness() {
+  const mine = ++readyCheck;
+  void Promise.all((['local', 'openrouter'] as Provider[]).map((p) => window.api.providerReady(p).catch(() => null))).then(([local, openrouter]) => {
+    if (mine !== readyCheck) return;
+    readiness.local = local;
+    readiness.openrouter = openrouter;
+    renderReady();
+    renderStart();
+    renderHome();
+  });
+}
+
+function renderReady() {
+  const reason = readiness[settings.provider];
+  const note = $('provider-ready');
+  note.classList.toggle('warn', Boolean(reason));
+  note.classList.toggle('ok', reason === null);
+  if (reason === undefined) return note.replaceChildren();
+  if (reason === null) return note.replaceChildren(icon(ICONS.check), t('translate.ready'));
+  note.replaceChildren(reason, h('button', { class: 'btn sm', type: 'button', onclick: () => show('settings') }, t('error.openSettings')));
 }
 
 function renderStart() {
   const noKey = isOnline(settings) && lastStatus?.hasKey === false;
   const button = $<HTMLButtonElement>('start');
-  button.disabled = !pending.length || noKey;
+  button.disabled = !pending.length || noKey || Boolean(readiness[settings.provider]);
   button.textContent = pending.length > 1 ? t('home.startMany', { count: pending.length }) : t('home.start');
   $('start-hint').textContent = noKey ? '' : pending.length ? '' : t('home.startHint');
 }
@@ -617,52 +643,13 @@ function setupDrop() {
   });
 }
 
-function jobCard(job: Job) {
-  const info = progressInfo(job);
-  return h(
-    'div',
-    { class: 'job-card' },
-    h(
-      'div',
-      {},
-      h('div', { class: 'job-card-name' }, `${job.name}${job.ext}`),
-      h('div', { class: 'job-card-stage' }, [info.label, info.eta, t(MODES[job.mode].title)].filter(Boolean).join(' · ')),
-    ),
-    h(
-      'div',
-      { class: 'row gap' },
-      h('button', { class: 'btn', onclick: () => openJob(job.id) }, t('job.open')),
-      h('button', { class: 'btn danger', onclick: () => window.api.cancelJob(job.id) }, icon(ICONS.stop), t('job.cancel')),
-    ),
-    progressBar(info.fraction),
-  );
-}
-
-/** Řádek „Nedávné dokumenty“: tečka stavu, název a stránky s datem. */
-function recentRow(job: Job) {
-  return h(
-    'button',
-    { class: 'recent-row', type: 'button', onclick: () => openJob(job.id), title: `${job.name}${job.ext}` },
-    h('span', { class: `dot dot-${job.status}`, title: t(STATUS_TEXT[job.status]) }),
-    h('span', { class: 'recent-name' }, jobTitle(job)),
-    h('span', { class: 'recent-meta' }, [job.pages ? t('cost.pages', { count: job.pages }) : '', date(job.createdAt)].filter(Boolean).join(' · ')),
-  );
-}
-
 const sorted = () => [...jobs.values()].sort((a, b) => b.createdAt - a.createdAt);
 const isActive = (j: Job) => j.status === 'running' || j.status === 'queued';
 
 function renderHome() {
-  const active = sorted()
-    .filter(isActive)
-    .sort((a, b) => (a.status === 'running' ? -1 : b.status === 'running' ? 1 : a.createdAt - b.createdAt));
-  $('active-title').hidden = !active.length;
-  $('active-jobs').replaceChildren(...active.map(jobCard));
-  const recent = sorted()
-    .filter((j) => !isActive(j))
-    .slice(0, 3);
-  $('recent-title').hidden = !recent.length;
-  $('recent-jobs').replaceChildren(...recent.map(recentRow));
+  const active = sorted().filter(isActive);
+  renderTranslations($('translations'), { jobs: sorted, cards: libraryCards, open: (id) => void openJob(id), showSettings: () => show('settings'), notReady: (p) => readiness[p] });
+  renderDock();
   const badge = $('active-badge');
   badge.hidden = !active.length;
   badge.textContent = String(active.length);
@@ -805,6 +792,7 @@ async function init() {
   setupCompare($('compare-root'), { back: () => (compareFrom ? void openJob(compareFrom) : show(previousView)) });
   setupPractice((id) => void openJob(id));
   setupDrop();
+  setupDock({ jobs: sorted, cards: libraryCards, open: (id) => void openJob(id) });
   fillLanguages();
   renderAll();
   setupLibrary({
@@ -816,7 +804,7 @@ async function init() {
     selectionChanged: syncNav,
     showSettings: () => show('settings'),
   });
-  setupUpload({ jobs: sorted, settings: () => settings, show: () => show('upload'), openJob, showAll });
+  setupUpload({ jobs: sorted, settings: () => settings, show: () => show('upload'), openJob, showAll, showSettings: () => show('settings') });
   setupOverview({
     jobs: sorted,
     settings: () => settings,

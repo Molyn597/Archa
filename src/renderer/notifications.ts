@@ -1,7 +1,7 @@
 import { docTitle } from '../shared/doc-title';
 import type { InvoiceStatusFilter } from '../shared/invoices';
 import { t } from '../shared/i18n';
-import { buildNotes, markSeen, unreadCount, type Note, type NoteTarget } from '../shared/notifications';
+import { buildNotes, markSeen, noteTime, unreadCount, type Note, type NoteTarget } from '../shared/notifications';
 import type { Job, Settings } from '../shared/types';
 import { h } from './dom';
 import { overviewKind, overviewSignals } from './overview';
@@ -84,6 +84,7 @@ function fill(notes: Note[], fresh: ReadonlySet<string>) {
         'button',
         { class: `note-row${fresh.has(n.id) ? ' new' : ''}`, type: 'button', role: 'menuitem', title: n.title, onclick: () => go(n.target) },
         h('span', { class: 'note-title' }, n.title),
+        n.at > 0 && h('span', { class: 'note-sub note-time' }, noteTime(n.at, Date.now())),
         n.sub && h('span', { class: 'note-sub' }, n.sub),
       ),
     ),

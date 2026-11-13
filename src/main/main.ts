@@ -23,7 +23,7 @@ import { resolveLang, setLang, t, type MessageKey } from '../shared/i18n';
 import { LIBRARY_CHAT, projectChatKey, TRASH_DAYS } from '../shared/folders';
 import { languageName } from '../shared/languages';
 import { findRegion, normalizeCrop } from '../shared/regions';
-import type { ChatModel, DocumentCard, InvoicePackageRequest, InvoicePackageResult, Libraries, LibraryKind, MoveOptions, DuplicateMatch, Highlight, Project, ProjectKind, Job, Library, LibraryFolder, JobOptions, Mode, OrganizePlan, OutputKind, Placement, Provider, RegionTranslation, SavedSearch, Settings, Stage } from '../shared/types';
+import type { ChatModel, DocumentCard, InvoicePackageRequest, InvoicePackageResult, Libraries, LibraryKind, MoveOptions, DuplicateMatch, Highlight, Project, ProjectKind, Job, Library, LibraryFolder, JobOptions, Mode, RetryOptions, OrganizePlan, OutputKind, Placement, Provider, RegionTranslation, SavedSearch, Settings, Stage } from '../shared/types';
 import { isOnline } from '../shared/provider';
 import { invoiceRows, isoDay } from '../shared/invoices';
 import { buildPackage, invoiceFile } from './accountant';
@@ -51,6 +51,7 @@ import { docLinks } from './related';
 import { normalizeIco } from '../shared/ares';
 import { setLink } from '../shared/related';
 import { clearKey, readKey, saveKey } from './keystore';
+import { assertReady, notReadyReason } from './readiness';
 import { listModels, status } from './lmstudio';
 import { fetchEmbedCatalog, openrouterStatus, refreshCatalog } from './provider';
 import { relayoutJob, translateRegion } from './pipeline';
@@ -410,7 +411,9 @@ function registerIpc() {
   ipcMain.handle('open-url', async (_e, url: string) => {
     if (typeof url === 'string' && url.startsWith('https://github.com/')) await shell.openExternal(url);
   });
+  ipcMain.handle('provider-ready', (_e, provider?: Provider) => notReadyReason(store, provider));
   ipcMain.handle('jobs-add', async (_e, paths: string[], options: JobOptions) => {
+    await assertReady(store, options.provider);
     const errors: string[] = [];
     const ids: string[] = [];
     for (const p of paths) {
@@ -513,8 +516,14 @@ function registerIpc() {
     return name ? new Uint8Array(await store.readJobFile(job.id, name)) : null;
   });
   ipcMain.handle('job-cancel', (_e, id: string) => queue.cancel(id));
-  ipcMain.handle('job-retry', (_e, id: string, mode: Mode, targetLang?: string) => queue.retry(id, mode, targetLang));
-  ipcMain.handle('job-translate', (_e, id: string, mode: Mode, targetLang: string) => queue.translate(id, mode, targetLang));
+  ipcMain.handle('job-retry', async (_e, id: string, mode: Mode, targetLang?: string, opts?: RetryOptions) => {
+    await assertReady(store, opts?.provider);
+    await queue.retry(id, mode, targetLang, opts);
+  });
+  ipcMain.handle('job-translate', async (_e, id: string, mode: Mode, targetLang: string, provider?: Provider) => {
+    await assertReady(store, provider);
+    await queue.translate(id, mode, targetLang, provider);
+  });
   ipcMain.handle('job-relayout', async (_e, id: string) => {
     if (active.has(id)) return;
     const job = await store.job(id);

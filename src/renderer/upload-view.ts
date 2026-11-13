@@ -4,7 +4,7 @@ import { t, type MessageKey } from '../shared/i18n';
 import { languageName, LANGUAGES } from '../shared/languages';
 import { isOnline } from '../shared/provider';
 import { bulkSavable, suggestion, type Suggestion } from '../shared/upload';
-import type { DocumentCard, DuplicateMatch, Job, LibraryState, Mode, Settings } from '../shared/types';
+import type { DocumentCard, DuplicateMatch, Job, LibraryState, Mode, Provider, Settings } from '../shared/types';
 import { openChat } from './chat';
 import { currentTitle, libraryFor, libraryTitle, moveDocTo } from './library-switch';
 import { actionMenu, cleanError, date, h, icon, ICONS, MODES, openModal, progressBar, progressInfo, STATUS_TEXT, toast, toastAction } from './dom';
@@ -16,6 +16,7 @@ interface UploadHost {
   show(): void;
   openJob(id: string): Promise<void>;
   showAll(): void;
+  showSettings(): void;
 }
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -173,24 +174,50 @@ function translateDialog(job: Job) {
   const target = h('select', { 'aria-label': t('home.to') }) as HTMLSelectElement;
   for (const l of LANGUAGES) if (l.code !== job.sourceLang) target.append(h('option', { value: l.code }, languageName(l.code)));
   target.value = s.targetLang === job.sourceLang ? (LANGUAGES.find((l) => l.code !== job.sourceLang)?.code ?? '') : s.targetLang;
-  let mode: Mode = isOnline(s) ? 'quality' : s.mode;
+  let mode: Mode = s.mode;
+  let provider: Provider = s.provider;
   const segments = h('div', { class: 'segmented', role: 'radiogroup' });
-  const paint = () =>
+  const where = h('div', { class: 'segmented', role: 'radiogroup', 'aria-label': t('home.provider') });
+  const modeField = h('div', { class: 'up-field' }, h('span', {}, t('home.mode')), segments);
+  const notReady = h('div', { class: 'warn-box up-notready' });
+  notReady.hidden = true;
+  const start = h('button', { class: 'btn primary', type: 'button' }, t('detail.tool.translate'));
+  let check = 0;
+  const paint = () => {
     segments.replaceChildren(
       ...(Object.keys(MODES) as Mode[]).map((m) =>
         h('button', { class: mode === m ? 'segment active' : 'segment', type: 'button', role: 'radio', 'aria-checked': String(mode === m), title: t(MODES[m].desc), onclick: () => ((mode = m), paint()) }, t(QUALITY[m])),
       ),
     );
-  paint();
-  const start = h('button', { class: 'btn primary', type: 'button' }, t('detail.tool.translate'));
+    where.replaceChildren(
+      ...(['local', 'openrouter'] as Provider[]).map((p) =>
+        h('button', { class: provider === p ? 'segment active' : 'segment', type: 'button', role: 'radio', 'aria-checked': String(provider === p), title: t(`home.provider.${p}Desc`), onclick: () => ((provider = p), paint()) }, t(`home.provider.${p}`)),
+      ),
+    );
+    modeField.hidden = isOnline({ provider });
+    // Připravenost se ověřuje v hlavním procesu; zastaralá odpověď (rychlé přepnutí) se zahodí.
+    const mine = ++check;
+    start.disabled = true;
+    void window.api.providerReady(provider).then((reason) => {
+      if (mine !== check) return;
+      start.disabled = Boolean(reason);
+      notReady.hidden = !reason;
+      if (reason)
+        notReady.replaceChildren(
+          h('p', {}, reason),
+          h('button', { class: 'btn sm', type: 'button', onclick: () => (close(), host.showSettings()) }, t('error.openSettings')),
+        );
+    });
+  };
   const close = openModal(
     t('upload.translateTitle', { name: docTitle(job, lib.cards[job.id]) }),
-    [h('label', { class: 'up-field' }, h('span', {}, t('home.to')), target), ...(isOnline(s) ? [] : [h('div', { class: 'up-field' }, h('span', {}, t('home.mode')), segments)])],
+    [h('label', { class: 'up-field' }, h('span', {}, t('home.to')), target), h('div', { class: 'up-field' }, h('span', {}, t('home.provider')), where), modeField, notReady],
     [h('button', { class: 'btn', type: 'button', onclick: () => close() }, t('region.close')), start],
   );
+  paint();
   start.addEventListener('click', () => {
     close();
-    window.api.translateJob(job.id, mode, target.value).then(
+    window.api.translateJob(job.id, isOnline({ provider }) ? 'quality' : mode, target.value, provider).then(
       () => {
         note(job.id, t('upload.translateQueued', { lang: languageName(target.value) }));
         render();

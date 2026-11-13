@@ -122,7 +122,7 @@ export const detailJobId = () => current?.job.id ?? null;
 const SIDE_BY_SIDE_MIN = 560;
 const PAIR_GAP = 14;
 
-const statusChip = (job: Job) => h('span', { class: `status-chip is-${job.status}` }, h('i'), t(STATUS_TEXT[job.status]));
+const statusChip = (job: Job) => h('span', { class: `status-chip is-${job.status}`, title: job.status === 'error' ? (job.error ?? '') : '' }, h('i'), t(STATUS_TEXT[job.status]));
 
 async function go(view: Tab) {
   clearCite();
@@ -288,6 +288,34 @@ function startPicking() {
   picking = true;
   const segments = pickable(current!.segments);
   picked = new Set(segments.filter((s) => current!.job.status === 'picking' || s.translation !== undefined).map((s) => s.id));
+}
+
+let openSettings = () => {};
+
+/** Důvod selhání nad záložkami, ať je vidět na každé; opakování a (když chybí klíč či LM Studio) Nastavení hned v něm. */
+function renderError(job: Job) {
+  const box = $('detail-error');
+  box.hidden = job.status !== 'error';
+  if (box.hidden) return;
+  const retry = h('button', { class: 'btn sm', type: 'button' }, t('error.retry'));
+  retry.addEventListener('click', () => {
+    retry.disabled = true;
+    // Překlad se zopakuje na místě (bez kopie dokumentu); nahrání bez překladu jde přes retry.
+    const again = job.translate === false ? window.api.retryJob(job.id, job.mode, undefined, { plain: true }) : window.api.translateJob(job.id, job.mode, job.targetLang);
+    again.then(
+      () => toast(t('detail.retryQueued', { name: job.name, mode: t(MODES[job.mode].title) })),
+      (e) => {
+        retry.disabled = false;
+        toast(cleanError(e), true);
+      },
+    );
+  });
+  const actions = h('div', { class: 'detail-error-actions' }, retry);
+  box.replaceChildren(h('span', { class: 'detail-error-text' }, job.error ?? t('status.error')), actions);
+  // Nastavení nabídnout jen, když chyba pochází z nepřipraveného poskytovatele.
+  void window.api.providerReady(job.provider).then((reason) => {
+    if (reason && current?.job.id === job.id) actions.append(h('button', { class: 'btn sm', type: 'button', onclick: openSettings }, t('error.openSettings')));
+  });
 }
 
 function renderProgress(job: Job) {
@@ -1125,7 +1153,6 @@ function overviewView(detail: JobDetail) {
   fillRisks();
   const highlights = highlightsSection();
   const nodes: HTMLElement[] = [riskBox, cardSection(detail.job), deadlineBox, ...(highlights ? [highlights] : [])];
-  if (detail.job.error) nodes.unshift(h('div', { class: 'error-box' }, detail.job.error));
   return nodes;
 }
 
@@ -1430,9 +1457,8 @@ async function renderBody() {
     return;
   }
   if (!segments.length) {
-    const text =
-      job.status === 'done' ? t('detail.noText') : job.status === 'error' ? (job.error ?? t('status.error')) : t('detail.pending');
-    return body.replaceChildren(h('p', { class: job.status === 'error' ? 'error-box' : 'empty' }, text));
+    // Důvod chyby je v pruhu nad záložkami.
+    return body.replaceChildren(h('p', { class: 'empty' }, job.status === 'done' || job.status === 'error' ? t('detail.noText') : t('detail.pending')));
   }
   if (tab === 'compare' && isPicking()) {
     if (job.status === 'picking' && !picking) startPicking();
@@ -1516,6 +1542,7 @@ function renderHeader() {
   $('detail-actions').replaceChildren(...actions(job));
   syncTabs();
   renderProgress(job);
+  renderError(job);
 }
 
 export async function openDetail(id: string, initialTab?: Tab) {
@@ -1574,8 +1601,9 @@ function toggleRegions() {
   $('detail-body').classList.toggle('regions-hidden', regionsHidden);
 }
 
-export function setupDetail(onBack: () => void, openSettings: () => void, detailHost: DetailHost) {
+export function setupDetail(onBack: () => void, openSettingsView: () => void, detailHost: DetailHost) {
   host = detailHost;
+  openSettings = openSettingsView;
   setupChat({ segments: () => current?.segments ?? [], cite: showCite, openSettings });
   setupPdfZoom();
   setupHighlights({

@@ -40,6 +40,7 @@ export function updateCard(latest: Latest, onLater?: () => void) {
     message.hidden = false;
   };
 
+  let releaseShown = false;
   install.addEventListener('click', async () => {
     install.disabled = true;
     message.hidden = true;
@@ -48,7 +49,10 @@ export function updateCard(latest: Latest, onLater?: () => void) {
       install.textContent = t('update.install');
       install.disabled = false;
       say(t('update.error', { error: r.error }), true);
-      actions.append(h('button', { class: 'btn', type: 'button', onclick: () => void window.api.openUrl(r.url ?? latest.url) }, t('update.openRelease')));
+      if (!releaseShown) {
+        releaseShown = true;
+        actions.append(h('button', { class: 'btn', type: 'button', onclick: () => void window.api.openUrl(r.url ?? latest.url) }, t('update.openRelease')));
+      }
       return;
     }
     install.hidden = true;

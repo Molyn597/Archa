@@ -39,7 +39,7 @@ async function loadedModels(): Promise<LmsModel[]> {
   return JSON.parse(await lms(['ps', '--json'])) as LmsModel[];
 }
 
-async function serverUp(apiUrl: string) {
+export async function serverUp(apiUrl: string) {
   try {
     const res = await fetch(`${apiUrl}/v1/models`, { signal: AbortSignal.timeout(2000) });
     return res.ok;

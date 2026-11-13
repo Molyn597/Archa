@@ -12,7 +12,7 @@ describe('navFor', () => {
   });
 
   it('práce má faktury, termíny a zakázky', () => {
-    expect(ids('work')).toEqual(['overview', 'upload', 'invoices', 'deadlines', 'projects']);
+    expect(ids('work')).toEqual(['overview', 'upload', 'translate', 'invoices', 'deadlines', 'projects']);
     expect(navFor('work').at(-1)?.label).toBe('nav.jobs');
   });
 
@@ -21,8 +21,13 @@ describe('navFor', () => {
   });
 
   it('studium má moje práce a termíny, bez faktur', () => {
-    expect(ids('study')).toEqual(['overview', 'upload', 'projects', 'deadlines']);
+    expect(ids('study')).toEqual(['overview', 'upload', 'translate', 'projects', 'deadlines']);
     expect(navFor('study').find((e) => e.id === 'projects')?.label).toBe('nav.myWork');
+  });
+
+  it('Překlad mají jen Práce a Studium', () => {
+    expect(ids('personal')).not.toContain('translate');
+    expect(ids('general')).not.toContain('translate');
   });
 
   it('osobní má jen termíny', () => {

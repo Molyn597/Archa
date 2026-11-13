@@ -170,6 +170,7 @@ h1 {
 
 /* Pravá část okna: horní lišta nad posuvným obsahem. */
 .stage {
+  position: relative;
   flex: 1;
   min-width: 0;
   display: flex;
@@ -1071,48 +1072,6 @@ input[type='checkbox'] {
   font-weight: 500;
 }
 
-.recent-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.recent-list:empty {
-  display: none;
-}
-
-.recent-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  height: 46px;
-  padding: 0 14px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--panel);
-  text-align: left;
-}
-
-.recent-row:hover {
-  background: var(--raised);
-}
-
-.recent-name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-weight: 500;
-}
-
-.recent-meta {
-  color: var(--muted);
-  font-size: 13px;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
-
 .dot {
   flex: none;
   width: 8px;
@@ -1133,44 +1092,6 @@ input[type='checkbox'] {
 .dot-queued,
 .dot-picking {
   background: var(--accent);
-}
-
-.job-cards {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.job-cards:empty {
-  display: none;
-}
-
-.job-card {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px 16px;
-  padding: 12px 14px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--panel);
-}
-
-.job-card-name {
-  font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.job-card-stage {
-  color: var(--muted);
-  font-size: 13px;
-  font-variant-numeric: tabular-nums;
-}
-
-.job-card .bar {
-  grid-column: 1 / -1;
 }
 
 .bar {
@@ -2277,6 +2198,32 @@ input[type='checkbox'] {
   background: var(--danger-soft);
   color: var(--danger-text);
   white-space: pre-wrap;
+}
+
+.error-box.detail-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex: none;
+  margin: 8px 16px 0;
+}
+
+.up-notready {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.up-notready p {
+  margin: 0;
+}
+
+.detail-error-actions {
+  display: flex;
+  flex: none;
+  gap: 8px;
 }
 
 .warn-box {
@@ -3925,7 +3872,6 @@ button.folder-toggle:hover {
   color: var(--muted);
 }
 
-
 .ai-row .lib-line > .btn,
 .ai-row .lib-line > .chip {
   flex: none;
@@ -5434,8 +5380,6 @@ body[data-view].tree-closed:not(.nav-collapsed) .nav-item[data-nav='projects'] .
 /* ---------- Sklo: karty, horní lišta, paleta, řádek aktualizace ---------- */
 
 .form-card,
-.job-card,
-.recent-row,
 .job-list,
 .pending-row,
 .ov-ask-box,
@@ -7162,4 +7106,268 @@ kbd {
   color: var(--muted);
   font-size: 13px;
   text-align: center;
+}
+
+/* ---------- Překlad: stav poskytovatele a poslední překlady ---------- */
+
+.ready-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ready-note.ok {
+  color: var(--ok-text);
+}
+
+.ready-note svg {
+  width: 14px;
+  height: 14px;
+}
+
+.tr-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tr-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 46px;
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: var(--card-shadow);
+}
+
+.tr-title {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.tr-lang {
+  flex: none;
+  color: var(--muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.tr-state {
+  flex: 0 1 280px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.tr-progress {
+  display: grid;
+  grid-template-columns: minmax(60px, 1fr) auto;
+  align-items: center;
+  gap: 2px 10px;
+  text-align: left;
+}
+
+.tr-progress .tr-stage {
+  grid-column: 1 / -1;
+}
+
+.tr-error {
+  color: var(--danger-text);
+  text-align: left;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.tr-actions {
+  flex: none;
+  display: flex;
+  gap: 6px;
+}
+
+.tr-empty {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px;
+  color: var(--muted);
+}
+
+.tr-empty svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* ---------- Plovoucí tlačítko s postupem (vpravo dole; chat je vedle, ne pod ním) ---------- */
+
+.pdock {
+  position: absolute;
+  right: 28px;
+  bottom: 20px;
+  z-index: 15;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.pdock[hidden] {
+  display: none;
+}
+
+/* V detailu je dole uprostřed ovladač přiblížení, tlačítko se zvedne nad jeho řadu. */
+body[data-view='detail'] .pdock {
+  bottom: 76px;
+}
+
+@media (max-width: 1000px) {
+  .pdock.beside-chat {
+    right: calc(min(360px, 100vw - 32px) + 20px);
+  }
+}
+
+.pdock-btn {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+
+.pdock-btn:hover {
+  background: var(--raised);
+}
+
+.pdock-btn > svg:not(.pdock-ring) {
+  width: 15px;
+  height: 15px;
+}
+
+.pdock-ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke-width: 3;
+  transform: rotate(-90deg);
+}
+
+.pdock-ring.spin {
+  animation: pdock-spin 1.2s linear infinite;
+}
+
+.pdock-track {
+  stroke: var(--line);
+}
+
+.pdock-arc {
+  stroke: var(--accent);
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.4s;
+}
+
+@keyframes pdock-spin {
+  to {
+    transform: rotate(270deg);
+  }
+}
+
+.pdock-percent {
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.pdock-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.pdock-pop {
+  width: 320px;
+  max-width: calc(100vw - 80px);
+  max-height: 50vh;
+  overflow-y: auto;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.pdock-title {
+  padding: 2px 4px 8px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.pdock-job {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 10px;
+  align-items: center;
+  padding: 10px 4px;
+  border-top: 1px solid var(--line);
+}
+
+.pdock-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.pdock-meta {
+  grid-column: 1;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pdock-line {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pdock-job .btn {
+  grid-column: 2;
+  grid-row: 1 / span 2;
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Deadline } from '../src/shared/deadlines';
-import { buildNotes, markSeen, NOTE_LIMIT, unreadCount, type NoteInput } from '../src/shared/notifications';
+import { buildNotes, markSeen, NOTE_LIMIT, noteTime, unreadCount, type NoteInput } from '../src/shared/notifications';
 import { relativeAgo, type WaitRow } from '../src/shared/overview';
 
 const NOW = Date.parse('2026-11-13T12:00:00');
@@ -76,5 +76,24 @@ describe('relativeAgo', () => {
     expect(relativeAgo(NOW - 5 * 60_000, NOW, TODAY)).toBe('před 5 min');
     expect(relativeAgo(NOW - 3 * HOUR, NOW, TODAY)).toBe('před 3 h');
     expect(relativeAgo(NOW - 30 * HOUR, NOW, TODAY)).toBe('včera');
+  });
+});
+
+describe('noteTime', () => {
+  const now = new Date(2026, 10, 13, 15, 0).getTime();
+  const at = (d: number, h: number, m: number) => new Date(2026, 10, d, h, m).getTime();
+
+  it('dnes a včera s časem, jinak datum a čas', () => {
+    expect(noteTime(at(13, 14, 32), now)).toBe('dnes 14:32');
+    expect(noteTime(at(12, 9, 5), now)).toBe('včera 9:05');
+    expect(noteTime(at(11, 14, 32), now)).toBe('11. 11. 14:32');
+  });
+
+  it('včera je kalendářní den, ne 24 hodin', () => {
+    expect(noteTime(at(12, 23, 59), new Date(2026, 10, 13, 0, 1).getTime())).toBe('včera 23:59');
+  });
+
+  it('bez času nic', () => {
+    expect(noteTime(0, now)).toBe('');
   });
 });

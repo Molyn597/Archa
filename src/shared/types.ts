@@ -573,6 +573,12 @@ export interface DocumentContext {
   terms: GlossaryEntry[];
 }
 
+/** Volby opakování úlohy; bez `provider` platí nastavení, `plain` zachová zpracování bez překladu. */
+export interface RetryOptions {
+  provider?: Provider;
+  plain?: boolean;
+}
+
 export interface JobOptions {
   mode: Mode;
   sourceLang: string;
@@ -810,9 +816,11 @@ export interface Api {
   jobFigure(id: string, file: string): Promise<string>;
   readOutputPdf(id: string): Promise<Uint8Array | null>;
   cancelJob(id: string): Promise<void>;
-  retryJob(id: string, mode: Mode, targetLang?: string): Promise<void>;
+  retryJob(id: string, mode: Mode, targetLang?: string, opts?: RetryOptions): Promise<void>;
+  /** Důvod, proč poskytovatel zatím nejde použít (chybí klíč, není LM Studio), jinak null. */
+  providerReady(provider?: Provider): Promise<string | null>;
   /** Přeloží existující dokument na místě (stejná úloha, složka a karta). */
-  translateJob(id: string, mode: Mode, targetLang: string): Promise<void>;
+  translateJob(id: string, mode: Mode, targetLang: string, provider?: Provider): Promise<void>;
   relayoutJob(id: string): Promise<void>;
   /** Přeloží vybrané segmenty (id) úlohy čekající na výběr nebo hotové; ostatní nepřeložené se přeskočí. */
   translateSegments(id: string, ids: number[]): Promise<void>;

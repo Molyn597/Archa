@@ -5,7 +5,7 @@ import { t } from '../shared/i18n';
 import { calibrate, costKey } from '../shared/cost';
 import { IMPORT_EXTS } from '../shared/watch';
 import { activeModels, activeRates, isOnline } from '../shared/provider';
-import type { Job, JobOptions, Mode, Placement, Rates } from '../shared/types';
+import type { Job, JobOptions, Mode, Placement, Provider, Rates, RetryOptions } from '../shared/types';
 import { hashFile } from './hash';
 import { buildIndex, embedder, embedModelFor } from './embed';
 import { makeCard } from './make-card';
@@ -95,7 +95,7 @@ export class Queue {
     return job.id;
   }
 
-  async retry(id: string, mode: Mode, targetLang?: string) {
+  async retry(id: string, mode: Mode, targetLang?: string, opts: RetryOptions = {}) {
     const old = await this.store.job(id);
     if (!old) return;
     const job: Job = {
@@ -103,6 +103,8 @@ export class Queue {
       id: randomUUID(),
       mode,
       targetLang: targetLang ?? old.targetLang,
+      // Bez zadání platí poskytovatel z nastavení, ne ten, na kterém úloha selhala.
+      provider: opts.provider,
       status: 'queued',
       createdAt: Date.now(),
       startedAt: undefined,
@@ -110,7 +112,7 @@ export class Queue {
       error: undefined,
       progress: undefined,
       resume: undefined,
-      translate: undefined,
+      translate: opts.plain ? old.translate : undefined,
       output: undefined,
       outputPdf: undefined,
       warnings: 0,
@@ -129,7 +131,7 @@ export class Queue {
    * Přeloží už uložený dokument (nahraný bez překladu) na místě: id, složka, karta, zvýraznění i originál zůstanou,
    * výstupy a průběh se vynulují a úloha se znovu přečte a přeloží.
    */
-  async translate(id: string, mode: Mode, targetLang: string) {
+  async translate(id: string, mode: Mode, targetLang: string, provider?: Provider) {
     const job = await this.store.job(id);
     if (!job || job.trashedAt || job.status === 'queued' || job.status === 'running') return;
     // Pipeline čte originál přímo z disku; zašifrovaný by nepřečetla.
@@ -137,6 +139,7 @@ export class Queue {
     Object.assign(job, {
       mode,
       targetLang,
+      provider,
       status: 'queued',
       translate: undefined,
       startedAt: undefined,

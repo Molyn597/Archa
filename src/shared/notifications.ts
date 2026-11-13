@@ -87,6 +87,18 @@ export function buildNotes(input: NoteInput): Note[] {
   return notes.sort((a, b) => RANK[a.kind] - RANK[b.kind] || b.at - a.at).slice(0, NOTE_LIMIT);
 }
 
+/** Čas události pro seznam oznámení: „dnes 14:32“, „včera 14:32“, jinak „12. 11. 14:32“; bez času prázdný řetězec. */
+export function noteTime(at: number, now: number): string {
+  if (at <= 0) return '';
+  const when = new Date(at);
+  const time = when.toLocaleTimeString(locale(), { hour: 'numeric', minute: '2-digit' });
+  const dayStart = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const days = Math.round((dayStart(new Date(now)) - dayStart(when)) / 86_400_000);
+  if (days === 0) return t('note.at.today', { time });
+  if (days === 1) return t('note.at.yesterday', { time });
+  return `${when.toLocaleDateString(locale(), { day: 'numeric', month: 'numeric' })} ${time}`;
+}
+
 /** Počet oznámení, která ještě nebyla vidět. */
 export const unreadCount = (notes: Note[], seen: ReadonlySet<string>) => notes.filter((n) => !seen.has(n.id)).length;
 
