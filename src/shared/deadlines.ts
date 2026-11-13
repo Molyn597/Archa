@@ -1,10 +1,11 @@
 import { addDuration, findDurations, type Duration, type FoundDuration } from './duration';
+import { docTitle } from './doc-title';
 import { locale, t } from './i18n';
 import { invoiceRows } from './invoices';
 import { formatMoney } from './money';
-import type { DocumentCard, Job, Project } from './types';
+import type { DocFacts, DocumentCard, Job, Project } from './types';
 
-export type DeadlineKind = 'invoiceDue' | 'contractEnd' | 'contractNotice' | 'projectDeadline';
+export type DeadlineKind = 'invoiceDue' | 'contractEnd' | 'contractNotice' | 'projectDeadline' | 'warranty';
 
 export interface Deadline {
   kind: DeadlineKind;
@@ -43,6 +44,23 @@ function splitRenewal(text: string): { renew?: FoundDuration; notice?: FoundDura
 
 /** Přidá den k datu RRRR-MM-DD (kladné i záporné). */
 const shift = (iso: string, days: number) => addDuration(iso, { days: Math.abs(days) }, days < 0 ? -1 : 1);
+
+const ISO_IN_TEXT = /(\d{4})-(\d{2})-(\d{2})/;
+const CZ_IN_TEXT = /(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{4})/;
+
+/** Konec záruky RRRR-MM-DD: datum v textu, jinak doba (měsíce, roky) od vystavení; neznámý konec undefined. */
+export function warrantyEnd(facts: Pick<DocFacts, 'warranty' | 'issued'> | undefined): string | undefined {
+  const text = clean(facts?.warranty);
+  if (!text) return undefined;
+  const issued = clean(facts?.issued);
+  const iso = text.match(ISO_IN_TEXT);
+  const cz = text.match(CZ_IN_TEXT);
+  const date = iso ? `${iso[1]}-${iso[2]}-${iso[3]}` : cz ? `${cz[3]}-${cz[2]!.padStart(2, '0')}-${cz[1]!.padStart(2, '0')}` : undefined;
+  // Datum před vystavením je spíš začátek („od 18. 6. 2025 na 24 měsíců“): pak rozhoduje doba.
+  if (date && !Number.isNaN(Date.parse(date)) && !(DATE.test(issued) && date <= issued)) return date;
+  const term = findDurations(text)[0];
+  return term && DATE.test(issued) ? addDuration(issued, dur(term)) : undefined;
+}
 
 function contractDeadlines(job: Job, card: DocumentCard, today: string): Deadline[] {
   const f = card.facts ?? {};
@@ -121,6 +139,15 @@ export function deadlines(input: {
 
   for (const p of projects) {
     if (p.deadline && DATE.test(p.deadline)) out.push({ kind: 'projectDeadline', date: p.deadline, projectId: p.id, title: p.name, overdue: p.deadline < today });
+  }
+
+  // Záruka: u jakéhokoli dokladu s údajem o záruce; skončená už nikoho nezajímá.
+  for (const job of jobs) {
+    const card = cards[job.id];
+    const end = warrantyEnd(card?.facts);
+    if (!card || !end || end < today) continue;
+    const supplier = clean(card.facts?.supplier);
+    out.push({ kind: 'warranty', date: end, jobId: job.id, title: clean(card.facts?.subject) || docTitle(job, card), ...(supplier && { detail: supplier }), overdue: false });
   }
 
   const cutoff = shift(today, -OVERDUE_KEEP_DAYS);

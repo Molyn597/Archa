@@ -1,4 +1,4 @@
-import { CONTRACT_FACTS, DOC_TYPES, INVOICE_FACTS } from '../shared/card';
+import { CONTRACT_FACTS, DOC_TYPES, INVOICE_FACTS, WARRANTY_FACTS } from '../shared/card';
 import type { Author, DocFacts, DocType, DocumentCard, Segment } from '../shared/types';
 import { extractJsonObject } from './review';
 
@@ -29,11 +29,13 @@ const DATE_FACTS = new Set<string>(['issued', 'due', 'validFrom', 'validTo']);
 /** DIČ / USt-IdNr.: kód země a číslice. */
 const VAT_ID = /^[A-Z]{2}\s?\d[\d\s]{6,}$/;
 
-/** Fakta faktury / smlouvy jen z polí daného typu; bez jediného vyplněného pole undefined. */
-function parseFacts(raw: unknown, type: 'invoice' | 'contract'): DocFacts | undefined {
+const FACT_SETS = { invoice: INVOICE_FACTS, contract: CONTRACT_FACTS, other: WARRANTY_FACTS };
+
+/** Fakta faktury / smlouvy / účtenky jen z polí daného typu; bez jediného vyplněného pole undefined. */
+function parseFacts(raw: unknown, type: keyof typeof FACT_SETS): DocFacts | undefined {
   const f = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const facts: DocFacts = {};
-  for (const k of type === 'invoice' ? INVOICE_FACTS : CONTRACT_FACTS) {
+  for (const k of FACT_SETS[type]) {
     const v = str(f[k]);
     if (v) facts[k] = DATE_FACTS.has(k) ? isoDate(v) : v;
   }
@@ -74,7 +76,9 @@ export function parseCard(text: string, target: string): DocumentCard | undefine
     .filter((a) => a.family || a.given);
   const opt = (v: unknown) => str(v) || undefined;
   const docType = DOC_TYPES.includes(type as DocType) ? (type as DocType) : 'other';
-  const facts = docType === 'invoice' || docType === 'contract' ? parseFacts(d.facts, docType) : undefined;
+  const parsed = docType === 'invoice' || docType === 'contract' || docType === 'other' ? parseFacts(d.facts, docType) : undefined;
+  // U jiného typu se fakta drží jen kvůli záruce.
+  const facts = docType === 'other' && !parsed?.warranty ? undefined : parsed;
   return {
     summary,
     type: docType,

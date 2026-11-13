@@ -85,8 +85,9 @@ export function releaseEntries(source: Library, ids: string[]) {
   for (const id of ids) {
     delete source.assign[id];
     if (source.paid) delete source.paid[id];
+    if (source.handedOver) delete source.handedOver[id];
   }
-  if (source.paid && !Object.keys(source.paid).length) delete source.paid;
+  for (const key of ['paid', 'handedOver'] as const) if (source[key] && !Object.keys(source[key]!).length) delete source[key];
   if (source.questions) source.questions = source.questions.filter((q) => !gone.has(q.jobId));
   if (source.aiLog) source.aiLog = source.aiLog.filter((p) => !gone.has(p.jobId));
   if (source.recent) source.recent = source.recent.filter((id) => !gone.has(id));

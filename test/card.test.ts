@@ -118,6 +118,13 @@ describe('parseCard – fakta', () => {
     expect(parseCard(JSON.stringify({ ...VALID, facts: { amount: '1 Kč' } }), 'cs')?.facts).toBeUndefined();
   });
 
+  it('účtenka (jiný typ) drží jen údaje o záruce a jen se zárukou', () => {
+    const facts = { subject: 'Pračka', supplier: 'Alza', amount: '12 990 Kč', issued: '18.6.2025', warranty: ' 24 měsíců ', number: 'X1' };
+    expect(parseCard(JSON.stringify({ ...VALID, type: 'other', facts }), 'cs')?.facts).toEqual({ subject: 'Pračka', supplier: 'Alza', amount: '12 990 Kč', issued: '2025-06-18', warranty: '24 měsíců' });
+    expect(parseCard(JSON.stringify({ ...invoice, facts: { amount: '1 Kč', warranty: 'do 18. 6. 2027' } }), 'cs')?.facts).toEqual({ amount: '1 Kč', warranty: 'do 18. 6. 2027' });
+    expect(parseCard(JSON.stringify({ ...VALID, type: 'other', facts: { subject: 'Pračka', amount: '1 Kč' } }), 'cs')?.facts).toBeUndefined();
+  });
+
   it('prázdná fakta nenastaví', () => {
     expect(parseCard(JSON.stringify({ ...invoice, facts: { amount: ' ', parties: [] } }), 'cs')).not.toHaveProperty('facts');
     expect(parseCard(JSON.stringify({ ...invoice, facts: 'nesmysl' }), 'cs')).not.toHaveProperty('facts');

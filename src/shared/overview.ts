@@ -90,6 +90,20 @@ export function dueTone(date: string, today: string): 'overdue' | 'soon' | 'calm
   return diff < 0 ? 'overdue' : diff <= 7 ? 'soon' : 'calm';
 }
 
+/** Barva konce záruky: do 30 dní oranžová, jinak klidná. */
+export function warrantyTone(date: string, today: string): 'warn' | 'calm' {
+  // Konec záruky není chyba: oranžová jako blížící se termín, ne červená.
+  return daysBetween(today, date) < 30 ? 'warn' : 'calm';
+}
+
+/** Blok Záruky: aktivní záruky, nejdřív ty, které končí; nejvýš `limit`. */
+export function warrantyRows<T extends { kind: string; date: string }>(deadlines: T[], today: string, limit = 5): T[] {
+  return deadlines
+    .filter((d) => d.kind === 'warranty' && d.date >= today)
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(0, limit);
+}
+
 /** Nejnověji upravené projekty. */
 export const latestProjects = <T extends { updatedAt: number }>(projects: T[], limit = 3) =>
   [...projects].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, limit);

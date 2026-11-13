@@ -123,7 +123,7 @@ export function cardPrompt(sample: string, target: string, folders: string[], ru
     '"publisher": "...", "place": "...", "edition": "...", "volume": "...", "issue": "...", "pages": "...", "doi": "...", "url": "..."}, ' +
     '"facts": {"subject": "...", "number": "...", "vs": "...", "supplier": "...", "supplierId": "...", "supplierVat": "...", "customer": "...", "customerId": "...", "customerVat": "...", ' +
     '"net": "...", "vat": "...", "amount": "...", "issued": "...", "due": "...", "validFrom": "...", "validTo": "...", "period": "...", "parties": ["..."], "notice": "...", ' +
-    '"autoRenewal": "...", "penalty": "...", "law": "..."}}\n' +
+    '"autoRenewal": "...", "penalty": "...", "law": "...", "warranty": "..."}}\n' +
     `Write summary (3–5 sentences) and keywords (at most 10) in ${lang}. ` +
     'type must be exactly one of: article, book, chapter, thesis, report, contract, invoice, manual, letter, law, web, other. ' +
     `folder is the library folder for the document, written as a path from this folder tree: ${folders.join('; ')}. ` +
@@ -136,13 +136,15 @@ export function cardPrompt(sample: string, target: string, folders: string[], ru
     'biblio contains only what is literally stated in the document (title page, header, citation line, DOI); never invent anything and use "" when unknown. ' +
     'Write authors as family and given name; an organisation goes into family with an empty given. ' +
     'container is the journal, proceedings or book the document was published in; pages is the page range in that container. ' +
-    'Fill facts only when type is invoice or contract, otherwise use {}; write only what is literally stated in the document, never invent anything, use "" when unknown. ' +
+    'Fill facts only when type is invoice or contract, or for a purchase receipt or warranty certificate (type other; then only subject, supplier, amount, issued and warranty), ' +
+    'otherwise use {}; write only what is literally stated in the document, never invent anything, use "" when unknown. ' +
     'For an invoice: number is the invoice number, vs the variable symbol, supplierId/customerId the company registration number (Czech IČO has 8 digits; never a VAT ID), ' +
     'supplierVat/customerVat the VAT ID (DIČ, USt-IdNr., e.g. CZ12345678, DE123456789), net the tax base and vat the VAT amount including currency – only when VAT is stated, ' +
     'amount the total payable including currency. Leave validFrom, validTo, notice, autoRenewal, penalty and law empty for an invoice. ' +
     'For a contract: parties are the contracting parties, amount the price, rent or fee including currency and period (e.g. "18 500 Kč monthly"), issued the signing date, ' +
     'validFrom/validTo the validity dates, notice the notice period, autoRenewal briefly whether and how it renews automatically, penalty briefly the contractual penalties, ' +
     'law the governing law. Leave number, vs, supplier, customer, their IDs, net, vat and due empty for a contract. ' +
+    'warranty is the warranty period or end date exactly as stated for the purchased goods (e.g. "24 měsíců", "3 years", "until 2027-06-18"), "" when not stated. ' +
     `Write dates as YYYY-MM-DD, amounts including their currency, subject, autoRenewal and penalty briefly in ${lang}.` +
     `\n\nDOCUMENT:\n${sample}`
   );

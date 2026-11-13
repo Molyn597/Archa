@@ -4706,6 +4706,16 @@ body.nav-collapsed #project-folders {
   display: none;
 }
 
+/* V sbalené liště se nabídka knihoven otevře doprava v plné šířce, nad obsahem. */
+.nav-collapsed .sidebar:has(.lib-switch .menu:not([hidden])) {
+  z-index: 40;
+}
+
+.nav-collapsed .lib-switch .menu {
+  right: auto;
+  min-width: 240px;
+}
+
 .menu-gap {
   flex: none;
   width: 16px;
@@ -5057,6 +5067,78 @@ body.nav-collapsed #project-folders {
   margin-right: auto;
   color: var(--muted);
   font-size: 13px;
+}
+
+.inv-handed {
+  margin-left: 6px;
+  font-size: 11px;
+}
+
+/* Balíček pro účetní */
+.pkg-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.pkg-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pkg-opts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.pkg-opt {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.pkg-opt[hidden] {
+  display: none;
+}
+
+.pkg-opt:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.pkg-switch {
+  border-style: dashed;
+}
+
+.pkg-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--sunken);
+  font-size: 13px;
+}
+
+.pkg-check {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--muted);
+}
+
+.pkg-check .warn {
+  color: var(--warning-text);
 }
 
 .inv-view .lib-bar {

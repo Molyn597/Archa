@@ -3,7 +3,7 @@ import { docSubtitle, docTitle } from '../shared/doc-title';
 import { t, type MessageKey } from '../shared/i18n';
 import { day, invoiceRows, isoDay, type CurrencySum, type InvoiceStatusFilter } from '../shared/invoices';
 import { sumsText } from '../shared/notifications';
-import { citeGapCount, continueRows, dueTone, relativeAgo, relativeDue, toSort, upcoming, waitRows, type WaitInput, type WaitRow } from '../shared/overview';
+import { citeGapCount, continueRows, dueTone, relativeAgo, relativeDue, toSort, upcoming, waitRows, warrantyRows, warrantyTone, type WaitInput, type WaitRow } from '../shared/overview';
 import { flowRows } from '../shared/finance';
 import { kindName, visibleProjects } from '../shared/projects';
 import type { DocumentCard, Job, LibraryKind, LibraryState, Mode, OwnCompany, PracticeDue, Project, Settings } from '../shared/types';
@@ -27,6 +27,8 @@ interface OverviewHost {
   openJob(id: string): void;
   showDeadlines(): void;
   showUnsorted(): void;
+  /** Složka Záruky a účtenky. */
+  showWarranty(): void;
   /** Dokumenty s filtrem Chybí údaje (citace). */
   showMissing(): void;
   /** Soubory, pohled Faktury s filtrem stavu. */
@@ -128,6 +130,12 @@ function waitRow(r: WaitRow, jobs: Job[]) {
   }
 }
 
+/** Záruka: název, konec záruky a při blížícím se konci štítek se zbývajícím časem. */
+function warrantyRow(d: Deadline, today: string) {
+  const tone = warrantyTone(d.date, today);
+  return row(d.title, t('ov.warranty.until', { date: day(d.date) }), () => d.jobId && host.openJob(d.jobId), tone !== 'calm' && h('span', { class: `chip ${tone}` }, relativeDue(d.date, today)));
+}
+
 /** Nový uživatel: tři kroky k prvnímu dotazu. */
 function welcome(aiReady: boolean) {
   const step = (n: number, done: boolean, text: string, action?: Node, focus = false) =>
@@ -216,11 +224,13 @@ export function renderOverview() {
   const dueRow = (d: Deadline) => deadlineRow(d, { open: host.openJob, openProject: host.openProject }, { dateText: relativeDue(d.date, today), soon: dueTone(d.date, today) === 'soon' });
   const cont = continueRows(kind, projects, jobs);
   const contRows = [...cont.projects.map(projectRow), ...cont.jobs.map((j) => docRow(j, cards[j.id]))];
+  const guarantees = kind === 'personal' ? warrantyRows(signals.deadlines, today) : [];
   const fin = kind === 'work' ? financeMini(financeCtx()) : null;
 
   const left = [
     waiting.length > 0 && card(t('ov.waiting'), h('div', { class: 'dl-list' }, ...waiting.map((r) => waitRow(r, jobs)))),
     next.length > 0 && card(t('dl.soon'), h('div', { class: 'dl-list' }, ...next.map(dueRow)), link(t('ov.all'), host.showDeadlines)),
+    guarantees.length > 0 && card(t('ov.warranty'), h('div', { class: 'dl-list' }, ...guarantees.map((d) => warrantyRow(d, today))), link(t('ov.warranty.folder'), host.showWarranty)),
   ].filter(Boolean);
   const right = [
     contRows.length > 0 && card(t('ov.continue'), h('div', { class: 'dl-list' }, ...contRows), link(t('ov.all'), () => host.show(cont.projects.length ? 'projects' : 'history'))),

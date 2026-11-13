@@ -129,6 +129,7 @@ const api: Api = {
   onJobRemoved: (handler) => ipcRenderer.on('job-removed', (_e, id) => handler(id)),
   setInvoicesPaid: (ids, paid) => ipcRenderer.invoke('invoices-paid', ids, paid),
   exportInvoices: (ids, format) => ipcRenderer.invoke('invoices-export', ids, format),
+  packageInvoices: (request) => ipcRenderer.invoke('invoices-package', request),
   onLibraryChanged: (handler) => ipcRenderer.on('library-changed', () => handler()),
   onLibraryProgress: (handler) => ipcRenderer.on('library-progress', (_e, p) => handler(p)),
   onOpenJob: (handler) => ipcRenderer.on('open-job', (_e, id) => handler(id)),

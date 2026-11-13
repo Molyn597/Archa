@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { InvoiceRow } from '../src/shared/invoices';
-import { citeGapCount, continueRows, dueTone, invoiceStats, latestProjects, newestJobs, relativeDue, toSort, upcoming, waitRows } from '../src/shared/overview';
+import { citeGapCount, continueRows, dueTone, invoiceStats, latestProjects, newestJobs, relativeDue, toSort, upcoming, waitRows, warrantyRows, warrantyTone } from '../src/shared/overview';
 
 const folders = [
   { id: 'invoices', createdAt: 0 },
@@ -159,5 +159,24 @@ describe('citeGapCount', () => {
     const cards = { a: card('article', [], '2020'), b: card('article', ['Novák'], '2020'), c: card('invoice', [], ''), d: card('book', ['X'], ''), e: card('article', [], '') };
     const jobs = ['a', 'b', 'c', 'd', 'e'].map((id) => ({ id, status: id === 'e' ? 'running' : 'done' }));
     expect(citeGapCount(jobs, cards)).toBe(2);
+  });
+});
+
+describe('záruky v Přehledu', () => {
+  const today = '2026-11-08';
+  const w = (date: string, kind = 'warranty') => ({ kind, date });
+
+  it('jen aktivní záruky, nejdřív končící, nejvýš limit', () => {
+    const list = [w('2027-06-18'), w('2026-11-01'), w('2026-12-20'), w('2026-11-20', 'contractEnd'), w('2026-11-08')];
+    expect(warrantyRows(list, today).map((d) => d.date)).toEqual(['2026-11-08', '2026-12-20', '2027-06-18']);
+    expect(warrantyRows(list, today, 2)).toHaveLength(2);
+    expect(warrantyRows([], today)).toEqual([]);
+  });
+
+  it('barva: do 30 dní oranžová, dál klidná', () => {
+    expect(warrantyTone('2026-11-15', today)).toBe('warn');
+    expect(warrantyTone('2026-11-16', today)).toBe('warn');
+    expect(warrantyTone('2026-12-07', today)).toBe('warn');
+    expect(warrantyTone('2026-12-08', today)).toBe('calm');
   });
 });

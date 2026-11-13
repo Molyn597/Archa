@@ -93,6 +93,21 @@ export interface ContractRisk {
   why: string;
   tip?: string;
 }
+/** Co má obsahovat balíček pro účetní. */
+export interface InvoicePackageRequest {
+  ids: string[];
+  include: { pdf: boolean; isdoc: boolean; xlsx: boolean; csv: boolean };
+  /** Označit faktury jako předané účetní. */
+  handOver: boolean;
+  /** Část názvu souboru za „Faktury-“, např. 2026-10. */
+  nameSuffix: string;
+}
+export interface InvoicePackageResult {
+  path: string;
+  count: number;
+  /** Faktury v zamčených složkách, které se do balíčku nedostaly. */
+  skipped: number;
+}
 /** Strukturované údaje faktury / smlouvy; jen to, co v dokumentu doslova stojí. Data jako RRRR-MM-DD. */
 export interface DocFacts {
   /** Za co (předmět faktury / smlouvy), např. „nájem bytu“. */
@@ -128,6 +143,8 @@ export interface DocFacts {
   parties?: string[];
   /** Výpovědní lhůta. */
   notice?: string;
+  /** Záruka: doba nebo datum konce přesně tak, jak stojí v dokladu („24 měsíců“, „do 18. 6. 2027“). */
+  warranty?: string;
 }
 
 export interface LibraryFolder {
@@ -153,6 +170,8 @@ export interface Library {
   recent?: string[];
   /** Zaplacené faktury: id dokumentu → čas označení. */
   paid?: Record<string, number>;
+  /** Faktury předané účetní (Balíček pro účetní): id dokumentu → čas předání. */
+  handedOver?: Record<string, number>;
   /** Verze šablon složek, podle které byla knihovna naposledy upravena (viz `alignToTemplate`). */
   templateVersion?: number;
   /** Trvale skryté nabídky (např. přesun článků do Studia: uživatel zvolil Nechat). */
@@ -934,6 +953,8 @@ export interface Api {
   setInvoicesPaid(ids: string[], paid: boolean): Promise<void>;
   /** Uloží faktury (aktuálně filtrované) do .xlsx nebo .csv; vrátí cestu, nebo null při zrušení dialogu. */
   exportInvoices(ids: string[], format: 'xlsx' | 'csv'): Promise<string | null>;
+  /** Uloží ZIP pro účetní (PDF, ISDOC, přehledy); null při zrušení dialogu. */
+  packageInvoices(request: InvoicePackageRequest): Promise<InvoicePackageResult | null>;
   onLibraryChanged(handler: () => void): void;
   onLibraryProgress(handler: (p: { done: number; total: number }) => void): void;
   openOutput(id: string, kind?: OutputKind): Promise<void>;

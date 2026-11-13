@@ -2,12 +2,15 @@ import { locale, t, type MessageKey } from '../shared/i18n';
 import { formatMoney } from '../shared/money';
 import { day, filterInvoices, invoiceRows, invoiceSums, isoDay, periodRange, sortInvoices, type InvoicePeriod, type InvoiceRow, type InvoiceSortKey, type InvoiceStatusFilter } from '../shared/invoices';
 import type { DocumentCard, Job } from '../shared/types';
+import { openPackageModal } from './accountant-package';
 import { actionMenu, cleanError, h, icon, ICONS, toast } from './dom';
 
 export interface InvoicesCtx {
   jobs: Job[];
   cards: Record<string, DocumentCard>;
   paid: Record<string, number> | undefined;
+  /** Faktury předané účetní: id → čas. */
+  handedOver: Record<string, number> | undefined;
   /** Text z pole hledání v hlavičce Souborů. */
   query: string;
   open(jobId: string): void;
@@ -62,8 +65,11 @@ export function renderInvoices(root: HTMLElement, ctx: InvoicesCtx) {
     select(period, [['all', 'inv.period.all'], ['thisMonth', 'inv.period.thisMonth'], ['lastMonth', 'inv.period.lastMonth'], ['thisYear', 'inv.period.thisYear'], ['lastYear', 'inv.period.lastYear']], (v) => ((period = v), ctx.redraw())),
     select(status, [['all', 'inv.filter.allStatus'], ['open', 'inv.filter.open'], ['overdue', 'inv.filter.overdue'], ['paid', 'inv.filter.paid']], (v) => ((status = v), ctx.redraw())),
     h('span', { class: 'inv-count' }, t('inv.count', { count: rows.length })),
-    h('button', { class: 'btn primary', type: 'button', disabled: !rows.length, onclick: () => exportTo('xlsx') }, icon(ICONS.download), t('inv.exportXlsx')),
-    actionMenu(() => [{ label: t('inv.exportCsv'), icon: ICONS.download, disabled: !rows.length, run: () => exportTo('csv') }]),
+    h('button', { class: 'btn primary', type: 'button', disabled: !all.length, onclick: () => void openPackageModal({ rows: all, jobs: ctx.jobs, done: ctx.redraw }) }, icon(ICONS.download), t('inv.package')),
+    actionMenu(() => [
+      { label: t('inv.exportXlsx'), icon: ICONS.download, disabled: !rows.length, run: () => exportTo('xlsx') },
+      { label: t('inv.exportCsv'), icon: ICONS.download, disabled: !rows.length, run: () => exportTo('csv') },
+    ]),
   );
 
   const bar = h(
@@ -138,7 +144,7 @@ export function renderInvoices(root: HTMLElement, ctx: InvoicesCtx) {
       h('td', { class: 'inv-check' }, check),
       h('td', { class: 'inv-party' }, r.supplier || '–'),
       h('td', { class: 'inv-party' }, r.customer || '–'),
-      h('td', { class: 'inv-nowrap' }, r.number || '–'),
+      h('td', { class: 'inv-nowrap' }, r.number || '–', ctx.handedOver?.[r.jobId] !== undefined ? h('span', { class: 'chip inv-handed', title: day(isoDay(new Date(ctx.handedOver[r.jobId]))) }, t('inv.handedOver')) : null),
       h('td', { class: 'inv-subject' }, h('span', { title: r.subject }, r.subject || '–')),
       h('td', { class: 'inv-date' }, r.issued ? day(r.issued) : '–'),
       h('td', { class: 'inv-date' }, r.due ? day(r.due) : '–'),

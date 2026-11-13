@@ -23,10 +23,10 @@ import { resolveLang, setLang, t, type MessageKey } from '../shared/i18n';
 import { LIBRARY_CHAT, projectChatKey, TRASH_DAYS } from '../shared/folders';
 import { languageName } from '../shared/languages';
 import { findRegion, normalizeCrop } from '../shared/regions';
-import type { ChatModel, DocumentCard, Libraries, LibraryKind, MoveOptions, DuplicateMatch, Highlight, Project, ProjectKind, Job, Library, LibraryFolder, JobOptions, Mode, OrganizePlan, OutputKind, Placement, Provider, RegionTranslation, SavedSearch, Settings, Stage } from '../shared/types';
+import type { ChatModel, DocumentCard, InvoicePackageRequest, InvoicePackageResult, Libraries, LibraryKind, MoveOptions, DuplicateMatch, Highlight, Project, ProjectKind, Job, Library, LibraryFolder, JobOptions, Mode, OrganizePlan, OutputKind, Placement, Provider, RegionTranslation, SavedSearch, Settings, Stage } from '../shared/types';
 import { isOnline } from '../shared/provider';
-import { exportTable, invoiceRows, isoDay, toCsv } from '../shared/invoices';
-import { buildXlsx } from './xlsx';
+import { invoiceRows, isoDay } from '../shared/invoices';
+import { buildPackage, invoiceFile } from './accountant';
 import { buildDocx, loadFigures } from './docx';
 import { originalText } from './segments';
 import { isTranslated } from '../shared/detail-tabs';
@@ -736,18 +736,47 @@ function registerIpc() {
     const rows = invoiceRows(jobs, cards, library.paid, today);
     const order = new Map(ids.map((id, i) => [id, i]));
     rows.sort((a, b) => order.get(a.jobId)! - order.get(b.jobId)!);
-    const table = exportTable(
-      rows,
-      (key) => t(`inv.col.${key}` as MessageKey),
-      (s) => t(`inv.status.${s}` as MessageKey),
-    );
     const res = await dialog.showSaveDialog(win!, {
       defaultPath: path.join(app.getPath('documents'), `${t('inv.fileName')}-${today}.${format}`),
       filters: format === 'xlsx' ? [{ name: 'Excel', extensions: ['xlsx'] }] : [{ name: 'CSV', extensions: ['csv'] }],
     });
     if (res.canceled || !res.filePath) return null;
-    await writeFile(res.filePath, format === 'xlsx' ? buildXlsx(t('inv.title'), table.headers, table.rows) : toCsv(table.headers, table.rows));
+    await writeFile(res.filePath, invoiceFile(rows, format));
     return res.filePath;
+  });
+  ipcMain.handle('invoices-package', async (_e, req: InvoicePackageRequest): Promise<InvoicePackageResult | null> => {
+    const library = await store.library();
+    const wanted = (await store.jobs()).filter((j) => req.ids.includes(j.id));
+    // Zamčený trezor: dokumenty v zamčených složkách se nečtou, jen se započítají jako přeskočené.
+    const jobs = store.unlocked ? wanted : wanted.filter((j) => !shouldBeLocked(library, j.id));
+    const cards = Object.fromEntries(await Promise.all(jobs.map(async (j) => [j.id, await store.card(j.id)] as const)));
+    const order = new Map(req.ids.map((id, i) => [id, i]));
+    const invoices = jobs.filter((j) => cards[j.id]?.type === 'invoice').sort((a, b) => order.get(a.id)! - order.get(b.id)!);
+    const today = isoDay();
+    const res = await dialog.showSaveDialog(win!, {
+      defaultPath: path.join(app.getPath('documents'), `${t('inv.fileName')}-${req.nameSuffix}.zip`),
+      filters: [{ name: 'ZIP', extensions: ['zip'] }],
+    });
+    if (res.canceled || !res.filePath) return null;
+    const { zip } = await buildPackage({
+      jobs: invoices,
+      cards,
+      paid: library.paid,
+      include: req.include,
+      template: (await store.settings()).nameTemplate,
+      today,
+      readInput: (job) => store.readInput(job),
+      readIsdoc: async (job) => (await import('./isdoc-pdf')).isdocXml(job.id, await store.readInput(job)),
+    });
+    await writeFile(res.filePath, zip);
+    if (req.handOver) {
+      const now = Date.now();
+      await editLibrary((l) => {
+        l.handedOver ??= {};
+        for (const j of invoices) l.handedOver[j.id] = now;
+      });
+    }
+    return { path: res.filePath, count: invoices.length, skipped: wanted.length - jobs.length };
   });
   ipcMain.handle('library-make-cards', async () => {
     const todo: Job[] = [];

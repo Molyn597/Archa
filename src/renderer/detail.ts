@@ -15,7 +15,8 @@ import { isOnline } from '../shared/provider';
 import { findRegion, moveCrop, normalizeCrop, resizeCrop, type Handle } from '../shared/regions';
 import { gaps } from '../shared/bibliography';
 import { reference, toHtml, toPlain } from '../shared/citation';
-import { authorsText, BIBLIO_FIELDS, CONTRACT_FACTS, DOC_TYPES, FACT_FIELDS, INVOICE_FACTS, parseAuthors } from '../shared/card';
+import { authorsText, BIBLIO_FIELDS, CONTRACT_FACTS, DOC_TYPES, FACT_FIELDS, INVOICE_FACTS, parseAuthors, WARRANTY_FACTS } from '../shared/card';
+import { warrantyEnd } from '../shared/deadlines';
 import type { AresEntry, Biblio, CitationStyle, DocFacts, DocLinks, DocType, DocumentCard, DocumentContext, Job, JobDetail, Mode, OwnCompany, RegionTranslation, RelatedDoc, Segment, Stage } from '../shared/types';
 import { currentKind, hasOtherLibrary, moveToLibraryModal } from './library-switch';
 import { openFill } from './openalex-view';
@@ -138,6 +139,16 @@ async function showWarnings() {
 const DATE_FACTS = new Set<string>(['issued', 'due', 'validFrom', 'validTo']);
 
 /** Popisek údaje; u smlouvy je částka cena a datum vystavení datum podpisu. */
+/** Údaje podle typu dokumentu (jiný typ = účtenka / záruční list). */
+const factSet = (type: string): readonly string[] => (type === 'invoice' ? INVOICE_FACTS : type === 'contract' ? CONTRACT_FACTS : type === 'other' ? WARRANTY_FACTS : []);
+
+/** Záruka tak, jak stojí v dokladu, a spočítaný konec (když ho text už neobsahuje). */
+function warrantyText(f: DocFacts) {
+  const end = warrantyEnd(f);
+  const said = (f.warranty ?? '').replace(/\s/g, '');
+  return end && !said.includes(end) && !said.includes(day(end).replace(/\s/g, '')) ? `${f.warranty} · ${t('ov.warranty.until', { date: day(end) })}` : f.warranty!;
+}
+
 const factLabel = (k: string, type?: string) =>
   t((type === 'contract' && (k === 'amount' || k === 'issued') ? `card.facts.${k}Contract` : `card.facts.${k}`) as MessageKey);
 
@@ -895,7 +906,7 @@ function cardSection(job: Job) {
     ].filter(Boolean) as HTMLElement[];
     const f = card.facts ?? {};
     const docFacts = [
-      ...FACT_FIELDS.filter((k) => f[k]).map((k) => line(factLabel(k, card.type), DATE_FACTS.has(k) ? day(f[k]!) : f[k]!)),
+      ...FACT_FIELDS.filter((k) => f[k]).map((k) => line(factLabel(k, card.type), DATE_FACTS.has(k) ? day(f[k]!) : k === 'warranty' ? warrantyText(f) : f[k]!)),
       f.parties?.length && line(t('card.facts.parties'), f.parties.join(', ')),
     ].filter(Boolean) as HTMLElement[];
     box.replaceChildren(
@@ -957,7 +968,7 @@ function cardSection(job: Job) {
     const parties = h('textarea', { rows: '2' });
     parties.value = (card.facts?.parties ?? []).join('\n');
     const field = (label: string, control: HTMLElement) => h('label', { class: 'field' }, h('span', {}, label), control);
-    // Fakta se nabízejí jen u faktury a smlouvy.
+    // Fakta se nabízejí jen u faktury, smlouvy a účtenky (typ jiný).
     const factsBox = h(
       'div',
       { class: 'card-facts-edit' },
@@ -966,7 +977,7 @@ function cardSection(job: Job) {
     );
     // Ukáže se jen pole patřící k zvolenému typu.
     const syncFacts = () => {
-      const shown: readonly string[] = type.value === 'invoice' ? INVOICE_FACTS : type.value === 'contract' ? CONTRACT_FACTS : [];
+      const shown = factSet(type.value);
       factsBox.hidden = !shown.length;
       FACT_FIELDS.forEach((k) => ((factInputs[k].parentElement as HTMLElement).hidden = !shown.includes(k)));
     };
@@ -979,9 +990,9 @@ function cardSection(job: Job) {
       const text = (v: string) => v.trim() || undefined;
       const biblio: Biblio = { authors: parseAuthors(authors.value), title: inputs.title.value.trim() };
       for (const k of BIBLIO_FIELDS) if (k !== 'title') biblio[k] = text(inputs[k].value);
-      const hasFacts = type.value === 'invoice' || type.value === 'contract';
+      const kept = factSet(type.value);
+      const hasFacts = kept.length > 0;
       const facts: DocFacts = {};
-      const kept: readonly string[] = type.value === 'invoice' ? INVOICE_FACTS : CONTRACT_FACTS;
       for (const k of FACT_FIELDS) if (kept.includes(k)) facts[k] = text(factInputs[k].value);
       facts.parties = [...new Set(parties.value.split('\n').map((p) => p.trim()).filter(Boolean))];
       if (!facts.parties.length) delete facts.parties;

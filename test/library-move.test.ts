@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { copyDirVerified, moveToLibrary } from '../src/main/library-move';
 import { alignLibraryFile, alignOpenLibrary, libraryRoot, setLibraryKind } from '../src/main/libraries';
 import { LOCK_MARK, Store } from '../src/main/store';
-import { templateLibrary } from '../src/shared/library-templates';
+import { TEMPLATE_VERSION, templateLibrary } from '../src/shared/library-templates';
 import type { Job, Libraries, Library, Project } from '../src/shared/types';
 
 let app: string;
@@ -165,7 +165,7 @@ describe('úprava podle šablony', () => {
     await alignOpenLibrary(src, 'work', true);
     const once = await src.library();
     expect(once.folders.map((f) => f.id)).toEqual(['contracts', 'invoices', 'hr', 'manuals', 'official', 'internal-docs', 'other']);
-    expect(once.templateVersion).toBe(1);
+    expect(once.templateVersion).toBe(TEMPLATE_VERSION);
     await src.saveLibrary({ ...once, folders: [...once.folders, { id: 'declarations', createdAt: 0 }] });
     await alignOpenLibrary(src, 'work', true);
     expect((await src.library()).folders.some((f) => f.id === 'declarations')).toBe(true);

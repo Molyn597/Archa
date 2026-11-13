@@ -4,12 +4,12 @@ import type { Library, LibraryFolder, LibraryKind } from './types';
 const top = (...ids: string[]): LibraryFolder[] => ids.map((id) => ({ id, createdAt: 0 }));
 
 /** Verze šablon složek; knihovna s nižší (nebo žádnou) se jednou upraví podle šablony svého typu (`alignToTemplate`). */
-export const TEMPLATE_VERSION = 1;
+export const TEMPLATE_VERSION = 2;
 
 /** Klíče složek šablony typu v pořadí, v jakém se ukazují (studium: bez předmětů, ty mají vlastní id). */
 export const TEMPLATE_KEYS: Record<Exclude<LibraryKind, 'general'>, readonly string[]> = {
   work: ['contracts', 'invoices', 'hr', 'manuals', 'official', 'internal-docs', 'other'],
-  personal: ['invoices', 'contracts', 'insurance', 'official', 'bank', 'health', 'study', 'manuals', 'other'],
+  personal: ['invoices', 'contracts', 'insurance', 'warranty', 'official', 'bank', 'health', 'study', 'manuals', 'other'],
   study: ['articles', 'schedule', 'other'],
 };
 

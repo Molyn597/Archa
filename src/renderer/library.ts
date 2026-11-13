@@ -735,6 +735,9 @@ export function leaveProject() {
 /** Otevře Soubory na pohledu Termíny. */
 export const showDeadlines = () => select(DEADLINES);
 
+/** Otevře složku Záruky a účtenky; bez ní všechny dokumenty. */
+export const showWarranty = () => select(state.library.folders.some((f) => f.id === 'warranty') ? 'warranty' : ALL);
+
 /** Otevře Soubory na všech dokumentech. */
 export const showAll = () => select(ALL);
 
@@ -1470,7 +1473,7 @@ function drawSpecial(query: string) {
     $('library-bar').hidden = true;
     $('history-empty').hidden = true;
     $('history-empty-action').hidden = true;
-    renderInvoices($('history-list'), { jobs: host.jobs(), cards: state.cards, paid: state.library.paid, query: $<HTMLInputElement>('history-search').value, open: (id) => host.open(id), redraw: renderLibrary });
+    renderInvoices($('history-list'), { jobs: host.jobs(), cards: state.cards, paid: state.library.paid, handedOver: state.library.handedOver, query: $<HTMLInputElement>('history-search').value, open: (id) => host.open(id), redraw: renderLibrary });
     return;
   }
   if (selected === DEADLINES) {

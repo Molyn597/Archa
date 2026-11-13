@@ -9,7 +9,7 @@ import { activeModels, activeRates, isOnline } from '../shared/provider';
 import type { Api, DuplicateMatch, FileInfo, Job, LmStatus, Mode, Models, Provider, Settings } from '../shared/types';
 import { askLibrary, renderFolderOpt, setupLibraryChat, showLibraryChat, syncChatSettings } from './chat';
 import { citeSegment, closeDetail, detailJobId, openDetail, setupDetail, updateDetail, type Tab } from './detail';
-import { applySavedSearch, createProject, leaveProject, savedSearches, libraryCards, openFolder, openProject, projectSelected, reloadLibrary, renderLibrary, revealDoc, setupLibrary, libraryView, selectedTitle, showAll, showDeadlines, showInvoices, showMissing, showUnsorted, type LibraryView } from './library';
+import { applySavedSearch, createProject, leaveProject, savedSearches, libraryCards, openFolder, openProject, projectSelected, reloadLibrary, renderLibrary, revealDoc, setupLibrary, libraryView, selectedTitle, showAll, showDeadlines, showInvoices, showMissing, showUnsorted, showWarranty, type LibraryView } from './library';
 import { addToLibrary, refreshOverview, renderOverview, setupOverview } from './overview';
 import { setupNotifications, updateNotifications } from './notifications';
 import { openCompare, setupCompare } from './compare-view';
@@ -827,6 +827,7 @@ async function init() {
     openJob: (id) => void openJob(id),
     showDeadlines,
     showUnsorted,
+    showWarranty,
     showMissing,
     showInvoices,
     ask: (question) => void askLibrary(question),

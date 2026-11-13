@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { deadlines, groupDeadlines } from '../src/shared/deadlines';
+import { deadlines, groupDeadlines, warrantyEnd } from '../src/shared/deadlines';
 import { formatMoney } from '../src/shared/money';
 import type { DocFacts, DocumentCard, Job, Project } from '../src/shared/types';
 
@@ -116,6 +116,33 @@ describe('projekty a řazení', () => {
   it('řadí podle data napříč druhy', () => {
     const r = run({ a: card('invoice', { due: '2026-12-01' }), b: card('contract', { validTo: '2026-11-15' }) }, { projects: [project('p', '2026-11-09')] });
     expect(r.map((x) => x.date)).toEqual(['2026-11-09', '2026-11-15', '2026-12-01']);
+  });
+});
+
+describe('záruka', () => {
+  it.each([
+    [{ warranty: '24 měsíců', issued: '2025-06-18' }, '2027-06-18'],
+    [{ warranty: '3 years', issued: '2024-06-18' }, '2027-06-18'],
+    [{ warranty: 'dva roky', issued: '2025-01-31' }, '2027-01-31'],
+    [{ warranty: '5 let', issued: '2024-03-01' }, '2029-03-01'],
+    [{ warranty: '12 months', issued: '2026-02-28' }, '2027-02-28'],
+    [{ warranty: 'do 18. 6. 2027', issued: '2024-01-01' }, '2027-06-18'],
+    [{ warranty: 'until 2027-06-18' }, '2027-06-18'],
+    [{ warranty: '24 měsíců, do 5. 3. 2028', issued: '2026-03-05' }, '2028-03-05'],
+    [{ warranty: 'od 18. 6. 2025 na 24 měsíců', issued: '2025-06-18' }, '2027-06-18'],
+    [{ warranty: '24 měsíců' }, undefined],
+    [{ warranty: 'doživotní', issued: '2025-06-18' }, undefined],
+    [{ issued: '2025-06-18' }, undefined],
+  ])('warrantyEnd %j', (facts, end) => expect(warrantyEnd(facts)).toBe(end));
+
+  it('termín Konec záruky: jen platná, u jakéhokoli typu, řazená mezi ostatními', () => {
+    const r = run({
+      a: card('other', { subject: 'Pračka', supplier: 'Alza', issued: '2025-06-18', warranty: '24 měsíců' }),
+      b: card('other', { subject: 'Sluchátka', issued: '2024-06-20', warranty: '24 měsíců' }),
+      c: card('invoice', { supplier: 'Foo', issued: '2026-11-01', warranty: '1 rok', due: '2026-11-20' }),
+    });
+    expect(r.map((x) => [x.kind, x.jobId])).toEqual([['invoiceDue', 'c'], ['warranty', 'a'], ['warranty', 'c']]);
+    expect(r[1]).toMatchObject({ date: '2027-06-18', title: 'Pračka', detail: 'Alza', overdue: false });
   });
 });
 
