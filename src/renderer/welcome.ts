@@ -17,7 +17,8 @@ const TITLES = { intro: 'welcome.1.title', libraries: 'welcome.libraries.title',
 
 /** Výběr knihoven: jeden obsah pro průvodce i samostatný dialog. `apply` založí knihovny nejvýše jednou. */
 function librariesPanel() {
-  const picked = new Set<LibraryKind>();
+  // Výchozí je osobní knihovna; Práce se nenabízí předvybraná.
+  const picked = new Set<LibraryKind>(['personal']);
   let keep: LibraryKind | undefined;
   let hasData = false;
   let done = false;
@@ -163,9 +164,9 @@ export function openWelcome(ctx: WelcomeContext) {
         h(
           'div',
           { class: 'welcome-tiles' },
-          tile(icon(ICONS.file), 'welcome.1.layout', 'welcome.1.layoutText'),
-          tile(icon(ICONS.list), 'welcome.1.scans', 'welcome.1.scansText'),
-          tile(icon(ICONS.balanced), 'welcome.1.choice', 'welcome.1.choiceText'),
+          tile(icon(ICONS.upload), 'welcome.1.upload', 'welcome.1.uploadText'),
+          tile(icon(ICONS.chat), 'welcome.1.ask', 'welcome.1.askText'),
+          tile(icon(ICONS.folder), 'welcome.1.sort', 'welcome.1.sortText'),
         ),
       );
     }

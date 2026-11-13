@@ -45,7 +45,7 @@ export function encrypt(key: Buffer, data: Buffer, aad: string): Buffer {
 }
 
 export function decrypt(key: Buffer, blob: Buffer, aad: string): Buffer {
-  if (blob.length < MAGIC.length + IV + TAG || !timingSafeEqual(blob.subarray(0, MAGIC.length), MAGIC)) throw new TamperedError('Not a TransLatte encrypted file');
+  if (blob.length < MAGIC.length + IV + TAG || !timingSafeEqual(blob.subarray(0, MAGIC.length), MAGIC)) throw new TamperedError('Not an Archa encrypted file');
   const iv = blob.subarray(MAGIC.length, MAGIC.length + IV);
   const tag = blob.subarray(MAGIC.length + IV, MAGIC.length + IV + TAG);
   const decipher = createDecipheriv('aes-256-gcm', key, iv);

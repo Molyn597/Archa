@@ -50,6 +50,8 @@ let ownCompany: OwnCompany | undefined;
 // Typ knihovny pro obsah Přehledu; převzatá data (general) se chovají jako Práce.
 type OverviewKind = Exclude<LibraryKind, 'general'>;
 let kind: OverviewKind = 'work';
+// Knihovna bez typu: Přehled jako Práce, ale s obecnými ukázkovými otázkami.
+let general = false;
 // Kartičky k zopakování dnes (jen ve Studiu).
 let due: PracticeDue = { total: 0, scopes: [] };
 
@@ -136,19 +138,12 @@ function warrantyRow(d: Deadline, today: string) {
   return row(d.title, t('ov.warranty.until', { date: day(d.date) }), () => d.jobId && host.openJob(d.jobId), tone !== 'calm' && h('span', { class: `chip ${tone}` }, relativeDue(d.date, today)));
 }
 
-/** Nový uživatel: tři kroky k prvnímu dotazu. */
+/** Nový uživatel: nahraj, zeptej se, seřaď; krok Nastav AI jen dokud AI není připravená. */
 function welcome(aiReady: boolean) {
-  const step = (n: number, done: boolean, text: string, action?: Node, focus = false) =>
-    h(
-      'li',
-      { class: `ov-step${done ? ' done' : ''}${focus ? ' focus' : ''}` },
-      h('span', { class: 'ov-step-mark', title: done ? t('overview.welcome.done') : '' }, done ? icon(ICONS.check) : String(n)),
-      h('span', { class: 'ov-step-text' }, text),
-      action,
-    );
+  let n = 0;
+  const step = (text: string, action?: Node, focus = false) =>
+    h('li', { class: `ov-step${focus ? ' focus' : ''}` }, h('span', { class: 'ov-step-mark' }, String(++n)), h('span', { class: 'ov-step-text' }, text), action);
   const pick = async () => addToLibrary(await window.api.pickFiles());
-  // Práce má text z dřívějška, Studium a Osobní vlastní (bez faktur).
-  const first = t((kind === 'work' ? 'overview.welcome.first' : `ov.welcome.first.${kind}`) as MessageKey);
   return h(
     'section',
     { class: 'ov-welcome' },
@@ -156,9 +151,10 @@ function welcome(aiReady: boolean) {
     h(
       'ol',
       { class: 'ov-steps' },
-      step(1, aiReady, t('overview.welcome.ai'), aiReady ? undefined : h('button', { class: 'btn', type: 'button', onclick: () => host.show('settings') }, t('overview.welcome.aiButton'))),
-      step(2, false, first, h('button', { class: 'btn primary', type: 'button', onclick: () => void pick() }, t('home.pick')), true),
-      step(3, false, t('overview.welcome.ask')),
+      ...(aiReady ? [] : [step(t('overview.welcome.ai'), h('button', { class: 'btn', type: 'button', onclick: () => host.show('settings') }, t('overview.welcome.aiButton')))]),
+      step(t('overview.welcome.first'), h('button', { class: 'btn primary', type: 'button', onclick: () => void pick() }, t('nav.upload')), true),
+      step(t('overview.welcome.ask')),
+      step(t('overview.welcome.sort')),
     ),
   );
 }
@@ -248,15 +244,16 @@ function renderHello(hasDocs: boolean) {
   hello.replaceChildren(h('strong', {}, t(hour < 12 ? 'ov.hello.morning' : hour < 18 ? 'ov.hello.afternoon' : 'ov.hello.evening')));
 }
 
-const SAMPLES: Record<OverviewKind, MessageKey[]> = {
+const SAMPLES: Record<OverviewKind | 'general', MessageKey[]> = {
+  general: ['ov.sample.general.1', 'ov.sample.general.2'],
   work: ['overview.sample.1', 'overview.sample.2'],
   study: ['ov.sample.study.1', 'ov.sample.study.2'],
-  personal: ['ov.sample.personal.1', 'ov.sample.personal.2'],
+  personal: ['ov.sample.personal.3', 'ov.sample.personal.1'],
 };
 
 /** Ukázkové otázky podle typu knihovny. */
 function fillSamples() {
-  $('overview-samples').replaceChildren(...SAMPLES[kind].map((key) => h('button', { class: 'ov-sample', type: 'button', onclick: () => host.ask(t(key)) }, t(key))));
+  $('overview-samples').replaceChildren(...SAMPLES[general ? 'general' : kind].map((key) => h('button', { class: 'ov-sample', type: 'button', onclick: () => host.ask(t(key)) }, t(key))));
 }
 
 /** Znovu načte knihovnu, projekty a typ knihovny a překreslí. */
@@ -267,7 +264,8 @@ export async function refreshOverview() {
     [libraryState, projects, libs, own] = await Promise.all([window.api.libraryState(), window.api.listProjects(), window.api.libraries(), window.api.getSettings()]);
     ownCompany = own.ownCompany;
     const cur = libs.list.find((l) => l.id === libs.current);
-    kind = !cur || cur.kind === 'general' ? 'work' : cur.kind;
+    general = cur?.kind === 'general';
+    kind = !cur || cur.kind === 'general' ? 'personal' : cur.kind;
     projects = visibleProjects(projects, kind);
     due = kind === 'study' ? await window.api.practiceDue() : { total: 0, scopes: [] };
   } catch (e) {

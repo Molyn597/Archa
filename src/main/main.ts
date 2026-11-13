@@ -63,6 +63,8 @@ import { removeRule } from '../shared/rules';
 import { addSaved, removeSaved } from '../shared/saved-search';
 import { isImportable } from '../shared/watch';
 import { checkUpdate, downloadUpdate } from './updates';
+import { migrateUserData } from './user-data-migration';
+import { OLD_USER_DATA } from '../shared/user-data-migration';
 import { Store } from './store';
 
 const isMac = process.platform === 'darwin';
@@ -83,7 +85,12 @@ const STAGE_LABEL: Record<Stage, MessageKey> = {
   layout: 'tray.stage.layout',
 };
 
-if (process.env.TRANSLATTE_USER_DATA) app.setPath('userData', process.env.TRANSLATTE_USER_DATA);
+// TRANSLATTE_USER_DATA zůstává jako záloha pro starší skripty.
+const customUserData = process.env.ARCHA_USER_DATA || process.env.TRANSLATTE_USER_DATA;
+if (customUserData) app.setPath('userData', customUserData);
+// Převzetí dat TransLatte musí proběhnout před prvním sáhnutím do userData (zámek jedné instance níž).
+const migration = migrateUserData(path.join(app.getPath('appData'), OLD_USER_DATA), app.getPath('userData'), Boolean(customUserData));
+if (migration.step !== 'skip' || migration.reason !== 'no-old') console.info('[user-data]', JSON.stringify(migration));
 
 const appRoot = app.getPath('userData');
 /** Aktuální knihovna: úložiště, trezor a fronta se při přepnutí vymění (handlery IPC je čtou až při volání). */
@@ -201,7 +208,7 @@ function updateProgressUi() {
       : t('tray.running', { stage: stage!, name: running.name })
     : t('tray.idle');
   if (isMac) tray.setTitle(running && fraction >= 0 ? percent : '');
-  tray.setToolTip(`TransLatte – ${label}`);
+  tray.setToolTip(`Archa – ${label}`);
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label, enabled: false },
@@ -255,7 +262,7 @@ function createWindow() {
     height: 820,
     minWidth: 940,
     minHeight: 640,
-    title: 'TransLatte',
+    title: 'Archa',
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#141414' : '#E4E4E4',
     titleBarStyle: isMac ? 'hiddenInset' : 'hidden',
     ...(isMac ? {} : { titleBarOverlay: { ...TITLE_BAR[nativeTheme.shouldUseDarkColors ? 'dark' : 'light'], height: 36 } }),
@@ -897,7 +904,7 @@ if (!app.requestSingleInstanceLock()) {
     if (!isMac && !queue?.busy) app.quit();
   });
   app.whenReady().then(async () => {
-    app.setName('TransLatte');
+    app.setName('Archa');
     if (isMac) app.dock?.setIcon(path.join(__dirname, 'icon.png'));
     // Starší verze měla vše přímo v userData: převezme se do první knihovny.
     libs = await loadLibraries(appRoot);

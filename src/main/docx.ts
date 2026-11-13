@@ -107,7 +107,7 @@ export async function buildDocx(title: string, segments: Segment[], images: Map<
   }
   const doc = new Document({
     title,
-    creator: 'TransLatte',
+    creator: 'Archa',
     styles: { default: { document: { run: { font: 'Calibri', size: 22 } } } },
     sections: [{ children }],
   });

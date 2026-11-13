@@ -6,10 +6,10 @@ import type { DocumentCard, Libraries, LibraryInfo, LibraryKind, MoveOptions } f
 import { cleanError, h, icon, ICONS, openModal, toast } from './dom';
 
 const KINDS: LibraryKind[] = ['work', 'study', 'personal'];
-const KIND_ICON: Record<LibraryKind, string> = { work: ICONS.briefcase, study: ICONS.cap, personal: ICONS.home, general: ICONS.briefcase };
+const KIND_ICON: Record<LibraryKind, string> = { work: ICONS.briefcase, study: ICONS.cap, personal: ICONS.home, general: ICONS.home };
 
 /** Barevná ikona typu knihovny (barvy --lib-work / --lib-study / --lib-personal). */
-const avatar = (kind: LibraryKind) => h('span', { class: `lib-avatar ${kind === 'general' ? 'work' : kind}` }, icon(KIND_ICON[kind]));
+const avatar = (kind: LibraryKind) => h('span', { class: `lib-avatar ${kind === 'general' ? 'personal' : kind}` }, icon(KIND_ICON[kind]));
 
 let libs: Libraries | undefined;
 
@@ -37,7 +37,7 @@ function kindModal(info: LibraryInfo, title: string, later?: () => void) {
     h(
       'button',
       {
-        class: `kind-option${info.kind === k ? ' selected' : ''}`,
+        class: `kind-option${(info.kind === 'general' ? 'personal' : info.kind) === k ? ' selected' : ''}`,
         type: 'button',
         onclick: () => {
           close();
@@ -163,6 +163,7 @@ function newLibraryModal() {
     name.placeholder = t(`libraryKind.${kind.value as LibraryKind}`);
     subjectsRow.hidden = kind.value !== 'study';
   };
+  kind.value = 'personal';
   kind.addEventListener('change', sync);
   sync();
   let close = () => {};
@@ -226,7 +227,7 @@ function render() {
     return;
   }
   // Víc knihoven = v titulku okna je vidět, která je otevřená.
-  document.title = libs.list.length > 1 ? `TransLatte – ${libraryTitle(cur)}` : 'TransLatte';
+  document.title = libs.list.length > 1 ? `Archa – ${libraryTitle(cur)}` : 'Archa';
   const name = libraryTitle(cur);
   const menu = h(
     'div',

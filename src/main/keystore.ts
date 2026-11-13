@@ -17,9 +17,14 @@ export async function saveKey(root: string, key: string) {
   await chmod(keyFile(root), 0o600);
 }
 
+/**
+ * Klíč, který nejde rozšifrovat (např. po přejmenování aplikace má macOS v Keychainu jiný záznam), se bere jako chybějící:
+ * aplikace ukáže běžné „zadej klíč“. Špatný klíč Keychainu občas „rozšifruje“ na nesmysl, proto kontrola znaků.
+ */
 export async function readKey(root: string): Promise<string | undefined> {
   try {
-    return safeStorage.decryptString(await readFile(keyFile(root))) || undefined;
+    const key = safeStorage.decryptString(await readFile(keyFile(root)));
+    return /^[\x21-\x7e]+$/.test(key) ? key : undefined;
   } catch {
     return undefined;
   }

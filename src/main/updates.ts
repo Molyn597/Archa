@@ -9,7 +9,7 @@ import { pickAsset } from '../shared/update-asset';
 import type { Store } from './store';
 import type { UpdateAsset, UpdateCheck, UpdateResult } from '../shared/types';
 
-const RELEASE_URL = 'https://api.github.com/repos/Molyn597/TransLatte/releases/latest';
+const RELEASE_URL = 'https://api.github.com/repos/Molyn597/Archa/releases/latest';
 const DAY = 24 * 3600 * 1000;
 const NOTES_MAX = 1500;
 
@@ -24,7 +24,7 @@ interface Release {
 export async function latestRelease(): Promise<Release | null> {
   try {
     const res = await fetch(RELEASE_URL, {
-      headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'TransLatte' },
+      headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'Archa' },
       signal: AbortSignal.timeout(8000),
     });
     if (!res.ok) return null;
@@ -70,7 +70,7 @@ export async function downloadUpdate(onProgress: (received: number, total: numbe
   const target = path.join(app.getPath('downloads'), path.basename(asset.name));
   const part = `${target}.part`;
   try {
-    const res = await fetch(asset.url, { headers: { 'User-Agent': 'TransLatte' } });
+    const res = await fetch(asset.url, { headers: { 'User-Agent': 'Archa' } });
     if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
     const total = Number(res.headers.get('content-length')) || asset.size;
     let received = 0;

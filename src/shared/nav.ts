@@ -17,8 +17,8 @@ export function navFor(kind: LibraryKind): NavEntry[] {
   ];
   const deadlines: NavEntry = { id: 'deadlines', label: 'dl.title' };
   if (kind === 'study') return [...base, { id: 'projects', label: 'nav.myWork' }, deadlines];
-  if (kind === 'personal') return [...base, deadlines];
-  // Práce a nepřevzatý typ (general).
+  // Nepřevzatý typ (general) je osobní prostor; faktury a zakázky jen v knihovně Práce.
+  if (kind === 'personal' || kind === 'general') return [...base, deadlines];
   return [...base, { id: 'invoices', label: 'inv.title' }, deadlines, { id: 'projects', label: 'nav.jobs' }];
 }
 

@@ -760,7 +760,7 @@ const PALETTE_KEY = navigator.platform.startsWith('Mac') ? '⌘K' : 'Ctrl K';
 function paletteCommands(): PaletteCommand[] {
   return [
     { label: t('nav.upload'), icon: ICONS.upload, run: () => show('upload') },
-    ...(currentKind() === 'work' || currentKind() === 'general' ? [{ label: t('fin.title'), icon: ICONS.invoice, run: () => show('finance') }] : []),
+    ...(currentKind() === 'work' ? [{ label: t('fin.title'), icon: ICONS.invoice, run: () => show('finance') }] : []),
     ...savedSearches().map((s) => ({ label: t('saved.palette', { name: s.name }), icon: ICONS.search, run: () => applySavedSearch(s) })),
     ...TOOLS.map((tool) => ({ label: t(tool.label), icon: tool.icon, run: () => (tool.nav ? show(tool.nav) : tool.run?.()) })),
     { label: t('nav.settings'), icon: ICONS.sliders, run: () => show('settings') },

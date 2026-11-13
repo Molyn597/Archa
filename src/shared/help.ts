@@ -19,13 +19,13 @@ const cs: HelpSection[] = [
     blocks: [
       {
         ul: [
-          '1. Přetáhni soubor do okna (PDF i sken, Word, TXT nebo Markdown), nebo klikni na Vybrat soubory.',
-          '2. Na kartě pod tím zvol, kde se má překládat (V počítači, nebo Online), jazyk a případně kvalitu.',
-          '3. Zkontroluj odhad dole a klikni na Přeložit.',
+          '1. Nahraj: přetáhni dokument do okna (PDF i sken, Word, TXT nebo Markdown).',
+          '2. Zeptej se: chat odpoví z dokumentu a u odpovědi ukáže místo, odkud je.',
+          '3. Seřaď: AI dokument popíše a zařadí do složek.',
         ],
       },
-      { p: 'Překlad běží na pozadí, průběh vidíš na úvodní stránce v části Probíhá. Hotové dokumenty najdeš v Nedávných dokumentech pod ním i v Knihovně; kliknutím je otevřeš, porovnáš s originálem, uložíš nebo se na ně zeptáš v chatu.' },
-      { tip: 'Do fronty můžeš přidat víc souborů najednou, přeloží se postupně.' },
+      { p: 'Potřebuješ ho v jiném jazyce? Zvol, kde se má překládat (V počítači, nebo Online), jazyk a klikni na Přeložit. Překlad běží na pozadí a hotové dokumenty najdeš v Knihovně.' },
+      { tip: 'Do fronty můžeš přidat víc souborů najednou, zpracují se postupně. Faktury, termíny a smlouvy jsou navíc v knihovně Práce.' },
     ],
   },
   {
@@ -124,8 +124,8 @@ const cs: HelpSection[] = [
     title: 'Aktualizace',
     blocks: [
       { p: 'Aplikace jednou denně sama zkontroluje, jestli je venku novější verze. Pokud ano, nahoře se objeví oznámení s tlačítky Co je nového, Stáhnout a nainstalovat a Později (skryje oznámení do příštího spuštění). Ruční kontrola je dole na této stránce.' },
-      { p: 'Windows: instalátor se stáhne do složky Stažené, spustí se a TransLatte se ukončí; instalátor novou verzi nainstaluje a aplikaci znovu spustí.' },
-      { p: 'macOS: stáhne se disk s instalací a otevře se. Přetáhni TransLatte do Aplikací a nahraď starou verzi, pak aplikaci spusť znovu. Tlačítko Ukončit TransLatte ti v tom pomůže.' },
+      { p: 'Windows: instalátor se stáhne do složky Stažené, spustí se a Archa se ukončí; instalátor novou verzi nainstaluje a aplikaci znovu spustí.' },
+      { p: 'macOS: stáhne se disk s instalací a otevře se. Přetáhni Archu do Aplikací a nahraď starou verzi, pak aplikaci spusť znovu. Tlačítko Ukončit Archu ti v tom pomůže.' },
       { tip: 'Když stažení selže, zobrazí se chyba a odkaz na stránku vydání, odkud soubor stáhneš ručně.' },
     ],
   },
@@ -149,7 +149,7 @@ const cs: HelpSection[] = [
   {
     id: 'about',
     title: 'O aplikaci',
-    blocks: [{ p: 'TransLatte překládá odborné dokumenty se zachováním vzhledu. Lokální modely běží v LM Studiu, online modely přes OpenRouter.' }],
+    blocks: [{ p: 'Archa je místní prostor pro tvé dokumenty: nahraješ je, zeptáš se na ně a Archa je roztřídí do složek. Umí je i přeložit se zachováním vzhledu. Lokální modely běží v LM Studiu, online modely přes OpenRouter.' }],
   },
 ];
 
@@ -160,13 +160,13 @@ const en: HelpSection[] = [
     blocks: [
       {
         ul: [
-          '1. Drop a file into the window (PDF including scans, Word, TXT or Markdown), or click Choose files.',
-          '2. On the card below, choose where to translate (On this computer or Online), the language and, if needed, the quality.',
-          '3. Check the estimate at the bottom and click Translate.',
+          '1. Upload: drop a document into the window (PDF including scans, Word, TXT or Markdown).',
+          '2. Ask: the chat answers from the document and shows where each answer comes from.',
+          '3. Sort: AI describes the document and files it into folders.',
         ],
       },
-      { p: 'Translation runs in the background; progress is shown on the home screen under In progress. Finished documents are in Recent documents below it and in the Library; click one to open it, compare it with the original, save it or ask about it in the chat.' },
-      { tip: 'You can queue several files at once; they are translated one after another.' },
+      { p: 'Need it in another language? Choose where to translate (On this computer or Online), the language and click Translate. Translation runs in the background and finished documents are in the Library.' },
+      { tip: 'You can queue several files at once; they are processed one after another. Invoices, deadlines and contracts are extras in the Work library.' },
     ],
   },
   {
@@ -265,8 +265,8 @@ const en: HelpSection[] = [
     title: 'Updates',
     blocks: [
       { p: 'Once a day the app checks by itself whether a newer version is out. If so, a notice appears at the top with the buttons What’s new, Download and install and Later (hides the notice until the next launch). You can also check manually at the bottom of this page.' },
-      { p: 'Windows: the installer is downloaded to your Downloads folder and started, and TransLatte quits; the installer installs the new version and starts the app again.' },
-      { p: 'macOS: the installer disk image is downloaded and opened. Drag TransLatte into Applications to replace the old version, then start the app again. The Quit TransLatte button helps with that.' },
+      { p: 'Windows: the installer is downloaded to your Downloads folder and started, and Archa quits; the installer installs the new version and starts the app again.' },
+      { p: 'macOS: the installer disk image is downloaded and opened. Drag Archa into Applications to replace the old version, then start the app again. The Quit Archa button helps with that.' },
       { tip: 'If the download fails you get an error and a link to the release page, where you can download the file manually.' },
     ],
   },
@@ -290,7 +290,7 @@ const en: HelpSection[] = [
   {
     id: 'about',
     title: 'About',
-    blocks: [{ p: 'TransLatte translates academic documents while keeping their layout. Local models run in LM Studio, online models via OpenRouter.' }],
+    blocks: [{ p: 'Archa is a local space for your documents: upload them, ask about them and Archa sorts them into folders. It can also translate them while keeping their layout. Local models run in LM Studio, online models via OpenRouter.' }],
   },
 ];
 

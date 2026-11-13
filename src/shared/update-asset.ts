@@ -1,6 +1,6 @@
 import type { UpdateAsset } from './types';
 
-export const RELEASE_DOWNLOAD_PREFIX = 'https://github.com/Molyn597/TransLatte/releases/download/';
+export const RELEASE_DOWNLOAD_PREFIX = 'https://github.com/Molyn597/Archa/releases/download/';
 
 /** Instalační soubor vydání pro platformu: mac → universal .dmg, Windows → .exe podle architektury. */
 export function pickAsset(assets: UpdateAsset[], platform: string, arch: string): UpdateAsset | null {

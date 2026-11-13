@@ -59,7 +59,7 @@ describe('chat', () => {
       expect(body).not.toHaveProperty('reasoning_effort');
     }
     expect(calls[0].url).toBe('https://openrouter.ai/api/v1/chat/completions');
-    expect(calls[0].init.headers).toMatchObject({ Authorization: 'Bearer sk-test', 'X-OpenRouter-Title': 'TransLatte' });
+    expect(calls[0].init.headers).toMatchObject({ Authorization: 'Bearer sk-test', 'X-OpenRouter-Title': 'Archa' });
   });
 
   it('sčítá cenu z usage.cost', async () => {

@@ -1,10 +1,11 @@
-import { t } from '../shared/i18n';
+import { t, type MessageKey } from '../shared/i18n';
 import { isOnline } from '../shared/provider';
 import { LIBRARY_CHAT, projectChatKey } from '../shared/folders';
 import type { ChatMessage, ChatModel, Job, LibraryRef, LmStatus, Project, Provider, Segment, Settings } from '../shared/types';
 import { chatWarningText, cleanError, h, icon, ICONS } from './dom';
 import { focusDocs, libraryFolders, selectedFolder, showAll } from './library';
 import { planView } from './plan-view';
+import { currentKind } from './library-switch';
 
 export interface ChatHost {
   segments(): Segment[];
@@ -302,7 +303,7 @@ const titleText = () => (scope === 'project' ? t('projectChat.title', { name: pr
 function buildPanel() {
   closeMenu?.();
   const quick = (label: 'chat.summary' | 'chat.keyPoints', prompt: 'chat.summaryPrompt' | 'chat.keyPointsPrompt') => h('button', { class: 'btn', onclick: () => void ask(t(prompt)) }, t(label));
-  const field = h('textarea', { id: 'chat-input', rows: '2', placeholder: t(scope === 'project' ? 'projectChat.placeholder' : scope === 'library' ? 'libraryChat.placeholder' : 'chat.placeholder') });
+  const field = h('textarea', { id: 'chat-input', rows: '2', placeholder: t(scope === 'project' ? 'projectChat.placeholder' : `${scope === 'library' ? 'libraryChat' : 'chat'}.placeholder${currentKind() === 'work' ? '.work' : ''}` as MessageKey) });
   field.addEventListener('keydown', (e) => {
     if (e.key !== 'Enter' || e.shiftKey || e.isComposing) return;
     e.preventDefault();

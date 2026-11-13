@@ -16,8 +16,8 @@ describe('navFor', () => {
     expect(navFor('work').at(-1)?.label).toBe('nav.jobs');
   });
 
-  it('nepřevzatý typ se chová jako práce', () => {
-    expect(navFor('general')).toEqual(navFor('work'));
+  it('nepřevzatý typ je osobní prostor bez faktur a zakázek', () => {
+    expect(navFor('general')).toEqual(navFor('personal'));
   });
 
   it('studium má moje práce a termíny, bez faktur', () => {

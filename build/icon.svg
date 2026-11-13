@@ -1,14 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
-  <g transform="translate(512 512) scale(6.645) translate(-62 -62)">
-    <rect width="124" height="124" rx="28" fill="#161619"/>
-    <rect x="96" y="55" width="17" height="14" rx="7" fill="#3A3A40"/>
-    <circle cx="62" cy="62" r="42" fill="#2A2A30"/>
-    <circle cx="62" cy="62" r="33" fill="#F5A524"/>
-    <rect x="40" y="42" width="27" height="21" rx="8" fill="#161619"/>
-    <polygon points="45,62 41,70 53,62" fill="#161619"/>
-    <path d="M46 50 H60 M46 56 H55" stroke="#F5A524" stroke-width="2.6" stroke-linecap="round"/>
-    <rect x="57" y="59" width="27" height="21" rx="8" fill="#FFF4DD"/>
-    <polygon points="79,79 83,87 71,79" fill="#FFF4DD"/>
-    <path d="M63 67 H77 M63 73 H73" stroke="#161619" stroke-width="2.6" stroke-linecap="round"/>
+  <g transform="translate(512 512) scale(8.24) translate(-50 -50)">
+    <rect width="100" height="100" rx="23" fill="#3E63DD"/>
+    <path d="M18 54h64l-8 17a9 9 0 0 1-8 5H34a9 9 0 0 1-8-5z" fill="#FFFFFF"/>
+    <path d="M34 44h32M41 33h18" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round"/>
   </g>
 </svg>

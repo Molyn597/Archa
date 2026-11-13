@@ -1,8 +1,8 @@
 {
-  "name": "translatte",
-  "productName": "TransLatte",
+  "name": "archa",
+  "productName": "Archa",
   "version": "0.2.0",
-  "description": "Lokální překladač PDF a dokumentů přes LM Studio",
+  "description": "Místní prostor pro dokumenty: nahraješ, zeptáš se a máš roztříděno; umí i překlad",
   "author": "olda",
   "license": "UNLICENSED",
   "private": true,
@@ -17,8 +17,8 @@
   },
   "build": {
     "appId": "eu.hollmotz.translatte",
-    "productName": "TransLatte",
-    "artifactName": "TransLatte-${version}-${os}-${arch}.${ext}",
+    "productName": "Archa",
+    "artifactName": "Archa-${version}-${os}-${arch}.${ext}",
     "directories": {
       "output": "release"
     },

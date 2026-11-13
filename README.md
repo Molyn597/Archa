@@ -1,24 +1,22 @@
-<p align="center"><img src="build/icon.png" width="112" alt="TransLatte logo"></p>
+<p align="center"><img src="build/icon.png" width="112" alt="Archa logo"></p>
 
-# TransLatte
+# Archa
 
-**Translate documents, keep their layout, and ask them questions. Privately on your own computer, or online for a few cents.**
+**Drop a document, ask about it, and let it sort your documents. Privately, on your own computer.**
 
-TransLatte translates PDFs (including scans), Word, TXT and Markdown files into a Word document, Markdown and a translated PDF that looks like the original. Then you can **chat with the document**: ask what a contract says about termination, what an author thinks about management or what a law requires, and get an answer **with sources** that highlight the exact passage in the original and in the translation.
-
-It runs either **for free on your own computer** (models in [LM Studio](https://lmstudio.ai), nothing leaves your machine) or **online for a few cents** through [OpenRouter](https://openrouter.ai).
+Upload a PDF (including scans), Word, TXT or Markdown file and **ask it questions**: you get an answer **with sources** that highlight the exact passage in the document. An AI model describes each document and **files it into folders** for you. It runs **for free on your own computer** with a local model (nothing leaves your machine), or online through [OpenRouter](https://openrouter.ai) for a few cents. Need the document in another language? Archa also **translates** it into a Word file, Markdown and a PDF that looks like the original.
 
 ![Chat with a translated contract: the answer cites the clause, which is highlighted in the original and in the translation](docs/screenshots/chat.png)
 
 ## Who it is for
 
-- **Companies and legal teams:** understand contracts, terms, tenders and policies written in another language. Ask *“What is the notice period and when does it start?”*, *“Is liability capped?”* or *“Where is the data stored?”* and jump straight to the clause. With local models, **confidential documents never leave the computer**: no cloud, no third-party processing, no subscription.
+- **Anyone with a pile of documents:** contracts, letters, receipts, manuals, scans. Drop them in, ask *“When does my lease end?”* or *“What does this letter want from me?”* and jump straight to the place in the document. With local models, **your documents never leave the computer**.
 - **Students and researchers:** read papers and books in a foreign language for (almost) nothing. See [For studying](#for-studying) below.
-- **Anyone who works with foreign documents:** manuals, reports, letters, scans.
+- **Small work use:** a Work library adds invoices, deadlines and contract checks when you need them.
 
 ### For studying
 
-Writing a seminar paper or a thesis from foreign-language sources? TransLatte lets you work the way you actually study:
+Writing a seminar paper or a thesis from foreign-language sources? Archa lets you work the way you actually study:
 
 - **Translate as much as you need.** The whole document, only some pages (e.g. `12-30` of a book), only the paragraphs you tick, or just one chart or table: drag over it on the page and it is translated on the spot. Translate more later without starting over.
 - **Ask instead of rereading.** *“What is the author's main argument?”*, *“How does the paper define human capital?”*, *“What method did they use and on what data?”*, *“What are the limitations?”* Every answer comes with sources and page numbers, so you can quote and cite correctly in your own work.
@@ -26,13 +24,13 @@ Writing a seminar paper or a thesis from foreign-language sources? TransLatte le
 - **Learn the terminology.** The paragraph-by-paragraph comparison shows the original next to the translation; the glossary keeps the technical terms of your field consistent across all your sources.
 - **For free and offline.** Locally it costs nothing and works without the internet, ideal for a student budget. Online, a whole article costs about half a crown.
 
-> TransLatte helps you find and understand what a document says. It is not legal advice: always check important answers against the cited text.
+> Archa helps you find and understand what a document says. It is not legal advice: always check important answers against the cited text.
 
-## Why TransLatte
+## Why Archa
 
 - **Private by design.** Local mode runs entirely on your computer. Translation, the document chat and all files stay on your disk.
 - **Answers you can verify.** Every claim in a chat answer links to the paragraph it comes from; one click highlights it in both PDFs side by side.
-- **Built for students and small teams on a budget.** Paid translators such as [DeepL Pro](https://www.deepl.com/pro) are monthly subscriptions, and document translation is limited on the cheaper plans. TransLatte has no subscription:
+- **Built for people on a budget.** Paid translators such as [DeepL Pro](https://www.deepl.com/pro) are monthly subscriptions, and document translation is limited on the cheaper plans. Archa has no subscription:
   - **Locally it costs nothing.** The models run on your computer.
   - **Online you pay only for what you use.** With the recommended model (DeepSeek V4.1 Flash) a 15–20-page article costs around **$0.02 (≈ 0.5 CZK)** to translate, and a question in the chat costs a fraction of a cent. A $10 OpenRouter credit is enough for hundreds of articles.
 - **Made for academic and professional texts.** It keeps paragraphs, headings, footnotes, citations, links and tables, fixes typical machine-translation errors and respects your glossary of technical terms.
@@ -42,16 +40,14 @@ Writing a seminar paper or a thesis from foreign-language sources? TransLatte le
 
 ## Features
 
-- **PDF in, PDF out:** a translated PDF with the original layout, plus Word (.docx) and Markdown. Works with digital PDFs, scans (OCR), password-free encrypted PDFs and multi-column journal and magazine layouts.
-- **Chat with the document:** a side panel next to the document, like NotebookLM. Answers come only from the document, with numbered sources that highlight the passage in the original and the translated PDF. You see what the model is doing (searching keywords, which pages it found, writing the answer) and the answer is written as it arrives. Quick actions **Summarize** and **Key terms**. Choose the model right in the chat: on your computer or online.
-- **Locally or online:** switch on the home screen between local models (free, private) and online models via OpenRouter (fast, pay per use).
-- **Tables and figures from the original:** a table or chart with a caption (Table 1, Figure 2…) can be kept exactly as in the original as an image; only the caption is translated.
-- **Pick what to translate:** choose a page range or tick individual paragraphs; translate more later.
-- **Check and fix:** flags untranslated words, likely typos, missing glossary terms and truncated sentences, and fixes them.
-- **Glossary:** binding translations of technical terms used in every job.
-- **Read comfortably:** translation, paragraph-by-paragraph comparison, translated PDF, both PDFs side by side and the original. Zoom with a pinch, Ctrl/Cmd + scroll or the zoom bar, and drag over any area of a page to translate it separately (e.g. a chart).
-- **Queue:** add several files at once; they are translated one after another in the background.
-- **Clean interface:** dark and light theme (or follow the system), collapsible sidebar and chat, Czech and English, macOS and Windows.
+- **Upload:** drop PDFs (digital or scanned), Word, TXT or Markdown files; several at once, they are processed in the background.
+- **Ask:** a chat with one document or your whole library. Answers come only from your documents, with numbered sources that highlight the passage in the original (and in the translation). You see what the model is doing, and quick actions **Summarize** and **Key terms** are one click away.
+- **Sort:** AI describes every document and files it into folders; what it is unsure about waits in the inbox for you.
+- **Private by design:** a local model keeps documents, questions and answers on your computer. Online models are optional.
+- **Translate:** a translated PDF with the original layout, plus Word (.docx) and Markdown. Tables and figures can stay as in the original, you can pick pages or paragraphs, and a glossary keeps terminology consistent. Check and fix flags untranslated words and likely typos.
+- **Read comfortably:** translation, paragraph-by-paragraph comparison, translated PDF, both PDFs side by side and the original, with zoom and area translation.
+- **For the Work library:** invoices, deadlines and contracts.
+- **Clean interface:** dark and light theme (or follow the system), Czech and English, macOS and Windows.
 
 <table>
   <tr>
@@ -72,7 +68,7 @@ The chat uses **retrieval-augmented generation (RAG)**: the model answers from t
 2. **Short document → whole text.** If the document fits into the model's context (about 10 pages locally, about 130 pages online), the model simply reads all of it. That is the most accurate option.
 3. **Long document → search first.** The model turns your question into keywords in both languages (so you can ask in Czech about an English text). A full-text search (BM25 over the original and the translation, tolerant to Czech word endings) picks the most relevant paragraphs together with the heading of the section they belong to.
 4. **Answer with sources.** The model gets only those passages and is told to answer strictly from them and cite each claim. Citations pointing to passages it was not given are removed automatically. If the answer is not in the document, it says so.
-5. **Verify.** Click a source number and TransLatte opens the PDFs side by side and highlights the passage in both.
+5. **Verify.** Click a source number and Archa opens the PDFs side by side and highlights the passage in both.
 
 The conversation is stored with the job, so you can come back to it later.
 
@@ -98,7 +94,7 @@ The models run on the GPU. Only one model is in memory at a time; the app swaps 
 
 - **Mac:** the GPU shares memory with the system and macOS gives it roughly two thirds to three quarters of it, so 16 GB is the minimum. Intel Macs with AMD graphics have not been tested.
 - **Windows:** LM Studio splits the model between GPU and RAM on its own. If a model fails to load or the system becomes unusable, open the model settings in LM Studio (**My Models** → gear icon next to the model) and lower **GPU Offload**. Fewer layers on the GPU means less VRAM but slower translation.
-- **Weaker and stronger machines:** TranslateGemma also comes in 4B (for 6–8 GB VRAM, lower quality) and 27B (for 24 GB VRAM, better quality). After downloading, select it in **Settings → Translation on this computer**. These sizes have not been tested with TransLatte yet.
+- **Weaker and stronger machines:** TranslateGemma also comes in 4B (for 6–8 GB VRAM, lower quality) and 27B (for 24 GB VRAM, better quality). After downloading, select it in **Settings → Translation on this computer**. These sizes have not been tested with Archa yet.
 
 These requirements are estimates. They have been verified on a 16 GB Apple Silicon MacBook Air.
 
@@ -116,14 +112,14 @@ These requirements are estimates. They have been verified on a 16 GB Apple Silic
    | Page reading (OCR) | `sahilchachra/Unlimited-OCR-GGUF` | Q8_0 | 3.9 GB |
 
    For Fast mode on digital PDFs the first two are enough. The OCR model is needed for scans and for Balanced and Quality modes.
-3. You don't need to load models or start the server yourself. TransLatte starts the server and loads models on its own, always only the one it currently needs.
+3. You don't need to load models or start the server yourself. Archa starts the server and loads models on its own, always only the one it currently needs.
 
-### 2. TransLatte
+### 2. Archa
 
-Download the installer from [Releases](https://github.com/Molyn597/TransLatte/releases).
+Download the installer from [Releases](https://github.com/Molyn597/Archa/releases).
 
-- **macOS:** `TransLatte-…-mac-universal.dmg`. Open it and drag TransLatte to Applications. The app is not signed with an Apple certificate, so the first time **right-click → Open** and confirm.
-- **Windows:** `TransLatte-…-win.exe`. If Windows shows "Windows protected your PC", click **More info → Run anyway**. The app installs for your user only and creates a desktop shortcut.
+- **macOS:** `Archa-…-mac-universal.dmg`. Open it and drag Archa to Applications. The app is not signed with an Apple certificate, so the first time **right-click → Open** and confirm.
+- **Windows:** `Archa-…-win.exe`. If Windows shows "Windows protected your PC", click **More info → Run anyway**. The app installs for your user only and creates a desktop shortcut.
 
 ### 3. First run
 
@@ -163,8 +159,10 @@ The **Help** tab explains everything in more detail; the “?” next to each op
 
 Jobs, outputs and chat history are stored in the app folder:
 
-- macOS: `~/Library/Application Support/TransLatte/jobs`
-- Windows: `%APPDATA%\TransLatte\jobs`
+- macOS: `~/Library/Application Support/Archa/jobs`
+- Windows: `%APPDATA%\Archa\jobs`
+
+Archa was previously called TransLatte. On the first start it moves the old `TransLatte` app folder to `Archa`, so your documents stay where they were. On macOS the online API key has to be entered again once, because the system keychain entry belongs to the old app name.
 
 ## Online models (OpenRouter)
 

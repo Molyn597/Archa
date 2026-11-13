@@ -65,8 +65,8 @@ describe('endpoint', () => {
     expect(ep.baseUrl).toBe('https://openrouter.ai/api');
     expect(ep.headers).toEqual({
       Authorization: 'Bearer k',
-      'HTTP-Referer': 'https://github.com/Molyn597/TransLatte',
-      'X-OpenRouter-Title': 'TransLatte',
+      'HTTP-Referer': 'https://github.com/Molyn597/Archa',
+      'X-OpenRouter-Title': 'Archa',
     });
   });
 

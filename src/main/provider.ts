@@ -19,8 +19,8 @@ export function resolveEndpoint(settings: Pick<Settings, 'provider' | 'apiUrl'>,
     baseUrl: OPENROUTER_API,
     headers: {
       Authorization: `Bearer ${apiKey}`,
-      'HTTP-Referer': 'https://github.com/Molyn597/TransLatte',
-      'X-OpenRouter-Title': 'TransLatte',
+      'HTTP-Referer': 'https://github.com/Molyn597/Archa',
+      'X-OpenRouter-Title': 'Archa',
     },
   };
 }
