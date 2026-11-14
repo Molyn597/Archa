@@ -6,10 +6,17 @@ import type { DocumentCard, Libraries, LibraryInfo, LibraryKind, MoveOptions } f
 import { cleanError, h, icon, ICONS, openModal, toast } from './dom';
 
 const KINDS: LibraryKind[] = ['work', 'study', 'personal'];
-const KIND_ICON: Record<LibraryKind, string> = { work: ICONS.briefcase, study: ICONS.cap, personal: ICONS.home, general: ICONS.home };
 
-/** Barevná ikona typu knihovny (barvy --lib-work / --lib-study / --lib-personal). */
-const avatar = (kind: LibraryKind) => h('span', { class: `lib-avatar ${kind === 'general' ? 'personal' : kind}` }, icon(KIND_ICON[kind]));
+/** Značka Archy (archa nesoucí dva listy); knihovnu odliší jen barva pozadí. */
+const ARCHA_MARK =
+  '<svg viewBox="15 18 70 70" aria-hidden="true"><path d="M18 54h64l-8 17a9 9 0 0 1-8 5H34a9 9 0 0 1-8-5z" fill="currentColor" stroke="none"/><path d="M34 44h32M41 33h18" stroke-width="6"/></svg>';
+
+/** Logo Archy v barvě typu knihovny (--lib-work / --lib-study / --lib-personal). */
+const avatar = (kind: LibraryKind) => {
+  const span = h('span', { class: `lib-avatar ${kind === 'general' ? 'personal' : kind}` });
+  span.innerHTML = ARCHA_MARK;
+  return span;
+};
 
 let libs: Libraries | undefined;
 
