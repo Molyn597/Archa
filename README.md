@@ -100,6 +100,8 @@ The models run on the GPU. Only one model is in memory at a time; the app swaps 
 - **Mac:** the GPU shares memory with the system and macOS gives it roughly two thirds to three quarters of it, so 16 GB is the minimum. Intel Macs with AMD graphics have not been tested.
 - **Windows:** LM Studio splits the model between GPU and RAM on its own. If a model fails to load or the system becomes unusable, open the model settings in LM Studio (**My Models** → gear icon next to the model) and lower **GPU Offload**. Fewer layers on the GPU means less VRAM but slower translation.
 - **Weaker and stronger machines:** TranslateGemma also comes in 4B (for 6–8 GB VRAM, lower quality) and 27B (for 24 GB VRAM, better quality). After downloading, select it in **Settings → Translation on this computer**. These sizes have not been tested with Archa yet.
+- **Recommended on weaker computers: TranslateGemma 12B for translation + Gemma 4 E4B for fixes, context and chat** (search `gemma-4-e4b` in LM Studio and select it in **Settings**). Gemma only fixes flagged paragraphs, so the smaller model makes little difference there; in our first test E4B did as well as 12B, and it is faster. Archa keeps only one model in memory at a time, so the memory requirement is still set by the 12B translator.
+- **When even that doesn't fit:** **TranslateGemma 4B** can handle simple, light texts (short letters, emails, instructions) or a quick idea of what a document says. On a demanding journal article it made roughly twice as many meaning errors and clearly worse Czech than 12B, so don't rely on it for texts that matter.
 
 These requirements are estimates. They have been verified on a 16 GB Apple Silicon MacBook Air.
 
