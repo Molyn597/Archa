@@ -4662,7 +4662,9 @@ body.nav-collapsed #project-folders {
 }
 
 /* V sbalené liště se nabídka knihoven otevře doprava v plné šířce, nad obsahem. */
-.nav-collapsed .sidebar:has(.lib-switch .menu:not([hidden])) {
+/* Otevřená nabídka nebo výběr modelů přesahuje panel; bez zvednutí by ji překryl dokument nebo chat. */
+.sidebar:has(.menu:not([hidden])),
+.sidebar:has(.lm-pop:not([hidden])) {
   z-index: 40;
 }
 
