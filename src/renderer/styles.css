@@ -1,4 +1,4 @@
-/* Sklo: monochromní motiv s poloprůhlednými panely na jemném přechodu; akcent je černá / bílá, stavy mají barvu. */
+/* Sklo: šedý motiv s poloprůhlednými panely na jemném přechodu; akcent je modrá (Apple), stavy mají barvu. */
 :root {
   --bg: #e4e4e4;
   --bg-image: linear-gradient(180deg, #f3f3f3 0%, #d9d9d9 100%);
@@ -17,10 +17,10 @@
   --muted: #646464;
   --faint: #8d8d8d;
   --dash: #c8c8c8;
-  --accent: #202020;
+  --accent: #007aff;
   --on-accent: #ffffff;
-  --accent-soft: rgb(0 0 0 / 7%);
-  --link: #202020;
+  --accent-soft: rgb(0 122 255 / 10%);
+  --link: #0066cc;
   --glass: rgb(255 255 255 / 80%);
   --ok: #1e9e5a;
   --ok-soft: rgb(30 158 90 / 10%);
@@ -64,10 +64,10 @@
     --muted: #b4b4b4;
     --faint: #7b7b7b;
     --dash: rgb(255 255 255 / 18%);
-    --accent: #eeeeee;
-    --on-accent: #111111;
-    --accent-soft: rgb(255 255 255 / 10%);
-    --link: #eeeeee;
+    --accent: #0a84ff;
+    --on-accent: #ffffff;
+    --accent-soft: rgb(10 132 255 / 18%);
+    --link: #409cff;
     --glass: rgb(30 30 34 / 72%);
     --ok: #3fb97a;
     --ok-soft: rgb(63 185 122 / 14%);
