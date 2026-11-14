@@ -31,12 +31,13 @@ import {
   jobDuration,
   langPair,
   MODES,
+  openModal,
   rememberOpen,
   statusIcon,
   toast,
   toastAction,
 } from './dom';
-import { updateRow } from './update';
+import { updateCard, updateRow } from './update';
 import { addUploads, renderUpload, setupUpload } from './upload-view';
 import { fillHelpDots, renderHelp, scrollToTopic } from './help-view';
 import { openLibrarySetup, openWelcome } from './welcome';
@@ -199,6 +200,23 @@ async function checkUpdates() {
   knownUpdate = { ...r.latest, at: Date.now() };
   showUpdate();
   updateNotifications();
+  popupUpdate(r.latest);
+}
+
+const POPUP_KEY = 'archa-update-popup';
+
+/** Okno o nové verzi: každá verze jen jednou, pak už jen pruh a zvonek. */
+function popupUpdate(latest: { version: string; url: string; notes: string }) {
+  try {
+    if (localStorage.getItem(POPUP_KEY) === latest.version) return;
+    localStorage.setItem(POPUP_KEY, latest.version);
+  } catch {
+    return;
+  }
+  const card = updateCard(latest, () => close());
+  const notes = card.querySelector<HTMLElement>('.update-notes');
+  if (notes) notes.hidden = false;
+  const close = openModal(t('update.popupTitle'), [card], []);
 }
 
 async function openJob(id: string, tab?: Tab) {

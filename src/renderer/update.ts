@@ -23,7 +23,8 @@ export function updateCard(latest: Latest, onLater?: () => void) {
 
   const message = h('p', { class: 'update-msg' }, '');
   message.hidden = true;
-  const notes = h('pre', { class: 'update-notes' }, latest.notes || t('update.noNotes'));
+  // Popis vydání je v Markdownu; tučné hvězdičky by v prostém textu jen překážely.
+  const notes = h('pre', { class: 'update-notes' }, latest.notes.replace(/\*\*/g, '') || t('update.noNotes'));
   notes.hidden = true;
   const toggle = h('button', { class: 'link', type: 'button', 'aria-expanded': 'false' }, t('update.whatsNew'));
   toggle.addEventListener('click', () => {

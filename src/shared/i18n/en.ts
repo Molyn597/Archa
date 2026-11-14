@@ -819,6 +819,7 @@ export const en: Record<keyof typeof cs, Message> = {
   'help.showWelcome': 'Show the welcome guide',
   'help.dot': 'Show help',
   'update.latest': 'You have the latest version',
+  'update.popupTitle': 'New version of Archa',
   'update.available': 'Version {version} is available',
   'update.failed': 'Could not check for updates',
   'update.install': 'Download and install',

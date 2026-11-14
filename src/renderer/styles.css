@@ -3205,6 +3205,10 @@ input[type='checkbox'] {
   font-size: 12px;
 }
 
+.modal-foot:empty {
+  display: none;
+}
+
 .modal-body {
   overflow: auto;
   padding: 16px;

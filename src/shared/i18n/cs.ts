@@ -825,6 +825,7 @@ export const cs = {
   'help.showWelcome': 'Zobrazit úvodního průvodce',
   'help.dot': 'Zobrazit nápovědu',
   'update.latest': 'Máš nejnovější verzi',
+  'update.popupTitle': 'Nová verze Archy',
   'update.available': 'Je dostupná verze {version}',
   'update.failed': 'Aktualizace se nepodařilo ověřit',
   'update.install': 'Stáhnout a nainstalovat',
