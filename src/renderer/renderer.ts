@@ -184,12 +184,21 @@ function showWelcome() {
   });
 }
 
+let knownUpdate: { version: string; url: string; notes: string; at: number } | null = null;
+
+function showUpdate() {
+  if (!knownUpdate) return;
+  const bar = $('update-bar');
+  bar.replaceChildren(...updateRow(knownUpdate, () => (bar.hidden = true)));
+  bar.hidden = false;
+}
+
 async function checkUpdates() {
   const r = await window.api.checkUpdate(true).catch(() => null);
   if (!r?.newer || !r.latest) return;
-  const bar = $('update-bar');
-  bar.replaceChildren(...updateRow(r.latest, () => (bar.hidden = true)));
-  bar.hidden = false;
+  knownUpdate = { ...r.latest, at: Date.now() };
+  showUpdate();
+  updateNotifications();
 }
 
 async function openJob(id: string, tab?: Tab) {
@@ -821,7 +830,7 @@ async function init() {
     ask: (question) => void askLibrary(question),
     ai: () => (lastStatus ? { remote: lastStatus.provider === 'openrouter', online: lastStatus.online, state: lmState(lastStatus) } : undefined),
   });
-  setupNotifications({ jobs: sorted, settings: () => settings, openJob: (id) => void openJob(id), openProject, showUnsorted, showAll, showInvoices, showDeadlines });
+  setupNotifications({ jobs: sorted, settings: () => settings, openJob: (id) => void openJob(id), openProject, showUnsorted, showAll, showInvoices, showDeadlines, showUpdate, update: () => knownUpdate });
   setupProjectsPage({ open: openProject, create: () => createProject() });
   void setupLibrarySwitch();
   void applyNavKind();

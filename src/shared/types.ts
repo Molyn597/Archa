@@ -704,6 +704,8 @@ export interface Settings {
   onboarded?: boolean;
   /** Kdy naposledy proběhla kontrola aktualizací (ms). */
   lastUpdateCheck?: number;
+  /** Nejnovější vydání z poslední kontroly; ať o něm aplikace ví i po restartu ve stejný den. */
+  knownUpdate?: { version: string; url: string; notes: string };
 }
 
 export interface UpdateAsset {

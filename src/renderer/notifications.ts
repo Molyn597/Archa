@@ -16,6 +16,9 @@ interface NotesHost {
   showAll(): void;
   showInvoices(status: InvoiceStatusFilter): void;
   showDeadlines(): void;
+  showUpdate(): void;
+  /** Známá novější verze, jinak null. */
+  update(): { version: string; notes: string; at: number } | null;
 }
 
 const SEEN_KEY = 'notesSeen';
@@ -52,7 +55,7 @@ function collect(): Note[] {
     const job = byId.get(id);
     return job ? docTitle(job, sig.cards[id]) : '';
   };
-  return buildNotes({ today: sig.today, now: Date.now(), jobs, title, wait: sig.wait(overviewKind() === 'study' ? 'study' : 'work'), deadlines: sig.deadlines });
+  return buildNotes({ today: sig.today, now: Date.now(), jobs, title, wait: sig.wait(overviewKind() === 'study' ? 'study' : 'work'), deadlines: sig.deadlines, update: host.update() ?? undefined });
 }
 
 function go(target: NoteTarget) {
@@ -71,6 +74,8 @@ function go(target: NoteTarget) {
       return host.showInvoices(target.status);
     case 'deadlines':
       return host.showDeadlines();
+    case 'update':
+      return host.showUpdate();
     case 'practice':
       return void openPractice(target.scope);
   }

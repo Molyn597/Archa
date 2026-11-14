@@ -42,6 +42,13 @@ describe('buildNotes', () => {
     expect(notes.filter((n) => n.kind === 'deadline').map((n) => n.target)).toEqual([{ to: 'job', id: 'k' }, { to: 'project', id: 'p' }]);
   });
 
+  it('dostupná aktualizace: stabilní id podle verze, první řádek poznámek, jinak výchozí podtitul', () => {
+    const notes = buildNotes(input({ jobs: [job('c', 'error', 2, 'chyba')], update: { version: '1.0.2', notes: '\n  Opravy nabídky\nDalší', at: NOW - HOUR } }));
+    expect(notes[0]).toMatchObject({ id: 'update:1.0.2', kind: 'update', title: 'Je dostupná verze 1.0.2', sub: 'Opravy nabídky', at: NOW - HOUR, target: { to: 'update' } });
+    expect(notes[1]?.kind).toBe('failed');
+    expect(buildNotes(input({ update: { version: '1.0.2', notes: '', at: 0 } }))[0]?.sub).toBe('Klikni pro instalaci');
+  });
+
   it('omezí počet', () => {
     const jobs = Array.from({ length: 15 }, (_, i) => job(`j${i}`, 'error', 1 + i / 100));
     expect(buildNotes(input({ jobs }))).toHaveLength(NOTE_LIMIT);

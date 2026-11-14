@@ -51,10 +51,13 @@ export async function latestRelease(): Promise<Release | null> {
 export async function checkUpdate(store: Store, auto: boolean): Promise<UpdateCheck> {
   const current = app.getVersion();
   const settings = await store.settings();
-  if (auto && settings.lastUpdateCheck && Date.now() - settings.lastUpdateCheck < DAY) return { current, newer: false, ok: false };
+  if (auto && settings.lastUpdateCheck && Date.now() - settings.lastUpdateCheck < DAY) {
+    const known = settings.knownUpdate;
+    return known && isNewer(known.version, current) ? { current, latest: known, newer: true, ok: true } : { current, newer: false, ok: false };
+  }
   const release = await latestRelease();
-  if (release) await store.saveSettings({ ...(await store.settings()), lastUpdateCheck: Date.now() });
   const latest = release ? { version: release.version, url: release.url, notes: release.notes } : undefined;
+  if (latest) await store.saveSettings({ ...(await store.settings()), lastUpdateCheck: Date.now(), knownUpdate: latest });
   return { current, ...(latest ? { latest } : {}), newer: release ? isNewer(release.version, current) : false, ok: release !== null };
 }
 

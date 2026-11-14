@@ -198,6 +198,12 @@ function actions(job: Job) {
     return button;
   };
   const list: HTMLElement[] = [];
+  if (job.status === 'error') {
+    const ask = tool(t('detail.tool.ask'), ICONS.chat, openChat, 'btn primary');
+    ask.disabled = true;
+    ask.title = t('detail.tool.askFailed');
+    list.push(ask);
+  }
   if (job.status === 'done') {
     list.push(tool(t('detail.tool.ask'), ICONS.chat, openChat, 'btn primary'));
     if (!translated) list.push(tool(t('detail.tool.translate'), ICONS.translate, () => translateTool(job)));

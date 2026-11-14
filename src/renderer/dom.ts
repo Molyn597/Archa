@@ -278,6 +278,13 @@ export function actionMenu(items: () => MenuItem[]) {
         for (const m of document.querySelectorAll<HTMLElement>('.menu')) m.hidden = true;
         if (open) menu.replaceChildren(...items().map(entry));
         menu.hidden = !open;
+        // Dole by nabídka přesáhla okno: otevře se nahoru, pokud je tam místo.
+        menu.classList.remove('up');
+        if (open) {
+          const r = menu.getBoundingClientRect();
+          const room = button.getBoundingClientRect().top;
+          if (r.bottom > window.innerHeight && room > r.height + 6) menu.classList.add('up');
+        }
       },
     },
     icon(ICONS.more),

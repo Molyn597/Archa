@@ -1413,6 +1413,11 @@ input[type='checkbox'] {
   box-shadow: var(--shadow);
 }
 
+.menu.up {
+  top: auto;
+  bottom: calc(100% + 6px);
+}
+
 .menu button {
   display: flex;
   align-items: center;
@@ -5654,6 +5659,20 @@ kbd {
   box-shadow: var(--card-shadow);
   -webkit-backdrop-filter: blur(18px);
   backdrop-filter: blur(18px);
+}
+
+/* Skleněné karty mají vlastní vrstvu; karta s otevřenou nabídkou „⋯“ se zvedne nad sousední karty. */
+.up-list:has(.menu:not([hidden])),
+.up-recent:has(.menu:not([hidden])),
+.form-card:has(.menu:not([hidden])),
+.job-list:has(.menu:not([hidden])),
+.pending-row:has(.menu:not([hidden])),
+.ov-ask-box:has(.menu:not([hidden])),
+.ov-card:has(.menu:not([hidden])),
+.ov-welcome:has(.menu:not([hidden])),
+.project-card:has(.menu:not([hidden])) {
+  position: relative;
+  z-index: 30;
 }
 
 .up-ico {

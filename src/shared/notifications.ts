@@ -7,7 +7,7 @@ import type { Job } from './types';
 
 export const sumsText = (sums: CurrencySum[]) => sums.map((s) => formatMoney(s.total, s.currency, locale(), true)).join(' · ');
 
-export type NoteKind = 'failed' | 'done' | 'overdue' | 'deadline' | 'soon' | 'practice' | 'inbox';
+export type NoteKind = 'failed' | 'done' | 'overdue' | 'deadline' | 'soon' | 'practice' | 'inbox' | 'update';
 
 /** Kam oznámení vede; konkrétní otevření řeší okno. */
 export type NoteTarget =
@@ -17,6 +17,7 @@ export type NoteTarget =
   | { to: 'all' }
   | { to: 'invoices'; status: InvoiceStatusFilter }
   | { to: 'deadlines' }
+  | { to: 'update' }
   | { to: 'practice'; scope: string };
 
 export interface Note {
@@ -40,6 +41,8 @@ export interface NoteInput {
   wait: WaitRow[];
   /** Všechny termíny knihovny. */
   deadlines: Deadline[];
+  /** Známá novější verze aplikace; `at` je čas, kdy se o ní zjistilo. */
+  update?: { version: string; notes: string; at: number };
 }
 
 /** Od tolika hotových dokumentů se ukáže jeden souhrnný řádek místo řádku za každý. */
@@ -48,12 +51,17 @@ const DONE_GROUP = 3;
 const FRESH_MS = 24 * 3_600_000;
 export const NOTE_LIMIT = 10;
 // Pořadí: nejdřív události (selhání, hotovo), pak to, co hoří, nakonec co čeká.
-const RANK: Record<NoteKind, number> = { failed: 0, done: 1, overdue: 2, deadline: 3, soon: 4, practice: 5, inbox: 6 };
+const RANK: Record<NoteKind, number> = { update: 0, failed: 1, done: 2, overdue: 3, deadline: 4, soon: 5, practice: 6, inbox: 7 };
 
 /** Oznámení pro aktuální knihovnu: jen neprázdné druhy, nejdřív události (nejnovější první), pak podle naléhavosti. */
 export function buildNotes(input: NoteInput): Note[] {
-  const { today, now, jobs, wait, deadlines } = input;
+  const { today, now, jobs, wait, deadlines, update } = input;
   const notes: Note[] = [];
+
+  if (update) {
+    const sub = update.notes.split('\n').find((l) => l.trim())?.trim() || t('note.update.sub');
+    notes.push({ id: `update:${update.version}`, kind: 'update', title: t('note.update', { version: update.version }), sub, at: update.at, target: { to: 'update' } });
+  }
 
   for (const j of jobs) {
     const at = j.finishedAt ?? j.createdAt;
